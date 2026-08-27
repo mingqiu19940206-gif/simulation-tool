@@ -1,0 +1,98 @@
+{
+  "passed": 18,
+  "failed": 0,
+  "total": 18,
+  "failures": [],
+  "checks": [
+    {
+      "name": "phase2_regression_no_errors",
+      "ok": true,
+      "detail": "geo=[] sem=[]"
+    },
+    {
+      "name": "phase2_signal_vias_2_ports_4",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase3_valid_no_errors",
+      "ok": true,
+      "detail": "geo=[] sem=[]"
+    },
+    {
+      "name": "phase3_backdrill_bottom",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase3_effective_barrel_removes_stub",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase3_target_equals_actual_stub",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase3_backdrill_diameter_gt_drill",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase3_bd_diameter_rejected",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase3_internal_exit_without_backdrill_rejected",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase3_auto_ambiguous_both_stubs",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "sweep_fail_closed",
+      "ok": true,
+      "detail": "scenario.type=via_transition 的扫描计划与目标评分已在 Phase 6 "
+    },
+    {
+      "name": "phase3_snapshot_round_trip_has_backdrill",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "example_backdrill_exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "example_backdrill_scenario",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "example_backdrill_exit_l10",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "example_backdrill_enabled",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "surface_capacitor_dispatch_ok",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "surface_capacitor_not_via",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

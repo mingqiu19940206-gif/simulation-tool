@@ -1,0 +1,58 @@
+{
+  "passed": true,
+  "software_build": {
+    "software_version": "2.3.2",
+    "build_time_utc": "2026-08-14T23:44:47.2715825Z",
+    "source_hash": "0a50f23048c0a2b4bcfd1cdc3c79cf49b35536d013285e2b0e75f3b79ba56b8d",
+    "sweep_backend_version": "native-optimetrics-v3.2",
+    "config_schema_version": 2
+  },
+  "checks": {
+    "default_config_loaded": true,
+    "config_roundtrip": true,
+    "config_roundtrip_corrections": [],
+    "validate_state": "passed_with_warnings",
+    "validate_counts": {
+      "passed": 8,
+      "errors": 0,
+      "warnings": 5,
+      "not_checked": 4
+    },
+    "scene_object_count": 51,
+    "scene_categories": [
+      "PCB叠层",
+      "Port",
+      "信号走线",
+      "反焊盘",
+      "开放边界",
+      "电容与焊盘",
+      "空气盒"
+    ],
+    "port_count": 4,
+    "airbox_present": true,
+    "open_boundary_present": true,
+    "hfss_script_tokens": {
+      "ports": true,
+      "airbox": true,
+      "antipad": true,
+      "gnd_via": true,
+      "stackup": true,
+      "optimetrics": true,
+      "hfss_variables": true,
+      "direct_45": true,
+      "smooth_s_bend": true
+    },
+    "hfss_validate_only_exit_code": 0,
+    "hfss_validate_only_output_tail": "2026-08-15 07:51:57 | INFO | generation_id=da003f71e05c40ec88a71e4f622af7fb | config_hash=3ab50dd84d0e5a5160036bc87b3def2b2f5a9a3b56f8d734a3d14b413ef9b036 | geometry_hash=b5e197c91168707f5ad7ae89696b2a7d0604e25d271740e28637870c759bc13d\n2026-08-15 07:51:57 | INFO | software_version=2.3.2 | build_time_utc=2026-08-14T23:44:47.2715825Z | source_hash=0a50f23048c0a2b4bcfd1cdc3c79cf49b35536d013285e2b0e75f3b79ba56b8d | sweep_backend_version=native-optimetrics-v3.2 | config_schema_version=2\n2026-08-15 07:51:57 | INFO | Ƕ�����úͼ������ݼ��ͨ����\n�����ű�Ƕ�����ݼ��ͨ����\n",
+    "smooth_s_bend_geometry": true,
+    "direct_45_geometry": true,
+    "native_optimetrics": {
+      "backend": "native_optimetrics",
+      "project_count": 1,
+      "design_count": 1,
+      "optimetrics_setup_count": 1,
+      "design_variation_count": 7
+    }
+  },
+  "real_aedt_hfss_executed": false
+}

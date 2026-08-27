@@ -1,0 +1,241 @@
+{
+  "passed": true,
+  "screenshot_count": 12,
+  "default_stackup": "M6G / 29 layers",
+  "capture_method": "Pillow ImageGrab(window=Tk HWND) / Windows PrintWindow",
+  "manual_review": {
+    "text_overlap_or_clipping_found": false,
+    "gnd_legend_items_visible": 8,
+    "last_stackup_layer_visible": true,
+    "scrollbars_visible_where_required": true,
+    "capacitor_core_labels_visible": [
+      "P",
+      "N",
+      "X",
+      "Y",
+      "pad_pitch",
+      "cap_pitch"
+    ],
+    "model_ports_visible": 4,
+    "airbox_boundary_label_combined": true
+  },
+  "screenshots": [
+    {
+      "path": "verification/screenshots/1120x720/gnd_via.png",
+      "target_size": [
+        1120,
+        720
+      ],
+      "actual_size": [
+        1120,
+        720
+      ],
+      "font_tier": "normal",
+      "sha256": "d69c59c1c871d7a76dff5b9a6f10975de7ea1c1c91f13205068bd465f1c47805",
+      "rgb_variance": [
+        4123.111,
+        3771.46,
+        5282.016
+      ]
+    },
+    {
+      "path": "verification/screenshots/1120x720/antipad_stackup.png",
+      "target_size": [
+        1120,
+        720
+      ],
+      "actual_size": [
+        1120,
+        720
+      ],
+      "font_tier": "normal",
+      "sha256": "879b40d6cedacc4dd704630e609e9d33a4f6f3d2478a27388f0e5e50f95b950e",
+      "rgb_variance": [
+        4188.858,
+        3334.915,
+        3827.842
+      ]
+    },
+    {
+      "path": "verification/screenshots/1120x720/capacitor_model.png",
+      "target_size": [
+        1120,
+        720
+      ],
+      "actual_size": [
+        1120,
+        720
+      ],
+      "font_tier": "normal",
+      "sha256": "7ad6ed31dbf41c4d97a50d1f667a28f1803c3ce3360175ceb724046bc510dd4c",
+      "rgb_variance": [
+        2365.182,
+        2432.419,
+        2341.182
+      ]
+    },
+    {
+      "path": "verification/screenshots/1120x720/model_preview.png",
+      "target_size": [
+        1120,
+        720
+      ],
+      "actual_size": [
+        1120,
+        720
+      ],
+      "font_tier": "normal",
+      "sha256": "60cd9828c405a9fb03fa9d3fbd247ae7ecc185ec4277740f4622cc40d26e47e9",
+      "rgb_variance": [
+        3917.618,
+        3991.188,
+        3243.925
+      ]
+    },
+    {
+      "path": "verification/screenshots/1900x1050/gnd_via.png",
+      "target_size": [
+        1900,
+        1050
+      ],
+      "actual_size": [
+        1900,
+        1050
+      ],
+      "font_tier": "large",
+      "sha256": "c7f71344374ca4f0ea31a0641c151d917367eddd4de801455ced2181fc4fb6fa",
+      "rgb_variance": [
+        4050.143,
+        3630.847,
+        5125.82
+      ]
+    },
+    {
+      "path": "verification/screenshots/1900x1050/antipad_stackup.png",
+      "target_size": [
+        1900,
+        1050
+      ],
+      "actual_size": [
+        1900,
+        1050
+      ],
+      "font_tier": "large",
+      "sha256": "c8058c9e282ba78e64f9c571b0f1317c35a6288c358c005dfc284b3af1a3058d",
+      "rgb_variance": [
+        3676.496,
+        2848.166,
+        3076.483
+      ]
+    },
+    {
+      "path": "verification/screenshots/1900x1050/capacitor_model.png",
+      "target_size": [
+        1900,
+        1050
+      ],
+      "actual_size": [
+        1900,
+        1050
+      ],
+      "font_tier": "large",
+      "sha256": "78d47eb1e3a150bfce86c503487727960a6698e0834bb4e4c9c2b09d9e3c4757",
+      "rgb_variance": [
+        1824.182,
+        1966.088,
+        1893.029
+      ]
+    },
+    {
+      "path": "verification/screenshots/1900x1050/model_preview.png",
+      "target_size": [
+        1900,
+        1050
+      ],
+      "actual_size": [
+        1900,
+        1050
+      ],
+      "font_tier": "large",
+      "sha256": "820c58ff80d192d01c8718da5a590a3fdcf32bea55d9f8041372e582bbabe470",
+      "rgb_variance": [
+        3625.071,
+        3190.914,
+        2853.329
+      ]
+    },
+    {
+      "path": "verification/screenshots/2560x1400/gnd_via.png",
+      "target_size": [
+        2560,
+        1400
+      ],
+      "actual_size": [
+        2560,
+        1400
+      ],
+      "font_tier": "ultra",
+      "sha256": "ddabfce1ee634730522da69c2d316f9b967e92722064cbfb6c264a6473ad3bd2",
+      "rgb_variance": [
+        4055.899,
+        3378.329,
+        5012.979
+      ]
+    },
+    {
+      "path": "verification/screenshots/2560x1400/antipad_stackup.png",
+      "target_size": [
+        2560,
+        1400
+      ],
+      "actual_size": [
+        2560,
+        1400
+      ],
+      "font_tier": "ultra",
+      "sha256": "054d691fb7096f248fe65b1ae2bc399a6b5794ebe20d5d8691d8a3be60701f6b",
+      "rgb_variance": [
+        2972.08,
+        2646.964,
+        2847.919
+      ]
+    },
+    {
+      "path": "verification/screenshots/2560x1400/capacitor_model.png",
+      "target_size": [
+        2560,
+        1400
+      ],
+      "actual_size": [
+        2560,
+        1400
+      ],
+      "font_tier": "ultra",
+      "sha256": "c9bd8c17009b68cef80d139ac65002d042e79129cd8dc783dc1aaa72b50685c0",
+      "rgb_variance": [
+        1568.782,
+        1671.613,
+        1618.277
+      ]
+    },
+    {
+      "path": "verification/screenshots/2560x1400/model_preview.png",
+      "target_size": [
+        2560,
+        1400
+      ],
+      "actual_size": [
+        2560,
+        1400
+      ],
+      "font_tier": "ultra",
+      "sha256": "1f2eb1c79021c66924f91bdd841552af747002ad35f7fe470533768f7eaf9e0c",
+      "rgb_variance": [
+        3409.885,
+        2627.607,
+        2706.028
+      ]
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,53 @@
+{
+  "passed": true,
+  "example_count": 2,
+  "real_aedt_hfss_executed": false,
+  "examples": [
+    {
+      "example": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\examples\\via_transition_through.json",
+      "migration_messages": [
+        "旧配置缺少 via_transition.signal_via_pitch，已回填为 pair_pitch（信号孔与走线同中心距，无扇出）。"
+      ],
+      "local_validate_state": "passed_with_warnings",
+      "local_validate_counts": {
+        "passed": 5,
+        "errors": 0,
+        "warnings": 4,
+        "not_checked": 1
+      },
+      "contour_count": 24,
+      "shapes": [
+        "circle"
+      ],
+      "hfss_script": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_through\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_build_hfss.py",
+      "geometry_summary": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_through\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_geometry_summary.txt",
+      "config_and_geometry_snapshot": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_through\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402.json",
+      "local_validate_json": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_through\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_validate_local.json",
+      "validate_only_exit_code": 0,
+      "validate_only_output_tail": "2026-08-21 16:34:11 | INFO | generation_id=a9c601565c514fa99224da69ae2bc844 | config_hash=9cd61fe9226db095c7563529c6729cca9db1458dd4a34cafbb0d041d43cb7d2c | geometry_hash=3a25173422e9b847817a86ed5cbc3b122d03616efbb02036bf6d5ba1124cccf1\n2026-08-21 16:34:11 | INFO | software_version=2.4.0 | build_time_utc=2026-08-14T23:44:47.2715825Z | source_hash=0a50f23048c0a2b4bcfd1cdc3c79cf49b35536d013285e2b0e75f3b79ba56b8d | sweep_backend_version=native-optimetrics-v3.2 | config_schema_version=3\n2026-08-21 16:34:11 | WARNING | ��⵽AEDT 2022 R2��ASCII·�����ݷ��գ����̽���Ӣ������·��������C:\\Users\\admin\\AppData\\Local\\SurfaceCapAntipadTool\\HFSSProjects\\Surface_Cap_Antipad_V2_0402\\a9c601565c514fa99224da69ae2bc844\\Surface_Cap_Antipad_V2_0402.aedt\n�����ű�Ƕ�����ݼ��ͨ����\n"
+    },
+    {
+      "example": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\examples\\via_transition_backdrill.json",
+      "migration_messages": [
+        "旧配置缺少 via_transition.signal_via_pitch，已回填为 pair_pitch（信号孔与走线同中心距，无扇出）。"
+      ],
+      "local_validate_state": "passed_with_warnings",
+      "local_validate_counts": {
+        "passed": 5,
+        "errors": 0,
+        "warnings": 4,
+        "not_checked": 1
+      },
+      "contour_count": 24,
+      "shapes": [
+        "circle"
+      ],
+      "hfss_script": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_backdrill\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_build_hfss.py",
+      "geometry_summary": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_backdrill\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_geometry_summary.txt",
+      "config_and_geometry_snapshot": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_backdrill\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402.json",
+      "local_validate_json": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_backdrill\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_validate_local.json",
+      "validate_only_exit_code": 0,
+      "validate_only_output_tail": "2026-08-21 16:34:11 | INFO | generation_id=4efb312c4a2a4656b5197a2e1b4fed03 | config_hash=acfb1396128339274d13e2c992177ff6fc07932a5b66ee19d2156ed19603776b | geometry_hash=c29f4d49f5a7a4e8ed4b020000bfec9a05feaa39745ee8bb2a3d1571f126d92b\n2026-08-21 16:34:11 | INFO | software_version=2.4.0 | build_time_utc=2026-08-14T23:44:47.2715825Z | source_hash=0a50f23048c0a2b4bcfd1cdc3c79cf49b35536d013285e2b0e75f3b79ba56b8d | sweep_backend_version=native-optimetrics-v3.2 | config_schema_version=3\n2026-08-21 16:34:11 | WARNING | ��⵽AEDT 2022 R2��ASCII·�����ݷ��գ����̽���Ӣ������·��������C:\\Users\\admin\\AppData\\Local\\SurfaceCapAntipadTool\\HFSSProjects\\Surface_Cap_Antipad_V2_0402\\4efb312c4a2a4656b5197a2e1b4fed03\\Surface_Cap_Antipad_V2_0402.aedt\n�����ű�Ƕ�����ݼ��ͨ����\n"
+    }
+  ]
+}

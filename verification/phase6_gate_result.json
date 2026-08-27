@@ -1,0 +1,83 @@
+{
+  "passed": 15,
+  "failed": 0,
+  "total": 15,
+  "failures": [],
+  "checks": [
+    {
+      "name": "phase6_safe_axes_9",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_topology_axes_11",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_plan_9_variations",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_variations_carry_params",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_topology_blocked",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_budget_blocked",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_residual_stub_guard",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_hand_penalties",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_ranking_matches_hand",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_pareto_nonempty",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_9_scored",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_summary_embeds_curves",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_summary_json_round_trip",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_scoring_csv_written",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase6_surface_capacitor_sweep_ok",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}
