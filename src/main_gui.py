@@ -524,7 +524,10 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             return
         selected = [name for name, variable in self.return_connect_vars.items()
                     if bool(variable.get())]
-        self.variables["via_transition.return_vias.connect_layers"].set(",".join(selected))
+        value = ",".join(selected)
+        variable = self.variables["via_transition.return_vias.connect_layers"]
+        if variable.get() != value:
+            variable.set(value)
 
     def _rebuild_return_connect_matrix(self, config: Mapping[str, Any]) -> None:
         matrix = getattr(self, "return_connect_matrix", None)
@@ -623,10 +626,15 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
     def _sync_return_coordinate_variable(self) -> None:
         rows = [self.return_coordinate_tree.item(item, "values")
                 for item in self.return_coordinate_tree.get_children()]
-        self.variables["via_transition.return_vias.custom_coordinates"].set(
-            "; ".join(f"{values[0]},{values[1]}" for values in rows))
+        value = "; ".join(f"{values[0]},{values[1]}" for values in rows)
+        variable = self.variables["via_transition.return_vias.custom_coordinates"]
+        if variable.get() != value:
+            variable.set(value)
         if self._backend_value("via_transition.return_vias.pattern") == "custom":
-            self.variables["via_transition.return_vias.count"].set(str(len(rows)))
+            count = str(len(rows))
+            count_variable = self.variables["via_transition.return_vias.count"]
+            if count_variable.get() != count:
+                count_variable.set(count)
 
     def _return_coordinate_values(self) -> tuple[str, str] | None:
         x_text = self.return_coordinate_x.get().strip()

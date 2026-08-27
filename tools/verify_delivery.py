@@ -16,7 +16,7 @@ sys.path.insert(0, str(SRC))
 os.chdir(ROOT)
 
 from build_info import get_build_info
-from config_manager import ConfigManager, normalize_config
+from config_manager import ConfigManager, normalize_config, to_external_config
 from geometry_calculator import GeometryCalculator
 from hfss_script_generator import HfssScriptGenerator
 from model_preview import build_model_scene
@@ -27,6 +27,18 @@ from sweep_manager import assert_native_manifest_safe, generate_sweep_cases
 def assert_true(condition: object, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
+
+def configs_roundtrip_equivalent(expected: object, actual: object) -> bool:
+    """Compare configs at the documented persistence boundary.
+
+    Internal engineering lengths are normalized to mm.  Saving converts them
+    to the selected external unit and loading converts them back, which can
+    change the last binary digit.  Converting both configs back to their
+    external JSON form removes only that defined unit-conversion noise; the
+    resulting structures and values are still compared strictly.
+    """
+    return to_external_config(expected) == to_external_config(actual)
 
 
 def main() -> int:
@@ -44,9 +56,10 @@ def main() -> int:
             roundtrip = temporary / "roundtrip.json"
             manager.save(config, roundtrip)
             loaded, corrections = manager.load(roundtrip)
-            checks["config_roundtrip"] = loaded == config
+            roundtrip_equivalent = configs_roundtrip_equivalent(config, loaded)
+            checks["config_roundtrip"] = roundtrip_equivalent
             checks["config_roundtrip_corrections"] = corrections
-            assert_true(loaded == config, "default configuration did not round-trip")
+            assert_true(roundtrip_equivalent, "default configuration did not round-trip")
 
             report, normalized, geometry = ModelValidator(manager).run_local(config)
             checks["validate_state"] = report.state

@@ -430,6 +430,27 @@ class GuiLayoutRegressionTests(unittest.TestCase):
         repeated_tall = snapshot(large_width, large_height)
         self.assertEqual(repeated_tall, tall)
 
+    def test_collect_does_not_schedule_another_refresh(self) -> None:
+        pending = self.app._refresh_job
+        if pending:
+            self.app.after_cancel(pending)
+            self.app._refresh_job = None
+
+        connect_layers = self.app.variables[
+            "via_transition.return_vias.connect_layers"
+        ].get()
+        coordinates = self.app.variables[
+            "via_transition.return_vias.custom_coordinates"
+        ].get()
+        self.app._collect()
+        self.app._collect()
+
+        self.assertIsNone(self.app._refresh_job)
+        self.assertEqual(self.app.variables[
+            "via_transition.return_vias.connect_layers"].get(), connect_layers)
+        self.assertEqual(self.app.variables[
+            "via_transition.return_vias.custom_coordinates"].get(), coordinates)
+
     def test_short_stack_units_disabled_vias_and_repeated_redraw_are_stable(self) -> None:
         self.app.geometry("1120x720+0+0")
         self.app.set_responsive_font_tier("ultra")
