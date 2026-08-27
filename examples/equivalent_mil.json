@@ -1,0 +1,613 @@
+{
+  "schema_version": 2,
+  "units": "mil",
+  "project": {
+    "project_name": "Surface_Cap_Antipad_V2_0402",
+    "design_name": "Surface_Cap_Antipad_V2",
+    "solution_type": "Terminal",
+    "aedt_version": "2022.2",
+    "output_directory": "./generated_v2",
+    "non_graphical": false,
+    "new_desktop_session": true,
+    "open_aedt_after_build": true,
+    "overwrite_existing": true
+  },
+  "trace": {
+    "trace_width": 3.937007874015748,
+    "trace_pitch": 7.874015748031496,
+    "trace_gap": 3.937007874015748,
+    "copper_thickness": 1.8499999999999999,
+    "input_straight_length": 118.11023622047244,
+    "output_straight_length": 118.11023622047244,
+    "pad_escape_mode": "direct_45",
+    "pad_lead_in_length": 0.0,
+    "pad_lead_out_length": 0.0,
+    "transition_length": 19.68503937007874,
+    "transition_direction": "auto"
+  },
+  "capacitor": {
+    "package": "0402",
+    "package_metric": "1005",
+    "body_length": 39.37007874015748,
+    "body_width": 19.68503937007874,
+    "body_height": 19.68503937007874,
+    "pad_length": 15.748031496062993,
+    "pad_width": 19.68503937007874,
+    "pad_gap": 15.748031496062993,
+    "pad_pitch": 31.496062992125985,
+    "pad_pitch_mode": "auto_from_gap",
+    "pad_rotation": 0.0,
+    "cap_pitch": 23.62204724409449,
+    "cap_center_x": 0.0,
+    "cap_center_x_offset": 0.0,
+    "symmetric_about_y": true,
+    "bridge_width": 3.937007874015748,
+    "bridge_length_mode": "auto",
+    "bridge_length": 15.82677165354331,
+    "bridge_material": "copper",
+    "create_body_in_hfss": true,
+    "show_body_outline_in_preview": true
+  },
+  "capacitor_model": {
+    "mode": "ideal_bridge",
+    "sheet_width": 3.937007874015748,
+    "capacitance_pf": 100.0,
+    "esr_ohm": 0.05,
+    "esl_nh": 0.25,
+    "touchstone_file": "",
+    "touchstone_file_p": "",
+    "touchstone_file_n": ""
+  },
+  "package_presets": {
+    "apply_on_selection": true
+  },
+  "antipad": {
+    "mode": "independent_pad",
+    "global_expansion": 7.874015748031496
+  },
+  "plane": {
+    "margin_input": 78.74015748031496,
+    "margin_output": 78.74015748031496,
+    "margin_y": 78.74015748031496
+  },
+  "geometry": {
+    "overlap": 0.03937007874015748,
+    "trace_join": "limited_miter",
+    "miter_limit": 2.0
+  },
+  "gnd_vias": {
+    "enabled": false,
+    "pattern": "four_corner",
+    "count": 4,
+    "side_orientation": "top_bottom",
+    "clearance_x": 13.779527559055119,
+    "clearance_y": 13.779527559055119,
+    "pitch_x": 31.496062992125985,
+    "pitch_y": 31.496062992125985,
+    "drill_diameter": 7.874015748031496,
+    "finished_hole_diameter": 5.905511811023622,
+    "plating_thickness": 0.984251968503937,
+    "pad_diameter": 15.748031496062993,
+    "antipad_diameter": 23.62204724409449,
+    "start_layer": "L1",
+    "end_layer": "L14",
+    "connect_layers": [
+      "L2"
+    ],
+    "material": "copper",
+    "barrel_model": "hollow",
+    "create_top_ground_copper": false,
+    "top_ground_clearance": 7.874015748031496,
+    "custom_coordinates": []
+  },
+  "baseline_comparison": {
+    "enabled": false,
+    "compare_gnd_vias": true
+  },
+  "simulation": {
+    "enabled": true,
+    "pcie_generation_preset": "custom",
+    "create_differential_ports": true,
+    "port_reference_mode": "auto_nearest",
+    "port_reference_layer": "L2",
+    "port_size_mode": "auto",
+    "port_lateral_margin": 9.84251968503937,
+    "create_airbox": true,
+    "airbox_margin": 39.37007874015748,
+    "open_boundary": "Radiation",
+    "setup_name": "Setup1",
+    "sweep_name": "Sweep1",
+    "adaptive_frequency_ghz": 16.0,
+    "max_passes": 12,
+    "max_delta_s": 0.02,
+    "automatically_use_causal_materials": true,
+    "sweep_type": "Interpolating",
+    "start_frequency_ghz": 0.01,
+    "stop_frequency_ghz": 32.0,
+    "step_frequency_ghz": 0.05,
+    "interpolating_tolerance": 0.5,
+    "interpolating_max_solutions": 250,
+    "save_fields": false,
+    "generate_reports": true,
+    "report_outputs": {
+      "Sdd11": true,
+      "Sdd21": true,
+      "Sdc21": true,
+      "Scd21": true
+    },
+    "generate_tdr": true
+  },
+  "sweep_execution": {
+    "strategy": "hybrid",
+    "variation_mode": "full_factorial",
+    "max_cases": 200,
+    "parallel_jobs": 1,
+    "optimetrics_setup_name": "ParametricSetup1",
+    "custom_variations": [],
+    "resume": true,
+    "retry_failed": true
+  },
+  "sweeps": {
+    "trace.trace_width": {
+      "enabled": false,
+      "start": 3.1496062992125986,
+      "stop": 4.724409448818897,
+      "step": 0.7874015748031497
+    },
+    "trace.trace_pitch": {
+      "enabled": false,
+      "start": 7.086614173228346,
+      "stop": 11.811023622047244,
+      "step": 0.7874015748031497
+    },
+    "trace.transition_length": {
+      "enabled": false,
+      "start": 15.748031496062993,
+      "stop": 31.496062992125985,
+      "step": 7.874015748031496
+    },
+    "capacitor.cap_pitch": {
+      "enabled": false,
+      "start": 19.68503937007874,
+      "stop": 39.37007874015748,
+      "step": 3.937007874015748
+    },
+    "capacitor.pad_length": {
+      "enabled": false,
+      "start": 9.84251968503937,
+      "stop": 19.68503937007874,
+      "step": 1.968503937007874
+    },
+    "capacitor.pad_width": {
+      "enabled": false,
+      "start": 11.811023622047244,
+      "stop": 23.62204724409449,
+      "step": 1.968503937007874
+    },
+    "capacitor.pad_gap": {
+      "enabled": false,
+      "start": 7.874015748031496,
+      "stop": 19.68503937007874,
+      "step": 1.968503937007874
+    },
+    "capacitor.pad_rotation": {
+      "enabled": false,
+      "start": -10.0,
+      "stop": 10.0,
+      "step": 5.0
+    },
+    "antipad.global_expansion": {
+      "enabled": false,
+      "start": 3.937007874015748,
+      "stop": 15.748031496062993,
+      "step": 1.968503937007874
+    },
+    "antipad.first_reference_expansion": {
+      "enabled": false,
+      "start": 3.937007874015748,
+      "stop": 15.748031496062993,
+      "step": 1.968503937007874
+    },
+    "gnd_vias.count": {
+      "enabled": false,
+      "start": 4,
+      "stop": 12,
+      "step": 4
+    },
+    "gnd_vias.clearance_x": {
+      "enabled": false,
+      "start": 7.874015748031496,
+      "stop": 31.496062992125985,
+      "step": 3.937007874015748
+    },
+    "gnd_vias.clearance_y": {
+      "enabled": false,
+      "start": 7.874015748031496,
+      "stop": 31.496062992125985,
+      "step": 3.937007874015748
+    },
+    "gnd_vias.drill_diameter": {
+      "enabled": false,
+      "start": 5.905511811023622,
+      "stop": 11.811023622047244,
+      "step": 1.968503937007874
+    },
+    "gnd_vias.pad_diameter": {
+      "enabled": false,
+      "start": 11.811023622047244,
+      "stop": 23.62204724409449,
+      "step": 1.968503937007874
+    },
+    "gnd_vias.antipad_diameter": {
+      "enabled": false,
+      "start": 19.68503937007874,
+      "stop": 35.43307086614173,
+      "step": 3.937007874015748
+    },
+    "capacitor.package": {
+      "enabled": false,
+      "values": [
+        "0201",
+        "0402"
+      ]
+    }
+  },
+  "materials": {
+    "conductor_mode": "copper",
+    "conductor_material": "copper",
+    "copper_conductivity": 58000000.0,
+    "use_ideal_conductor": false,
+    "custom_conductor_name": "CUSTOM_CONDUCTOR",
+    "custom_conductor_conductivity": 58000000.0
+  },
+  "stackup": [
+    {
+      "name": "Top_Soldermask",
+      "type": "soldermask",
+      "thickness": 0.9840000000000001,
+      "material": "Soldermask PROVISIONAL",
+      "dk": 3.8,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L1",
+      "type": "signal",
+      "thickness": 1.8499999999999999,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L1_L2",
+      "type": "dielectric",
+      "thickness": 2.59,
+      "material": "Panasonic R-5775(G) PP(1035) PROVISIONAL_DF",
+      "dk": 2.99,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L2",
+      "type": "plane",
+      "thickness": 0.6,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": true,
+      "enable_antipad": true,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L2_L3",
+      "type": "dielectric",
+      "thickness": 3.54,
+      "material": "Panasonic R-5775(G) CORE(1078*1) PROVISIONAL_DF",
+      "dk": 2.98,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L3",
+      "type": "signal",
+      "thickness": 0.6,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L3_L4",
+      "type": "dielectric",
+      "thickness": 4.2299999999999995,
+      "material": "Panasonic R-5775(G) PP(1078) PROVISIONAL_DF",
+      "dk": 3.11,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L4",
+      "type": "plane",
+      "thickness": 0.6,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": true,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L4_L5",
+      "type": "dielectric",
+      "thickness": 3.54,
+      "material": "Panasonic R-5775(G) CORE(1078*1) PROVISIONAL_DF",
+      "dk": 2.98,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L5",
+      "type": "signal",
+      "thickness": 0.6,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L5_L6",
+      "type": "dielectric",
+      "thickness": 4.14,
+      "material": "Panasonic R-5775(G) PP(1078) PROVISIONAL_DF",
+      "dk": 3.11,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L6",
+      "type": "plane",
+      "thickness": 1.2,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": true,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L6_L7",
+      "type": "dielectric",
+      "thickness": 2.56,
+      "material": "Panasonic R-5775(G) CORE(1080*1) PROVISIONAL",
+      "dk": 3.8,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L7",
+      "type": "signal",
+      "thickness": 2.52,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L7_L8",
+      "type": "dielectric",
+      "thickness": 6.09,
+      "material": "Panasonic R-5775(G) PP(1080+1080) PROVISIONAL",
+      "dk": 3.8,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L8",
+      "type": "signal",
+      "thickness": 2.52,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L8_L9",
+      "type": "dielectric",
+      "thickness": 2.56,
+      "material": "Panasonic R-5775(G) CORE(1080*1) PROVISIONAL",
+      "dk": 3.8,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L9",
+      "type": "plane",
+      "thickness": 1.2,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": true,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L9_L10",
+      "type": "dielectric",
+      "thickness": 4.14,
+      "material": "Panasonic R-5775(G) PP(1078) PROVISIONAL_DF",
+      "dk": 3.11,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L10",
+      "type": "signal",
+      "thickness": 0.6,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L10_L11",
+      "type": "dielectric",
+      "thickness": 3.54,
+      "material": "Panasonic R-5775(G) CORE(1078*1) PROVISIONAL_DF",
+      "dk": 2.98,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L11",
+      "type": "plane",
+      "thickness": 0.6,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": true,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L11_L12",
+      "type": "dielectric",
+      "thickness": 4.2299999999999995,
+      "material": "Panasonic R-5775(G) PP(1078) PROVISIONAL_DF",
+      "dk": 3.11,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L12",
+      "type": "signal",
+      "thickness": 0.6,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L12_L13",
+      "type": "dielectric",
+      "thickness": 3.54,
+      "material": "Panasonic R-5775(G) CORE(1078*1) PROVISIONAL_DF",
+      "dk": 2.98,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L13",
+      "type": "plane",
+      "thickness": 0.6,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": true,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "DIEL_L13_L14",
+      "type": "dielectric",
+      "thickness": 2.59,
+      "material": "Panasonic R-5775(G) PP(1035) PROVISIONAL_DF",
+      "dk": 2.99,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "L14",
+      "type": "signal",
+      "thickness": 1.8499999999999999,
+      "material": "copper",
+      "dk": null,
+      "df": null,
+      "conductivity": 58000000.0,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    },
+    {
+      "name": "Bottom_Soldermask",
+      "type": "soldermask",
+      "thickness": 0.9840000000000001,
+      "material": "Soldermask PROVISIONAL",
+      "dk": 3.8,
+      "df": 0.015,
+      "conductivity": null,
+      "is_reference_plane": false,
+      "enable_antipad": false,
+      "antipad_expansion_override": null
+    }
+  ]
+}

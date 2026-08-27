@@ -1,0 +1,33 @@
+{
+    "software_version":  "2.4.0",
+    "build_time_utc":  "2026-08-14T23:44:47.2715825Z",
+    "source_hash":  "0a50f23048c0a2b4bcfd1cdc3c79cf49b35536d013285e2b0e75f3b79ba56b8d",
+    "sweep_backend_version":  "native-optimetrics-v3.2",
+    "config_schema_version":  3,
+    "source_files":  [
+                         "src/antipad_editor/__init__.py",
+                         "src/antipad_editor_core.py",
+                         "src/antipad_editor_legacy/__init__.py",
+                         "src/antipad_editor_preview_base.py",
+                         "src/antipad_semantic/__init__.py",
+                         "src/antipad_semantic_core.py",
+                         "src/build_info.py",
+                         "src/capacitor_editor.py",
+                         "src/config_manager.py",
+                         "src/geometry_calculator.py",
+                         "src/geometry_v1.py",
+                         "src/gnd_via_editor.py",
+                         "src/gnd_via_semantics.py",
+                         "src/gui_layout.py",
+                         "src/hfss_script_generator.py",
+                         "src/main_gui.py",
+                         "src/main_gui_legacy.py",
+                         "src/model_preview.py",
+                         "src/model_validator.py",
+                         "src/simulation_sweep_editor.py",
+                         "src/simulation_sweep_semantics.py",
+                         "src/sweep_manager.py",
+                         "src/validate_results.py",
+                         "config/default_config.json"
+                     ]
+}

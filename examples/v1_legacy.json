@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "units": "mm",
+  "project": {"project_name": "Surface_Cap_Antipad_0402", "design_name": "Surface_Cap_Antipad", "solution_type": "Modal", "aedt_version": "", "output_directory": "./generated", "non_graphical": false, "new_desktop_session": true, "open_aedt_after_build": true, "overwrite_existing": false},
+  "trace": {"trace_width": 0.1, "trace_pitch": 0.2, "copper_thickness": 0.035, "input_straight_length": 3.0, "output_straight_length": 3.0, "pad_lead_in_length": 0.2, "pad_lead_out_length": 0.2, "transition_mode": "strict_45deg", "transition_direction": "auto"},
+  "capacitor": {"package": "0402", "package_metric": "1005", "body_length": 1.0, "body_width": 0.5, "body_height": 0.5, "pad_length": 0.4, "pad_width": 0.5, "pad_gap": 0.4, "pad_pitch": 0.8, "pad_pitch_mode": "auto_from_gap", "pad_rotation": 0.0, "cap_pitch": 0.6, "cap_center_x": 0.0, "cap_center_x_offset": 0.0, "symmetric_about_y": true, "bridge_width": 0.1, "bridge_length_mode": "auto", "bridge_length": 0.402, "bridge_material": "copper", "create_body_in_hfss": false, "show_body_outline_in_preview": true},
+  "antipad": {"mode": "independent_pad", "global_expansion": 0.2},
+  "plane": {"margin_input": 2.0, "margin_output": 2.0, "margin_y": 2.0},
+  "geometry": {"overlap": 0.001},
+  "materials": {"conductor_mode": "copper", "conductor_material": "copper", "copper_conductivity": 58000000.0, "use_ideal_conductor": false, "custom_conductor_name": "CUSTOM_CONDUCTOR", "custom_conductor_conductivity": 58000000.0},
+  "stackup": [
+    {"name": "TOP", "type": "signal", "thickness": 0.035, "material": "copper", "dk": null, "df": null, "conductivity": 58000000.0, "is_reference_plane": false, "enable_antipad": false, "antipad_expansion_override": null},
+    {"name": "DIEL1", "type": "dielectric", "thickness": 0.1, "material": "FR4_DIEL1", "dk": 3.8, "df": 0.015, "conductivity": null, "is_reference_plane": false, "enable_antipad": false, "antipad_expansion_override": null},
+    {"name": "GND1", "type": "plane", "thickness": 0.035, "material": "copper", "dk": null, "df": null, "conductivity": 58000000.0, "is_reference_plane": true, "enable_antipad": true, "antipad_expansion_override": null},
+    {"name": "DIEL2", "type": "dielectric", "thickness": 0.2, "material": "FR4_DIEL2", "dk": 3.8, "df": 0.015, "conductivity": null, "is_reference_plane": false, "enable_antipad": false, "antipad_expansion_override": null},
+    {"name": "GND2", "type": "plane", "thickness": 0.035, "material": "copper", "dk": null, "df": null, "conductivity": 58000000.0, "is_reference_plane": true, "enable_antipad": false, "antipad_expansion_override": null}
+  ]
+}

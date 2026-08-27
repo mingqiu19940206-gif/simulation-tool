@@ -1,0 +1,41 @@
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets and local-only settings
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Build and packaging output
+build/
+dist/
+release/
+*.egg-info/
+
+# Generated simulation/output data
+generated*/
+outputs/
+HFSS_Projects/
+*.aedt
+*.aedtresults/
+*.results/
+*.lock
+*.log
+crash*.txt
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
