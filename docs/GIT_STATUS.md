@@ -20,7 +20,8 @@
 | `81ba5ce` | 修复验证门（round-trip 比较、Tk 刷新循环） |
 | `303c37b` | 合并 PR #1 |
 
-当前测试套件规模：`tests/` 下 342 个用例。
+当前测试套件规模：`tests/` 下 344 个用例，其中包含 Windows 关闭路径与
+`report_callback_exception` 交互/headless 行为的回归覆盖。
 
 ## 测试计数说明
 
@@ -29,8 +30,8 @@
 | 文件 | 记录数量 | 时点 |
 | --- | --- | --- |
 | `baseline_v2.3.0_test_results.json` | 184 | v2.3.0 基线 |
-| `test_results.json` | 190 | 2.3.2 正式构建链 |
-| `isolation_test_results.json` | 190 | 2.3.2 ZIP 隔离副本 |
+| `test_results.json` | 344 | 2.4.0 PR #2 Windows 接手验证 |
+| `isolation_test_results.json` | 344 | 同一候选 ZIP 的 Windows 隔离验证 |
 | `via_antipad_test_results.json` | 286 | 2026-08-21 反焊盘修复 |
 
 引用这些文件时应连同时点一起引用，不要当作当前套件的通过状态。

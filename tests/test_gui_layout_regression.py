@@ -2,22 +2,86 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import os
 import sys
 import tkinter as tk
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from geometry_calculator import GeometryCalculator
 from gnd_via_semantics import derive_via_values
+import main_gui
 from main_gui import SurfaceCapAntipadApp
 
 
 SIZES = ((1120, 720), (1280, 800), (1900, 1050), (2560, 1400))
 FONT_TIERS = ("normal", "large", "ultra")
+
+
+class MainGuiLifecycleTests(unittest.TestCase):
+    def setUp(self) -> None:
+        try:
+            self.app = SurfaceCapAntipadApp()
+            self.app.withdraw()
+            self.app.update_idletasks()
+        except tk.TclError as exc:
+            raise unittest.SkipTest(f"Tk GUI unavailable: {exc}") from exc
+
+    def tearDown(self) -> None:
+        app = getattr(self, "app", None)
+        if app is None:
+            return
+        try:
+            exists = bool(app.winfo_exists())
+        except tk.TclError:
+            exists = False
+        if exists:
+            app.destroy()
+
+    def test_destroy_closes_root_and_clears_default_root(self) -> None:
+        child = tk.Frame(self.app)
+        child.pack()
+        child.after_idle(lambda: None)
+        self.app.after_idle(lambda: None)
+
+        self.assertIs(tk._default_root, self.app)
+        self.app.destroy()
+
+        try:
+            root_still_exists = bool(self.app.winfo_exists())
+        except tk.TclError:
+            root_still_exists = False
+        self.assertFalse(root_still_exists)
+        self.assertIsNone(tk._default_root)
+        self.app = None
+
+    def test_callback_errors_keep_interactive_feedback_and_skip_headless_dialogs(self) -> None:
+        with mock.patch.object(main_gui, "_write_crash_log") as write_log, \
+                mock.patch.object(main_gui.messagebox, "showerror") as show_error, \
+                mock.patch.dict(os.environ, {"SURFACE_CAP_HEADLESS": ""}):
+            try:
+                raise RuntimeError("interactive callback probe")
+            except RuntimeError:
+                self.app.report_callback_exception(*sys.exc_info())
+
+            show_error.assert_called_once()
+            self.assertIn("interactive callback probe", show_error.call_args.args[1])
+            self.assertIn("界面操作失败", self.app.status.get())
+            self.assertEqual(write_log.call_count, 1)
+
+            with mock.patch.dict(os.environ, {"SURFACE_CAP_HEADLESS": "1"}):
+                try:
+                    raise RuntimeError("headless callback probe")
+                except RuntimeError:
+                    self.app.report_callback_exception(*sys.exc_info())
+
+            show_error.assert_called_once()
+            self.assertEqual(write_log.call_count, 2)
 
 
 class GuiLayoutRegressionTests(unittest.TestCase):
@@ -42,20 +106,7 @@ class GuiLayoutRegressionTests(unittest.TestCase):
         app = getattr(cls, "app", None)
         if app is None:
             return
-        try:
-            for after_id in app.tk.call("after", "info"):
-                app.after_cancel(after_id)
-        except tk.TclError:
-            pass
-        try:
-            app.destroy()
-        except tk.TclError:
-            # Tk/Aqua raises "can't delete Tcl command" part-way through root
-            # teardown.  The window is already gone, but an uncaught error
-            # aborts destroy() before Tk clears its module-level default root,
-            # and the next test that builds a root then blocks instead of
-            # failing.  Swallowing keeps the suite runnable on macOS.
-            pass
+        app.destroy()
 
     def _settle(self) -> None:
         self.app.update_idletasks()

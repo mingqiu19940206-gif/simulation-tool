@@ -1457,10 +1457,14 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         # At application shutdown no callback is useful; cancel the complete
         # root queue so Tcl never tries to invoke a command after Tk has been
         # destroyed (observed as intermittent "invalid command name" noise).
+        # Use Tcl's scheduler cancellation directly: ``self.after_cancel``
+        # also deletes the callback command from ``self._tclCommands``, even
+        # when that command belongs to a child widget.  The child's later
+        # destroy then tries to delete the same command and aborts teardown.
         try:
             for pending_job in self.tk.call("after", "info"):
                 try:
-                    self.after_cancel(pending_job)
+                    self.tk.call("after", "cancel", pending_job)
                 except tk.TclError:
                     pass
         except tk.TclError:
@@ -1468,12 +1472,17 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         try:
             super().destroy()
         except tk.TclError:
-            # Tk deletes each widget's Tcl command during root teardown and
-            # raises "can't delete Tcl command" when a cascade already removed
-            # one.  The toplevel is destroyed before that point, so shutdown
-            # must not abort here; letting it propagate leaves Tk's default
-            # root bound to a dead interpreter.
-            pass
+            # Some Tk builds can fail during Python-command cleanup after the
+            # native root is already gone.  Suppress only that completed-close
+            # case; an error while the window still exists must remain visible.
+            try:
+                root_still_exists = bool(self.winfo_exists())
+            except tk.TclError:
+                root_still_exists = False
+            if root_still_exists:
+                raise
+            if getattr(tk, "_default_root", None) is self:
+                tk._default_root = None
 
 
 def _walk_widgets(widget: tk.Misc):
