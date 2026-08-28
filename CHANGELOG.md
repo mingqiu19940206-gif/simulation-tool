@@ -1,8 +1,10 @@
 # Changelog
 
-## 2.4.0（发布候选，未完成真实 AEDT 验收）差分 VIA 换层 Phase 1–7
+## 2.4.0（发布候选）差分 VIA 换层 Phase 1–7
 
-> 源码版本标识已更新为 2.4.0（`VERSION`、`build_info.py`、GUI 标题、打包资源）；配置 schema 为 3。真实 AEDT 验收、EXE 构建与隔离副本验证为阶段外部门禁，Definition of Done（规格 §17）尚未满足。以下为已完成的离线开发能力。
+> 源码版本标识已更新为 2.4.0（`VERSION`、`build_info.py`、GUI 标题、打包资源）；配置 schema 为 3。Windows EXE、隔离副本及默认 `surface_capacitor` 的真实 AEDT 2022 R2 Build/Validate/Solve/S 参数门禁已通过；`via_transition` 真机求解、3×3 Optimetrics、TDR 交叉核对等 Definition of Done（规格 §17）项目仍未满足。
+
+- 2026-08-28：默认 `surface_capacitor`（`ideal_bridge`、关闭 GND VIA、Terminal）在 AEDT 2022 R2 / PyAEDT 1.3.0 上完成真实非图形化验收：原生 Validate 19/19、Setup1/Sweep1 正常收敛且被动，250 个 0.01–32 GHz 频点的 Sdd11/Sdd21/Sdc21/Scd21 均为有限值；脱敏证据见 `verification/real_aedt_hfss_validation.json`。
 
 - 2026-08-21 续做：补齐 `signal_via_pitch`/fanout 回归，并修复圆弧扇出在“总长恰等于横向位移、直线段为 0”时错误退化为斜直线的问题；同值仍保持旧版四点矩形，45° 展开/收拢和弧形离散均有直接测试。
 - 2026-08-21 续做：独立 HFSS 脚本新增 Signal VIA 钻孔、功能焊盘、反焊盘 Design Variables，圆柱/焊盘/平面避空对象直接引用变量；原生 Optimetrics 支持上述三轴，新增单 Project/单 Design/单 Parametric Setup 的离线 3×3（9 Variation）生成门禁。尚未绑定的 `pair_pitch`、残桩和回流孔坐标轴继续 fail closed，真实 3×3 求解仍 pending。
@@ -16,7 +18,7 @@
 - `via_transition` Phase 5 差分 TDR（规格 §10.4）：新增 `via_transition_tdr.py` 离线 IFT 算法，由复数 SDD11 计算差分阻抗随时间/距离曲线；明确并保存全部设置（输入曲线 SDD11、差分参考阻抗 100 Ω、上升时间、DC 外推、因果处理/窗函数、传播速度或只显示时间）；禁止对 dB 曲线直接 IFFT（复数相位敏感测试）；理想负载/开路/短路方向与阻抗数值测试通过；结果携带复数 SDD11，独立脚本同步导出 `via_tdr.json`/`via_tdr.csv`。
 - `via_transition` Phase 6 参数扫描与结果评分（规格 §11）：新增 `via_transition_sweeps.py`（安全数值轴 9 项、拓扑轴 11 项、残桩跨界护栏、预算 ≤200）与 `via_objective.py`（规格掩膜→无量纲惩罚、加权目标、排名与帕累托、JSON/CSV 导出、`sweep_results_summary.json` 内嵌逐 Variation 曲线与评分）；拓扑轴被明确阻止并解释原因；`residual_stub` 扫描区间跨越铜层边界时 fail closed。Signal VIA 三项孔径轴已能生成原生 Optimetrics；其余 VIA 轴绑定与 3×3 真机扫描仍为外部门禁（pending）。
 - `via_transition` 专属 GUI 编辑器（规格 §12.2）：新增“VIA 换层”页，提供进出层、Signal VIA Padstack、背钻与残桩、Return VIA、输入/输出走线的直接编辑，并带派生值/校验反馈与俯视图（P/N 信号孔、回流孔、走线）；场景切换按 `scenario.type` 分派，切换后电容页与 VIA 页互不误触。
-- 未进行真实 AEDT/HFSS 建模、原生 Validate 和求解；当前证据止于本地几何、预览、Validate、混合模 S 参数与差分 TDR 离线测试、目标评分/扫描计划离线测试和生成脚本 `--validate-only`。AEDT 原生 TDR 或独立算法交叉核对、3×3 小型 Optimetrics 真机扫描为外部门禁（pending）。
+- 默认 `surface_capacitor` 最小方案已完成真实 AEDT/HFSS 建模、原生 Validate、求解及混合模 S 参数提取。`via_transition` 的真实建模/求解、AEDT 原生 TDR 或独立算法交叉核对、3×3 小型 Optimetrics 真机扫描仍为外部门禁（pending）。
 
 ## 2.3.2 反焊盘独立开窗预览热修复 — 2026-08-15
 

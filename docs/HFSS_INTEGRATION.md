@@ -12,6 +12,20 @@ python <Project>_build_hfss.py --validate-only
 
 安装面切换时，生成脚本直接读取嵌入快照中的最终 `signal_layer_name`、Z 范围、端口、参考层、本体、阻焊开窗、安装面 GND 和空气盒。脚本不得再次根据顶/底层猜测几何。`--validate-only` 只验证嵌入数据和脚本结构；底层模式仍须在真实 AEDT 中检查对象边界、端口终端、RLC/Touchstone 端子、阻焊布尔和原生 Design Validate。
 
+## 2026-08-28 真实 AEDT 验证基线
+
+Windows 上使用 AEDT 2022 R2、PyAEDT 1.3.0 与 Python 3.14.6，以非图形模式执行默认
+`surface_capacitor`、`ideal_bridge`、关闭 GND VIA 的 Terminal 方案。真实工程创建和
+原生 Validate 通过（19 passed、0 error、0 warning，报告非 stale/incomplete）；
+Setup1 与 Sweep1 正常完成，插值扫频收敛且被动。通过产品兼容的
+`get_solution_data_per_variation` 路径提取 0.01–32 GHz 的 250 个频点，
+Sdd11、Sdd21、Sdc21、Scd21 全部为有限值。退出后 AEDT 进程数为 0，工程无 lock。
+
+机器可读脱敏证据和原始运行产物哈希见
+`verification/real_aedt_hfss_validation.json`。仓库不保存 AEDT 工程、results、日志、
+许可证或机器标识。本基线不覆盖 `via_transition`、原生 3×3 Optimetrics、背钻、
+Touchstone、RLC、底层安装、TDR、AEDT 2023 R2 或人工端口场分布审查。
+
 ## 真实 AEDT 联调顺序
 
 1. 在安装 AEDT 2022 R2 或 2023 R2 的机器上选择一致的目标版本。

@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "evidence_type": "real_aedt_hfss_validation",
+  "verified_at_utc": "2026-08-28T12:28:36.761824Z",
+  "passed": true,
+  "source_build": {
+    "software_version": "2.4.0",
+    "build_time_utc": "2026-08-28T09:02:18.8255946Z",
+    "source_hash": "7ba75f4d224019d70c16a36bbd46480215af3df8006484d9514e5265a529be60",
+    "config_schema_version": 3
+  },
+  "environment": {
+    "platform": "Windows",
+    "python_version": "3.14.6",
+    "pyaedt_version": "1.3.0",
+    "aedt_version": "2022.2",
+    "aedt_release": "2022 R2",
+    "execution_mode": "non_graphical"
+  },
+  "scenario": {
+    "type": "surface_capacitor",
+    "capacitor_model": "ideal_bridge",
+    "gnd_vias_enabled": false,
+    "solution_type": "Terminal",
+    "setup": "Setup1",
+    "sweep": "Sweep1",
+    "config_hash": "a9fa89ab6c48135f4de131addaed20219d51436fe70feaf2e5914b026c94447e",
+    "geometry_hash": "e740b7980e6c007c8ef9da486f436bc49551f4373cb16d9df7fb53e5b7711423"
+  },
+  "native_validate": {
+    "state": "passed",
+    "counts": {
+      "passed": 19,
+      "errors": 0,
+      "warnings": 0,
+      "not_checked": 0
+    },
+    "stale": false,
+    "incomplete": false,
+    "rule_ids": [
+      "HFSS-001",
+      "HFSS-002",
+      "HFSS-021",
+      "HFSS-022",
+      "HFSS-003",
+      "HFSS-003S",
+      "GEO-011",
+      "GEO-011",
+      "HFSS-010",
+      "PORT-011",
+      "HFSS-004",
+      "HFSS-005",
+      "HFSS-006",
+      "HFSS-007",
+      "CAP-101",
+      "PORT-012",
+      "PORT-013",
+      "HFSS-011",
+      "HFSS-090"
+    ]
+  },
+  "solve": {
+    "passed": true,
+    "analyze_result": true,
+    "elapsed_seconds": 188.236,
+    "adaptive_converged": true,
+    "sweep_converged": true,
+    "sweep_passive": true,
+    "normal_completion": true,
+    "max_solved_tetrahedra": 24778,
+    "max_matrix_size": 165908
+  },
+  "terminal_s_parameters": {
+    "passed": true,
+    "api": "get_solution_data_per_variation",
+    "frequency_unit": "GHz",
+    "frequency_count": 250,
+    "frequency_range_ghz": [
+      0.01,
+      32.0
+    ],
+    "curves_db": {
+      "Sdd11": {
+        "first": -65.89226521946146,
+        "last": -13.961512039338462,
+        "min": -66.05163872817457,
+        "max": -12.77807614412014,
+        "all_finite": true
+      },
+      "Sdd21": {
+        "first": -0.0038418382160803803,
+        "last": -0.7618675155069533,
+        "min": -0.7917351935377493,
+        "max": -0.0038418382160803803,
+        "all_finite": true
+      },
+      "Sdc21": {
+        "first": -124.184635007674,
+        "last": -57.30001254498249,
+        "min": -124.184635007674,
+        "max": -57.290519370907624,
+        "all_finite": true
+      },
+      "Scd21": {
+        "first": -124.18976225007512,
+        "last": -60.533250015796014,
+        "min": -124.18976225007512,
+        "max": -60.18166729490826,
+        "all_finite": true
+      }
+    }
+  },
+  "cleanup": {
+    "aedt_process_count": 0,
+    "project_lock_present": false
+  },
+  "source_artifact_hashes": {
+    "aedt_project": {
+      "sha256": "2b9a5e84f8871c78ee9eba0a3752bf93724f986c5ac887d6295b8d779537e68f",
+      "size_bytes": 642085
+    },
+    "native_validate_detail": {
+      "sha256": "aa5a4f5943bebcdf442f3c230134ba1cbb67827245c491bc6b5c082f1af964bd",
+      "size_bytes": 47659
+    },
+    "solve_detail": {
+      "sha256": "3881810ce4cf22fe20aa4f9490f7fd5300fd1ab7bc60c893804e32dfe8000479",
+      "size_bytes": 7424
+    },
+    "s_parameter_detail": {
+      "sha256": "27d4c7a91bc68d508baaffc46b7bdfb2711072503dde41dda4efac7f9c489d76",
+      "size_bytes": 1288
+    }
+  },
+  "not_committed": [
+    "Generated AEDT project and results directory",
+    "Detailed validation, solve, profile, and S-parameter logs",
+    "Machine, user, temporary-directory, network, and license identifiers"
+  ],
+  "known_limitations": [
+    "This evidence covers only the default surface_capacitor scenario with ideal_bridge and GND vias disabled.",
+    "The via_transition scenario, native 3x3 Optimetrics solve, backdrill, Touchstone, RLC, bottom-mount, and TDR paths remain unverified in real AEDT.",
+    "AEDT 2023 R2 remains unverified.",
+    "Manual port field-distribution and alternative multi-conductor cross-section review remain pending."
+  ]
+}
