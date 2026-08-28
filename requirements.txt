@@ -3,3 +3,6 @@ pyaedt>=1.1.0,<2.0.0
 vtk>=9.4,<10
 shapely>=2.1,<3
 pyinstaller>=6.0,<7
+# tools/verify_visual_acceptance.py and tools/gui_visual_acceptance.py
+# capture and inspect GUI screenshots.
+pillow>=10,<12

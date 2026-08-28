@@ -30,9 +30,14 @@ class VerifyDeliveryConfigRoundtripTests(unittest.TestCase):
 
         # The internal mm values differ at binary floating-point precision,
         # while both produce exactly the same documented external JSON values.
+        # Assert that property rather than one platform's exact bit pattern, so
+        # editing the default stackup cannot fail this test for an unrelated
+        # reason.
         self.assertNotEqual(loaded, self.config)
-        self.assertEqual(loaded["stackup"][3]["thickness"],
-                         0.015239999999999998)
+        original = self.config["stackup"][3]["thickness"]
+        roundtripped = loaded["stackup"][3]["thickness"]
+        self.assertNotEqual(roundtripped, original)
+        self.assertLess(abs(roundtripped - original), 1.0e-12)
         self.assertTrue(configs_roundtrip_equivalent(self.config, loaded))
 
     def test_meaningful_numeric_change_is_not_equivalent(self) -> None:

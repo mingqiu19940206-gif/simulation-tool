@@ -1,8 +1,8 @@
 ﻿{
     "passed":  true,
-    "executable":  "release/SurfaceCapAntipadTool_v2.3.2.exe",
-    "software_version":  "2.3.2",
-    "source_hash":  "0a50f23048c0a2b4bcfd1cdc3c79cf49b35536d013285e2b0e75f3b79ba56b8d",
+    "executable":  "release/SurfaceCapAntipadTool_v2.4.0.exe",
+    "software_version":  "2.4.0",
+    "source_hash":  "7ba75f4d224019d70c16a36bbd46480215af3df8006484d9514e5265a529be60",
     "release_self_check":  {
                                "passed":  true,
                                "backend":  "native_optimetrics",
@@ -10,13 +10,13 @@
                                "design_count":  1,
                                "optimetrics_setup_count":  1,
                                "design_variation_count":  7,
-                               "software_version":  "2.3.2",
-                               "build_time_utc":  "2026-08-14T23:44:47.2715825Z",
-                               "source_hash":  "0a50f23048c0a2b4bcfd1cdc3c79cf49b35536d013285e2b0e75f3b79ba56b8d",
+                               "software_version":  "2.4.0",
+                               "build_time_utc":  "2026-08-28T09:02:18.8255946Z",
+                               "source_hash":  "7ba75f4d224019d70c16a36bbd46480215af3df8006484d9514e5265a529be60",
                                "sweep_backend_version":  "native-optimetrics-v3.2",
-                               "config_schema_version":  2
+                               "config_schema_version":  3
                            },
     "gui_startup_exit_code":  0,
     "model_preview_exit_code":  0,
-    "verified_at_utc":  "2026-08-14T23:47:33.9841891Z"
+    "verified_at_utc":  "2026-08-28T09:05:40.2277417Z"
 }

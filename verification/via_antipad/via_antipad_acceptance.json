@@ -4,8 +4,9 @@
   "real_aedt_hfss_executed": false,
   "examples": [
     {
-      "example": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\examples\\via_transition_through.json",
+      "example": "E:\\chatgpt workspace\\simulation tool\\examples\\via_transition_through.json",
       "migration_messages": [
+        "旧配置缺少 antipad.direction_mode，已迁移为 auto_pn（自动沿实际 P/N 中心轴）；原 rotation_deg 仍保留，切换 manual 后继续使用。",
         "旧配置缺少 via_transition.signal_via_pitch，已回填为 pair_pitch（信号孔与走线同中心距，无扇出）。"
       ],
       "local_validate_state": "passed_with_warnings",
@@ -15,20 +16,21 @@
         "warnings": 4,
         "not_checked": 1
       },
-      "contour_count": 24,
+      "contour_count": 12,
       "shapes": [
         "circle"
       ],
-      "hfss_script": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_through\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_build_hfss.py",
-      "geometry_summary": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_through\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_geometry_summary.txt",
-      "config_and_geometry_snapshot": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_through\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402.json",
-      "local_validate_json": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_through\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_validate_local.json",
+      "hfss_script": "E:\\chatgpt workspace\\simulation tool\\verification\\via_antipad\\via_transition_through\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_build_hfss.py",
+      "geometry_summary": "E:\\chatgpt workspace\\simulation tool\\verification\\via_antipad\\via_transition_through\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_geometry_summary.txt",
+      "config_and_geometry_snapshot": "E:\\chatgpt workspace\\simulation tool\\verification\\via_antipad\\via_transition_through\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402.json",
+      "local_validate_json": "E:\\chatgpt workspace\\simulation tool\\verification\\via_antipad\\via_transition_through\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_validate_local.json",
       "validate_only_exit_code": 0,
-      "validate_only_output_tail": "2026-08-21 16:34:11 | INFO | generation_id=a9c601565c514fa99224da69ae2bc844 | config_hash=9cd61fe9226db095c7563529c6729cca9db1458dd4a34cafbb0d041d43cb7d2c | geometry_hash=3a25173422e9b847817a86ed5cbc3b122d03616efbb02036bf6d5ba1124cccf1\n2026-08-21 16:34:11 | INFO | software_version=2.4.0 | build_time_utc=2026-08-14T23:44:47.2715825Z | source_hash=0a50f23048c0a2b4bcfd1cdc3c79cf49b35536d013285e2b0e75f3b79ba56b8d | sweep_backend_version=native-optimetrics-v3.2 | config_schema_version=3\n2026-08-21 16:34:11 | WARNING | ��⵽AEDT 2022 R2��ASCII·�����ݷ��գ����̽���Ӣ������·��������C:\\Users\\admin\\AppData\\Local\\SurfaceCapAntipadTool\\HFSSProjects\\Surface_Cap_Antipad_V2_0402\\a9c601565c514fa99224da69ae2bc844\\Surface_Cap_Antipad_V2_0402.aedt\n�����ű�Ƕ�����ݼ��ͨ����\n"
+      "validate_only_output_tail": "2026-08-28 17:06:34 | INFO | generation_id=a1dc2bf1797f4607b781c3a25fc2cce2 | config_hash=3de1c1980c863baa68c329a3cc71399433600ab05484acd78608391372279b92 | geometry_hash=fcaf8f168f46c17f8fa5eddf3c13cf9dcf444d8d02fe6dd7305052eac2aa9482\n2026-08-28 17:06:34 | INFO | software_version=2.4.0 | build_time_utc=2026-08-28T09:02:18.8255946Z | source_hash=7ba75f4d224019d70c16a36bbd46480215af3df8006484d9514e5265a529be60 | sweep_backend_version=native-optimetrics-v3.2 | config_schema_version=3\n\\xb6\\xc0\\xc1\\xa2\\xbdű\\xbeǶ\\xc8\\xeb\\xca\\xfd\\xbeݼ\\xec\\xb2\\xe9ͨ\\xb9\\xfd\\xa1\\xa3\n"
     },
     {
-      "example": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\examples\\via_transition_backdrill.json",
+      "example": "E:\\chatgpt workspace\\simulation tool\\examples\\via_transition_backdrill.json",
       "migration_messages": [
+        "旧配置缺少 antipad.direction_mode，已迁移为 auto_pn（自动沿实际 P/N 中心轴）；原 rotation_deg 仍保留，切换 manual 后继续使用。",
         "旧配置缺少 via_transition.signal_via_pitch，已回填为 pair_pitch（信号孔与走线同中心距，无扇出）。"
       ],
       "local_validate_state": "passed_with_warnings",
@@ -38,16 +40,16 @@
         "warnings": 4,
         "not_checked": 1
       },
-      "contour_count": 24,
+      "contour_count": 12,
       "shapes": [
         "circle"
       ],
-      "hfss_script": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_backdrill\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_build_hfss.py",
-      "geometry_summary": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_backdrill\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_geometry_summary.txt",
-      "config_and_geometry_snapshot": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_backdrill\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402.json",
-      "local_validate_json": "E:\\chatgpt workspace\\via换层续做\\VIA换层_Codex交接包\\surface_cap_antipad_tool_v2.4.0_dev\\verification\\via_antipad\\via_transition_backdrill\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_validate_local.json",
+      "hfss_script": "E:\\chatgpt workspace\\simulation tool\\verification\\via_antipad\\via_transition_backdrill\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_build_hfss.py",
+      "geometry_summary": "E:\\chatgpt workspace\\simulation tool\\verification\\via_antipad\\via_transition_backdrill\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_geometry_summary.txt",
+      "config_and_geometry_snapshot": "E:\\chatgpt workspace\\simulation tool\\verification\\via_antipad\\via_transition_backdrill\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402.json",
+      "local_validate_json": "E:\\chatgpt workspace\\simulation tool\\verification\\via_antipad\\via_transition_backdrill\\Surface_Cap_Antipad_V2_0402\\Surface_Cap_Antipad_V2_0402_validate_local.json",
       "validate_only_exit_code": 0,
-      "validate_only_output_tail": "2026-08-21 16:34:11 | INFO | generation_id=4efb312c4a2a4656b5197a2e1b4fed03 | config_hash=acfb1396128339274d13e2c992177ff6fc07932a5b66ee19d2156ed19603776b | geometry_hash=c29f4d49f5a7a4e8ed4b020000bfec9a05feaa39745ee8bb2a3d1571f126d92b\n2026-08-21 16:34:11 | INFO | software_version=2.4.0 | build_time_utc=2026-08-14T23:44:47.2715825Z | source_hash=0a50f23048c0a2b4bcfd1cdc3c79cf49b35536d013285e2b0e75f3b79ba56b8d | sweep_backend_version=native-optimetrics-v3.2 | config_schema_version=3\n2026-08-21 16:34:11 | WARNING | ��⵽AEDT 2022 R2��ASCII·�����ݷ��գ����̽���Ӣ������·��������C:\\Users\\admin\\AppData\\Local\\SurfaceCapAntipadTool\\HFSSProjects\\Surface_Cap_Antipad_V2_0402\\4efb312c4a2a4656b5197a2e1b4fed03\\Surface_Cap_Antipad_V2_0402.aedt\n�����ű�Ƕ�����ݼ��ͨ����\n"
+      "validate_only_output_tail": "2026-08-28 17:06:34 | INFO | generation_id=91619df3dcb44f2cb70cfe4387927dce | config_hash=ce3a46ca69fb71dcfb9656d5606c02b374f310dfd1ed1ad75886636ef5e1fb7a | geometry_hash=a2fb7a43be929bd4f014d74b8580cf5189ab02ec937e638719e760794e1d47ad\n2026-08-28 17:06:34 | INFO | software_version=2.4.0 | build_time_utc=2026-08-28T09:02:18.8255946Z | source_hash=7ba75f4d224019d70c16a36bbd46480215af3df8006484d9514e5265a529be60 | sweep_backend_version=native-optimetrics-v3.2 | config_schema_version=3\n\\xb6\\xc0\\xc1\\xa2\\xbdű\\xbeǶ\\xc8\\xeb\\xca\\xfd\\xbeݼ\\xec\\xb2\\xe9ͨ\\xb9\\xfd\\xa1\\xa3\n"
     }
   ]
 }

@@ -11,11 +11,12 @@
 - Windows 程序：`release/SurfaceCapAntipadTool_v2.3.2.exe`
 - PyInstaller 配置：`packaging/SurfaceCapAntipadTool.spec`
 - 自动构建脚本：`packaging/build_windows.ps1`
-- 自动化测试：188 个，188 通过，0 失败，0 错误，0 跳过
+- 自动化测试：190 个，190 通过，0 失败，0 错误，0 跳过（2.3.2 交付时记录；
+  `verification/test_results.json` 现由 2.4.0 Windows 验证覆盖）
 - GUI 布局矩阵：4 个视口 × 3 个字体档，并覆盖 29/5 层、mm/mil、VIA 开关与窗格拖动
 - 可视化证据：12 张，1120×720、1900×1050、2560×1400 各四页
 - EXE 发布自检、GUI 启动、默认等轴 3D 旋转/平移/缩放/Validate 冒烟：通过
-- ZIP 隔离副本：188 个测试、源码验证、EXE 自检、GUI 与 3D 冒烟全部通过
+- ZIP 隔离副本：190 个测试、源码验证、EXE 自检、GUI 与 3D 冒烟全部通过
 - 真实 AEDT/HFSS：本次未启动 AEDT、未求解；仅执行脚本 `--validate-only` 与对象/端口/扫参结构验证
 
 ## 根因与布局修复
@@ -37,7 +38,8 @@
 
 ## 自动与视觉验证证据
 
-- `verification/test_results.json`：正式构建链 188/188 通过。
+- 2.3.2 正式构建链当时为 190/190 通过；共享路径
+  `verification/test_results.json` 现保存 2.4.0 的最新 Windows 验证结果。
 - `verification/source_verification.json`：默认配置、保存/读取、本地 Validate、51 个 3D 场景对象、四 Port、空气盒、HFSS `--validate-only`、45°/S 弯和 Optimetrics。
 - `verification/semantic_invariance.json`：V2.3.0 对比的语义零变化结果。
 - `verification/visual_acceptance.json`：12 张 PNG 的尺寸、SHA-256 和人工巡检清单。
@@ -45,7 +47,8 @@
 - `verification/screenshots/1900x1050/`：同四页。
 - `verification/screenshots/2560x1400/`：同四页。
 - `verification/exe_model_preview_smoke.json`：EXE 构建身份、GUI 和 3D 冒烟。
-- `verification/isolation_test_results.json`：ZIP 隔离副本 188/188 通过。
+- 2.3.2 ZIP 隔离副本当时为 190/190 通过；共享路径
+  `verification/isolation_test_results.json` 现保存 2.4.0 候选 ZIP 的最新隔离结果。
 - `verification/isolation_source_verification.json`、`isolation_exe_self_check.json`、`isolation_summary.json`：隔离自检证据。
 
 截图通过真实 Windows Tk HWND 的 `PrintWindow` 路径捕获，不是重新绘制的示意图。人工巡检与 Canvas bbox 测试共同确认：文本组无非预期相交；非滚动画布文本在真实视口内；滚动画布内容在 `scrollregion` 内；29 层不丢失、不重复且末层可达；P/N/X/Y、`pad_pitch`、`cap_pitch` 各出现一次；四个 Port 与合并的 AIRBOX/开放边界标签不重叠。
