@@ -1,0 +1,73 @@
+{
+  "passed": 13,
+  "failed": 0,
+  "total": 13,
+  "failures": [],
+  "checks": [
+    {
+      "name": "phase4_four_ports",
+      "ok": true,
+      "detail": "ports=4"
+    },
+    {
+      "name": "phase4_port_reference_present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase4_two_differential_pairs",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase4_port_validation_no_errors",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "phase4_mixed_mode_sdd21",
+      "ok": true,
+      "detail": "SDD21=(0.7999999999999999+0j)"
+    },
+    {
+      "name": "phase4_mixed_mode_no_conversion",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase4_build_results_db",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase4_results_hash_present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase4_validate_results_ok",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase4_json_round_trip",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase4_csv_written",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase4_snapshot_has_differential_pairs",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase4_surface_capacitor_ok",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

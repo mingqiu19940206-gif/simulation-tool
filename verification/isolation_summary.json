@@ -1,0 +1,15 @@
+﻿{
+    "passed":  true,
+    "tested_candidate_zip":  "C:\\Users\\admin\\Documents\\仿真小工具\\latest_complete_package\\delivery\\SurfaceCapAntipadTool_v2.3.2_latest_full.zip",
+    "tested_candidate_zip_sha256":  "5a9fa1c8f7425622bd6213d4e562e32fb428d5de3906042b9c6b409cda719ef4",
+    "isolated_directory":  "C:\\Users\\admin\\AppData\\Local\\Temp\\SurfaceCapAntipadTool_v2.3.2_isolation_2d17b7235e264939ac69d86026cc5a44",
+    "tests_run":  190,
+    "test_failures":  0,
+    "test_errors":  0,
+    "source_verification_passed":  true,
+    "exe_self_check_passed":  true,
+    "gui_smoke_exit_code":  0,
+    "model_preview_smoke_exit_code":  0,
+    "verified_at_utc":  "2026-08-14T23:52:16.5229805Z",
+    "temporary_copy_removed_after_verification":  true
+}

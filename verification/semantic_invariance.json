@@ -1,0 +1,98 @@
+﻿{
+  "passed": true,
+  "baseline_root": "<WORKSPACE_ROOT>\\delivery\\SurfaceCapAntipadTool_v2.3.1_latest",
+  "current_root": "<WORKSPACE_ROOT>\\surface_cap_antipad_tool_v2.3.1",
+  "semantic_file_hashes": {
+    "config/default_config.json": {
+      "baseline_sha256": "0c54361523ad0f679ab368069a3855e5ce607325adc23b24c5d5afef4dfb7df6",
+      "current_sha256": "0c54361523ad0f679ab368069a3855e5ce607325adc23b24c5d5afef4dfb7df6",
+      "equal": true
+    },
+    "src/config_manager.py": {
+      "baseline_sha256": "1a5647f2a98cd679acba5f2408087315ecdf398df82565825ded22d7184c0eae",
+      "current_sha256": "1a5647f2a98cd679acba5f2408087315ecdf398df82565825ded22d7184c0eae",
+      "equal": true
+    },
+    "src/geometry_calculator.py": {
+      "baseline_sha256": "ca70825bb3acd38d2ce7aa46244a576227340403c5e8d5322c6926f46929288c",
+      "current_sha256": "ca70825bb3acd38d2ce7aa46244a576227340403c5e8d5322c6926f46929288c",
+      "equal": true
+    },
+    "src/geometry_v1.py": {
+      "baseline_sha256": "cf597fbdc56571ed3730ec6c271deeb68d07ce0f1c82363088a866fbf34e81e3",
+      "current_sha256": "cf597fbdc56571ed3730ec6c271deeb68d07ce0f1c82363088a866fbf34e81e3",
+      "equal": true
+    },
+    "src/gnd_via_semantics.py": {
+      "baseline_sha256": "b3919cf6490a857d6cb66bd5ead86442f3779a024f342232f8f25938350403ff",
+      "current_sha256": "b3919cf6490a857d6cb66bd5ead86442f3779a024f342232f8f25938350403ff",
+      "equal": true
+    },
+    "src/hfss_script_generator.py": {
+      "baseline_sha256": "351c622aa3fb4e09ed1c0ade956c3600f61a1694ab4224d8709c742122bfd50f",
+      "current_sha256": "351c622aa3fb4e09ed1c0ade956c3600f61a1694ab4224d8709c742122bfd50f",
+      "equal": true
+    },
+    "src/model_validator.py": {
+      "baseline_sha256": "6489fc10db8f17fc71d91a8663b85f845d061f804d10c1fa4da5631d2c758687",
+      "current_sha256": "6489fc10db8f17fc71d91a8663b85f845d061f804d10c1fa4da5631d2c758687",
+      "equal": true
+    },
+    "src/simulation_sweep_semantics.py": {
+      "baseline_sha256": "af2fb4106b3aeafa9727354c8b20dc24c6291e7c23c60d7cd8575c869a6286ec",
+      "current_sha256": "af2fb4106b3aeafa9727354c8b20dc24c6291e7c23c60d7cd8575c869a6286ec",
+      "equal": true
+    },
+    "src/sweep_manager.py": {
+      "baseline_sha256": "f88c99a05a60407444d62596ca04204bdf753b39c8b7fcfc484f03da7ad7a6d3",
+      "current_sha256": "f88c99a05a60407444d62596ca04204bdf753b39c8b7fcfc484f03da7ad7a6d3",
+      "equal": true
+    }
+  },
+  "runtime_cases": {
+    "mil:via=False": "5c974c24baa894b5c32735b5f1b993eb3e912dc5b01cb9d1f4616b27bbdd81aa",
+    "mil:via=True": "919ec8aaa1ee3ea954426877f69692cc7373b115f0599759b9adf5599453e1af",
+    "mm:via=False": "45d2647b5c31e8a2813fcda71ece9f897c0b32834be8d325a42d607963c284ce",
+    "mm:via=True": "3196e28cf126987c5ec5dd54238990323158d6771e2c429b296060bfcdfd1100"
+  },
+  "runtime_equal": true,
+  "m6g_layer_count": 29,
+  "m6g_layer_names": [
+    "Top_Soldermask",
+    "L1",
+    "DIEL_L1_L2",
+    "L2",
+    "DIEL_L2_L3",
+    "L3",
+    "DIEL_L3_L4",
+    "L4",
+    "DIEL_L4_L5",
+    "L5",
+    "DIEL_L5_L6",
+    "L6",
+    "DIEL_L6_L7",
+    "L7",
+    "DIEL_L7_L8",
+    "L8",
+    "DIEL_L8_L9",
+    "L9",
+    "DIEL_L9_L10",
+    "L10",
+    "DIEL_L10_L11",
+    "L11",
+    "DIEL_L11_L12",
+    "L12",
+    "DIEL_L12_L13",
+    "L13",
+    "DIEL_L13_L14",
+    "L14",
+    "Bottom_Soldermask"
+  ],
+  "verified_scope": [
+    "configuration normalization and mm/mil conversion",
+    "29-layer M6G geometry with GND VIA disabled/enabled",
+    "ports, airbox and simulation geometry",
+    "generation snapshot",
+    "HFSS script text with normalized build identity"
+  ]
+}

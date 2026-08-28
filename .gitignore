@@ -33,6 +33,16 @@ HFSS_Projects/
 *.log
 crash*.txt
 
+# Regenerable verification artifacts (maintained baselines are tracked explicitly)
+verification/phase*_tmp/
+verification/phase*_verify_delivery.json
+verification/via_antipad/via_transition_*/
+verification/ui_layout_*/
+verification/screenshots/via_antipad_ux_*/
+verification/via_antipad_ux_*_test_results.json
+verification/capacitor_viewport_fill_*.png
+verification/probe.txt
+
 # Editors and operating systems
 .idea/
 .vscode/

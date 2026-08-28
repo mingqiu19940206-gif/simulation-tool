@@ -1,0 +1,98 @@
+{
+  "passed": 18,
+  "failed": 0,
+  "total": 18,
+  "failures": [],
+  "checks": [
+    {
+      "name": "phase2_valid_geometry_two_signal_vias",
+      "ok": true,
+      "detail": "signal_vias=2"
+    },
+    {
+      "name": "phase2_valid_geometry_four_ports",
+      "ok": true,
+      "detail": "ports=4"
+    },
+    {
+      "name": "phase2_valid_geometry_no_errors",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "phase2_valid_semantics_no_errors",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "phase2_dispatch_is_via",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase2_snapshot_round_trip",
+      "ok": true,
+      "detail": "scenario=via_transition"
+    },
+    {
+      "name": "backdrill_enabled_geometry_error",
+      "ok": true,
+      "detail": "['backdrill.enabled=true 但背钻尚未实现（Phase 3）；当前仅支持无背钻的外层到外层贯通孔。']"
+    },
+    {
+      "name": "backdrill_enabled_rule_via_trn_040",
+      "ok": true,
+      "detail": "['VIA-TRN-040']"
+    },
+    {
+      "name": "internal_exit_geometry_error",
+      "ok": true,
+      "detail": "[\"exit_layer 'L10' 不等于 drill_end_layer 'L14'，会产生未背钻残桩（Phase 3 实现前不支持）。\"]"
+    },
+    {
+      "name": "internal_exit_rule_via_trn_042",
+      "ok": true,
+      "detail": "['VIA-TRN-042']"
+    },
+    {
+      "name": "sweep_fail_closed",
+      "ok": true,
+      "detail": "scenario.type=via_transition（差分 VIA 换层）的参数扫描将在 Phase 6 实现；当前"
+    },
+    {
+      "name": "example_exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "example_schema_v3",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "example_scenario_via",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "example_backdrill_disabled",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "example_exit_l14",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "surface_capacitor_dispatch_still_works",
+      "ok": true,
+      "detail": "type=surface_capacitor"
+    },
+    {
+      "name": "surface_capacitor_not_via_dispatch",
+      "ok": true,
+      "detail": "电容几何不包含 via_transition signal_vias"
+    }
+  ]
+}

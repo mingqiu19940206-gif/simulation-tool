@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "tests_run": 190,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "duration_seconds": 85.158,
+  "python": "3.14.6 (tags/v3.14.6:c63aec6, Jun 10 2026, 10:26:10) [MSC v.1944 64 bit (AMD64)]"
+}

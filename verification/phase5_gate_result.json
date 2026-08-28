@@ -1,0 +1,83 @@
+{
+  "passed": 15,
+  "failed": 0,
+  "total": 15,
+  "failures": [],
+  "checks": [
+    {
+      "name": "phase5_settings_complete",
+      "ok": true,
+      "detail": "['algorithm', 'causality', 'dc_extrapolation', 'differential_reference_impedance', 'distance_axis', 'input_curve', 'propagation_velocity_m_s', 'rise_time_ps', 'window_beta', 'window_function']"
+    },
+    {
+      "name": "phase5_settings_valid",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase5_load_zref",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase5_open_direction",
+      "ok": true,
+      "detail": "rho=1.0000 Z=200000005556.4"
+    },
+    {
+      "name": "phase5_short_direction",
+      "ok": true,
+      "detail": "rho=-1.0000 Z=0.000"
+    },
+    {
+      "name": "phase5_not_db_ifft",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase5_constant_ratio",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase5_dc_extrapolation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase5_distance_axis",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase5_nonuniform_fail_closed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase5_result_carries_complex_sdd11",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase5_run_tdr_from_result",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase5_tdr_json_round_trip",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase5_tdr_csv_written",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phase5_surface_capacitor_ok",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}
