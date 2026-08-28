@@ -1,13 +1,14 @@
 # Git 状态与快照基线
 
-更新时间：2026-08-27（Asia/Shanghai）
+更新时间：2026-08-28（Asia/Shanghai）
 
 ## 当前状态
 
 本项目已置于 Git 版本控制之下。
 
 - 远端：`https://github.com/mingqiu19940206-gif/simulation-tool`
-- 稳定分支：`main`，当前 `303c37b`（合并 PR #1）
+- 稳定分支：`main`，当前 `4a8b355`（合并 PR #3）
+- 当前 Windows 任务分支：`codex/hfss-real-validation`（补充脱敏后的真实 AEDT/HFSS 验证证据）
 - 协作分支命名：Windows Codex 用 `codex/<任务名>`，macOS Claude Code 用 `claude/<任务名>`
 - 分支保护约定：不直接提交到 `main`，一律经 Pull Request 合并（见 `AGENTS.md` 与 `COLLABORATION.md`）
 
@@ -19,6 +20,9 @@
 | `e22fd87` | 恢复 `tests/`、`docs/`、`packaging/`、`tools/`、`verification/` |
 | `81ba5ce` | 修复验证门（round-trip 比较、Tk 刷新循环） |
 | `303c37b` | 合并 PR #1 |
+| `64c9fb4` | PR #2：macOS 测试可运行性与审查跟进 |
+| `957d27c` | PR #3：恢复 Windows Tk 关闭路径并补充回归 |
+| `4a8b355` | 合并 PR #3 |
 
 当前测试套件规模：`tests/` 下 344 个用例，其中包含 Windows 关闭路径与
 `report_callback_exception` 交互/headless 行为的回归覆盖。

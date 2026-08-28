@@ -1,6 +1,6 @@
 # SurfaceCapAntipadTool 2.4.0
 
-这是 v2.4.0 差分 VIA 换层版本（发布候选，未完成真实 AEDT 验收）。正式源码入口为 `src/main_gui.py`。Windows 发布程序由 `packaging/build_windows.ps1` 生成到 `release/SurfaceCapAntipadTool_v2.4.0.exe`；`release/` 属于构建产物，被 `.gitignore` 排除，不在仓库中。
+这是 v2.4.0 差分 VIA 换层版本（发布候选）。默认 `surface_capacitor` 最小方案已在 Windows / AEDT 2022 R2 完成真实建模、原生 Validate、求解和混合模 S 参数提取；VIA 真机验收仍在进行。正式源码入口为 `src/main_gui.py`。Windows 发布程序由 `packaging/build_windows.ps1` 生成到 `release/SurfaceCapAntipadTool_v2.4.0.exe`；`release/` 属于构建产物，被 `.gitignore` 排除，不在仓库中。
 
 ## 快速开始
 
@@ -45,7 +45,7 @@ powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 - `packaging/`：唯一 PyInstaller spec、版本资源和自动构建脚本。
 - `release/`：本快照重建并通过冒烟测试的 Windows EXE。
 - `docs/`：运行、开发、测试、HFSS 联调、Git 状态与已知问题。
-- `verification/`：本次交付的机器可读验证结果；不包含构建/运行日志或用户工程。
+- `verification/`：机器可读验证结果，包括脱敏后的真实 AEDT 验证摘要 `real_aedt_hfss_validation.json`；不包含构建/运行日志或用户工程。
 
 没有外部图片、图标、材料库或 HFSS 模板文件被运行时引用；HFSS 脚本模板由 `src/hfss_script_generator.py` 生成，材料和叠层默认值位于 `config/default_config.json`。
 
@@ -71,9 +71,9 @@ powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 
 已实现：差分 P/N 信号孔、entry/exit 走线、回流孔、逐层圆形反焊盘、背钻铜/介质切除与腔体、四个 Terminal Port 与两个差分对、混合模 S 参数转换（SDD11/SDD21/SDC21/SCD21）、`via_results.json`/CSV 结果导出、差分 TDR（由复数 SDD11 离线 IFT 计算差分阻抗随时间/距离曲线，导出 `via_tdr.json`/CSV，保存完整 TDR 设置）、扫描计划（安全数值轴/拓扑护栏/残桩跨界护栏/预算）与目标评分（规格掩膜、加权目标、排名与帕累托）、Signal VIA 钻孔/功能焊盘/反焊盘三项 HFSS Design Variables 与原生 Parametric Setup 离线生成（含 3×3 结构门禁）、专属“VIA 换层”参数编辑器（进出层/Padstack/背钻/回流孔/走线 + 派生值校验 + 俯视图）、2D/3D 预览、本地 Validate 和独立 HFSS 脚本 `--validate-only`。
 
-尚未实现并会 fail closed：
+尚未实现或仍待真机验收：
 
 - VIA 原生 Optimetrics 的 `pair_pitch`、残桩与回流孔坐标表达式绑定；这些轴当前明确 fail closed。已绑定的 Signal VIA 钻孔/功能焊盘/反焊盘轴仍需真实 AEDT 3×3 求解验收。
-- 真实 AEDT/HFSS 建模、原生 Validate 与求解（需要目标机 AEDT 2022 R2 / 2023 R2 及许可证）。
+- `via_transition` 的真实 AEDT/HFSS 建模、原生 Validate、求解、3×3 Optimetrics 与端到端 TDR 验收；默认 `surface_capacitor` 最小方案的真机结果见 `verification/real_aedt_hfss_validation.json`。
 
 2026-08-21 的续做改动、命令退出码与下一阶段入口见 `docs/CONTINUATION_REPORT_2026-08-21.md`。

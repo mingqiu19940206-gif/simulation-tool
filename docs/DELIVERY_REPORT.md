@@ -60,3 +60,17 @@
 - 完整 ZIP 的最终 SHA-256 写在 ZIP 旁的同名 `.sha256` 文件中；ZIP 不能在自身内部保存最终哈希而不改变该哈希。
 
 PyInstaller 对 PyAEDT 可选 Nastran 扩展中的 Python 3.10–3.13 `.pyd` 给出缺少对应 Python DLL 的警告；这些可选扩展不在本工具调用链。当前 Python 3.14 EXE 的发布自检、GUI 和 3D 冒烟均已通过。
+
+## 2.4.0 补充真实 AEDT 证据（2026-08-28）
+
+本节补充后续 2.4.0 验证，不改写上文 2.3.2 交付当时“未启动 AEDT、未求解”的
+历史事实。默认 `surface_capacitor`（`ideal_bridge`、关闭 GND VIA）已在 Windows、
+AEDT 2022 R2 / PyAEDT 1.3.0 中完成真实非图形化 Build、原生 Validate、
+Setup1/Sweep1 求解和混合模 S 参数提取：Validate 19/19，求解正常收敛且 Sweep
+被动，0.01–32 GHz 共 250 个频点的 Sdd11/Sdd21/Sdc21/Scd21 均为有限值，退出后
+没有残留 AEDT 进程或工程锁。
+
+脱敏的机器可读结果和原始运行产物哈希保存在
+`verification/real_aedt_hfss_validation.json`；AEDT 工程、results、详细日志、机器与
+许可证标识未加入仓库。`via_transition` 真机求解、3×3 Optimetrics、背钻、
+Touchstone/RLC、底层安装、TDR 与人工端口场分布审查仍未验证。

@@ -1,7 +1,7 @@
 # 已知问题与待验证事项
 
-1. 2.4.0 当前快照没有在真实 AEDT/HFSS 中重新执行工程创建、原生 Validate、求解和 Optimetrics 扫描；本次验证止于本地 Validate、生成脚本的 `--validate-only`、对象/变量/Optimetrics 代码断言、离线 TDR/评分与 EXE 自检。原工作区存在较早构建的 AEDT 验收痕迹，但不能代替本快照验证。
-2. 正式支持目标为 AEDT 2022 R2 与 2023 R2。PyAEDT/AEDT 小版本差异可能影响 Lumped RLC、Touchstone 网络组件、Terminal Port、Radiation/PML 和 Optimetrics API，首次联调必须逐项核对。
+1. 2.4.0 当前快照已在真实 AEDT 2022 R2 中完成默认 `surface_capacitor`（`ideal_bridge`、关闭 GND VIA）的工程创建、原生 Validate、Setup1/Sweep1 求解及四条混合模 S 参数提取，脱敏证据见 `verification/real_aedt_hfss_validation.json`。该结果不覆盖 `via_transition`、原生 3×3 Optimetrics、背钻、Touchstone、RLC、底层安装或 TDR，以上项目仍为 pending。
+2. 正式支持目标为 AEDT 2022 R2 与 2023 R2；本次实际覆盖 AEDT 2022 R2 / PyAEDT 1.3.0，尚未覆盖 2023 R2。PyAEDT/AEDT 小版本差异可能影响 Lumped RLC、Touchstone 网络组件、Terminal Port、Radiation/PML 和 Optimetrics API，未覆盖组合首次联调仍须逐项核对。
 3. 默认 M6G 叠层中 Excel 未明确提供的 CORE/PP Dk、全部 Df 和阻焊 Dk/Df 仍标记为 `PROVISIONAL`，不能视为供应商签核材料数据。
 4. 自动 TDR 仅记录复核请求；完整时域报告、上升时间、参考阻抗、去嵌和合规判据仍需在 AEDT 中人工确认。
 5. 会改变拓扑的扫参轴会被明确阻止，当前原生 Optimetrics 只允许同一 Design 中可安全变量化的轴。
