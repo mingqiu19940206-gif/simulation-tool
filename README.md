@@ -1,6 +1,6 @@
 # SurfaceCapAntipadTool 2.4.0
 
-这是 v2.4.0 差分 VIA 换层版本（发布候选，未完成真实 AEDT 验收）。正式源码入口为 `src/main_gui.py`，Windows 发布程序为 `release/SurfaceCapAntipadTool_v2.4.0.exe`。
+这是 v2.4.0 差分 VIA 换层版本（发布候选，未完成真实 AEDT 验收）。正式源码入口为 `src/main_gui.py`。Windows 发布程序由 `packaging/build_windows.ps1` 生成到 `release/SurfaceCapAntipadTool_v2.4.0.exe`；`release/` 属于构建产物，被 `.gitignore` 排除，不在仓库中。
 
 ## 快速开始
 

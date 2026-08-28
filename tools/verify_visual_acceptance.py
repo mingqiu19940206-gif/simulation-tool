@@ -56,7 +56,15 @@ def main() -> int:
         "screenshot_count": len(evidence),
         "default_stackup": "M6G / 29 layers",
         "capture_method": "Pillow ImageGrab(window=Tk HWND) / Windows PrintWindow",
-        "manual_review": {
+        # These values are NOT measured by this script.  It only checks that
+        # each screenshot exists, has the target size and is not blank; it
+        # records a sha256 but compares it against no baseline.  The entries
+        # below are what a person reported after looking at the screenshots, so
+        # they are labelled as a declaration rather than presented as an
+        # automated result.
+        "manual_review_declared": {
+            "measured_by_this_script": False,
+            "declared_by": "operator reviewing the captured screenshots",
             "text_overlap_or_clipping_found": False,
             "gnd_legend_items_visible": 8,
             "last_stackup_layer_visible": True,

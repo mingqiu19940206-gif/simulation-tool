@@ -136,8 +136,13 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         """Keep Tk callback failures visible and logged instead of silently exiting."""
         detail = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
         _write_crash_log("Tk callback exception", detail)
-        if hasattr(self, "status"):
-            self.status.set(f"界面操作失败，窗口已保留；诊断日志：{CRASH_LOG_PATH}")
+        try:
+            if hasattr(self, "status"):
+                self.status.set(f"界面操作失败，窗口已保留；诊断日志：{CRASH_LOG_PATH}")
+        except tk.TclError:
+            pass
+        if not self._can_show_modal_dialog():
+            return
         try:
             messagebox.showerror(
                 "界面操作失败",
@@ -146,6 +151,22 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             )
         except tk.TclError:
             pass
+
+    def _can_show_modal_dialog(self) -> bool:
+        """Whether someone is present to dismiss a modal dialog.
+
+        Unattended runs -- unit tests and the packaged GUI acceptance driver --
+        would otherwise block forever on an error box nobody closes.  Set
+        ``SURFACE_CAP_HEADLESS=1`` to declare such a run.  A destroyed root
+        cannot host a dialog at all, and asking it to raises a second error
+        inside the exception handler itself.
+        """
+        if str(os.environ.get("SURFACE_CAP_HEADLESS", "")).strip() == "1":
+            return False
+        try:
+            return bool(self.winfo_exists())
+        except tk.TclError:
+            return False
 
     def _configure_editor_styles(self) -> None:
         # Per-Monitor V2 stays enabled.  Layout code consumes real font metrics
@@ -201,6 +222,15 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
 
     def _apply_responsive_fonts(self) -> None:
         self._responsive_font_job = None
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            # A queued ``after`` callback can still fire once this root is
+            # gone.  ``winfo exists`` is itself a Tcl command, so on a
+            # destroyed interpreter the guard raises rather than returning
+            # false; both outcomes mean the same thing here.
+            return
         width, height = self.winfo_width(), self.winfo_height()
         dpi_scale = self._current_monitor_dpi_scale()
         density_guard = max(1.0, dpi_scale / 1.25)
@@ -230,14 +260,16 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             ("TkHeadingFont", "Microsoft YaHei UI", 9),
             ("TkFixedFont", "Consolas", 9),
         ):
-            tkfont.nametofont(name).configure(family=family, size=base + delta)
+            tkfont.nametofont(name, root=self).configure(family=family, size=base + delta)
         for name, base in (
             ("ViaCardTitleFont", 10), ("ViaCardBodyFont", 9),
             ("ViaPreviewTitleFont", 11), ("ViaCanvasFont", 9),
             ("ViaSmallFont", 8), ("ViaMonoFont", 9), ("ViaStatusFont", 10),
         ):
             self._responsive_fonts[name].configure(size=base + delta)
-        row_height = max(22, int(tkfont.nametofont("TkDefaultFont").metrics("linespace")) + 8)
+        row_height = max(
+            22,
+            int(tkfont.nametofont("TkDefaultFont", root=self).metrics("linespace")) + 8)
         _legacy.ttk.Style(self).configure("Treeview", rowheight=row_height)
         if hasattr(self, "gnd_via_workbench"):
             self.gnd_via_workbench.on_font_scale_changed(tier)
@@ -1433,7 +1465,15 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                     pass
         except tk.TclError:
             pass
-        super().destroy()
+        try:
+            super().destroy()
+        except tk.TclError:
+            # Tk deletes each widget's Tcl command during root teardown and
+            # raises "can't delete Tcl command" when a cascade already removed
+            # one.  The toplevel is destroyed before that point, so shutdown
+            # must not abort here; letting it propagate leaves Tk's default
+            # root bound to a dead interpreter.
+            pass
 
 
 def _walk_widgets(widget: tk.Misc):

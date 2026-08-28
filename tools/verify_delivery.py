@@ -88,7 +88,7 @@ def main() -> int:
                 stderr=subprocess.STDOUT,
                 text=True,
                 encoding="utf-8",
-                errors="replace",
+                errors="backslashreplace",
                 timeout=120,
             )
             tokens = {

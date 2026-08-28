@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import math
 import subprocess
 import sys
@@ -198,6 +199,9 @@ class V2AcceptanceTests(unittest.TestCase):
         self.assertEqual(restored["geometry_hash"], snapshot["geometry_hash"])
         self.assertEqual(restored["config_snapshot"], snapshot["config_snapshot"])
 
+    @unittest.skipUnless(os.name == "nt", "frozen EXE paths are Windows-only; "
+                         "on POSIX these strings are relative paths, so "
+                         "Path.resolve() rebases them on the current directory")
     def test_19_frozen_relative_output_is_based_on_exe_not_meipass(self) -> None:
         executable = Path(r"C:\Tools\SurfaceCapAntipadTool.exe")
         module_file = Path(r"C:\Temp\_MEI123456\main_gui_legacy.py")

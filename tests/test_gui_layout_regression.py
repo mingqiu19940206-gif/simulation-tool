@@ -47,7 +47,15 @@ class GuiLayoutRegressionTests(unittest.TestCase):
                 app.after_cancel(after_id)
         except tk.TclError:
             pass
-        app.destroy()
+        try:
+            app.destroy()
+        except tk.TclError:
+            # Tk/Aqua raises "can't delete Tcl command" part-way through root
+            # teardown.  The window is already gone, but an uncaught error
+            # aborts destroy() before Tk clears its module-level default root,
+            # and the next test that builds a root then blocks instead of
+            # failing.  Swallowing keeps the suite runnable on macOS.
+            pass
 
     def _settle(self) -> None:
         self.app.update_idletasks()
