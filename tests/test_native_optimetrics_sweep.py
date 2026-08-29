@@ -60,6 +60,27 @@ class NativeOptimetricsSweepTests(unittest.TestCase):
             self.assertIn("bridge_length", script)
             self.assertIn("gnd_via_finished_hole_diameter", script)
 
+    def test_native_optimetrics_save_fields_follows_simulation_config(self) -> None:
+        self.config["simulation"]["save_fields"] = True
+        self.config["sweeps"]["capacitor.cap_pitch"].update(
+            enabled=True, start=0.5, stop=0.7, step=0.1
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            result = generate_sweep_cases(self.config, Path(directory))
+            script = result.project.script_path.read_text(encoding="utf-8")
+        self.assertIn(
+            'save_fields = bool(CONFIG.get("simulation", {}).get("save_fields", False))',
+            script,
+        )
+        self.assertIn(
+            '["NAME:ProdOptiSetupDataV2", "SaveFields:=", save_fields,',
+            script,
+        )
+        self.assertNotIn(
+            '["NAME:ProdOptiSetupDataV2", "SaveFields:=", False,',
+            script,
+        )
+
     def test_global_antipad_sweep_parameterizes_merged_all_geometry(self) -> None:
         self.config["antipad"]["mode"] = "merged_all"
         self.config["sweeps"]["antipad.global_expansion"].update(

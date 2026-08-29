@@ -2825,10 +2825,11 @@ def create_optimetrics_parametric_setup(app):
     setup_name = str(execution.get("optimetrics_setup_name", "ParametricSetup1"))
     variation_mode = str(execution.get("variation_mode", "full_factorial"))
     synchronize = 1 if variation_mode == "synchronous" else 0
+    save_fields = bool(CONFIG.get("simulation", {}).get("save_fields", False))
     definition = [
         "NAME:" + setup_name,
         "IsEnabled:=", True,
-        ["NAME:ProdOptiSetupDataV2", "SaveFields:=", False,
+        ["NAME:ProdOptiSetupDataV2", "SaveFields:=", save_fields,
          "CopyMesh:=", False, "SolveWithCopiedMeshOnly:=", True],
         ["NAME:StartingPoint"],
         "Sim. Setups:=", [str(CONFIG.get("simulation", {}).get("setup_name", "Setup1"))],
