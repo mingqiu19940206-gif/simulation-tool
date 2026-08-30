@@ -33,6 +33,20 @@ from via_antipad import (ViaAntipadContour, build_layer_contours,
 
 
 @dataclass(frozen=True)
+class FunctionalBarrelSpan:
+    """功能连接层与机械钻孔之间的物理上下关系。"""
+
+    upper_functional_layer: str
+    lower_functional_layer: str
+    upper_index: int
+    lower_index: int
+    drill_start_index: int
+    drill_end_index: int
+    top_stub: bool
+    bottom_stub: bool
+
+
+@dataclass(frozen=True)
 class ViaTransitionPort:
     """单个差分端口（Terminal Port 的局部工程估计）。"""
 
@@ -92,6 +106,10 @@ class SignalViaGeometry:
     drill_end_layer: str
     entry_layer: str
     exit_layer: str
+    upper_functional_layer: str
+    lower_functional_layer: str
+    top_stub_present: bool
+    bottom_stub_present: bool
     z_bottom: float
     z_top: float
     drill_diameter: float
@@ -129,6 +147,10 @@ class SignalViaGeometry:
             "drill_end_layer": self.drill_end_layer,
             "entry_layer": self.entry_layer,
             "exit_layer": self.exit_layer,
+            "upper_functional_layer": self.upper_functional_layer,
+            "lower_functional_layer": self.lower_functional_layer,
+            "top_stub_present": self.top_stub_present,
+            "bottom_stub_present": self.bottom_stub_present,
             "z_bottom": self.z_bottom,
             "z_top": self.z_top,
             "drill_diameter": self.drill_diameter,
@@ -250,6 +272,43 @@ def _layer_map(stackup: Sequence[LayerZPosition]) -> Dict[str, LayerZPosition]:
 
 def _copper_layers(stackup: Sequence[LayerZPosition]) -> List[LayerZPosition]:
     return [layer for layer in stackup if layer.layer_type in {"signal", "plane"}]
+
+
+def derive_functional_barrel_span(
+    layer_names: Sequence[str],
+    entry_layer: str,
+    exit_layer: str,
+    drill_start_layer: str,
+    drill_end_layer: str,
+) -> Optional[FunctionalBarrelSpan]:
+    """按叠层索引推导功能孔桶和上下残桩，不赋予 entry/exit 物理方向。"""
+
+    indices = {str(name): index for index, name in enumerate(layer_names)}
+    required = (entry_layer, exit_layer, drill_start_layer, drill_end_layer)
+    if any(name not in indices for name in required):
+        return None
+    drill_start_index = indices[drill_start_layer]
+    drill_end_index = indices[drill_end_layer]
+    if drill_start_index >= drill_end_index:
+        return None
+    entry_index = indices[entry_layer]
+    exit_index = indices[exit_layer]
+    upper_index = min(entry_index, exit_index)
+    lower_index = max(entry_index, exit_index)
+    if upper_index < drill_start_index or lower_index > drill_end_index:
+        return None
+    upper_layer = entry_layer if entry_index == upper_index else exit_layer
+    lower_layer = entry_layer if entry_index == lower_index else exit_layer
+    return FunctionalBarrelSpan(
+        upper_functional_layer=upper_layer,
+        lower_functional_layer=lower_layer,
+        upper_index=upper_index,
+        lower_index=lower_index,
+        drill_start_index=drill_start_index,
+        drill_end_index=drill_end_index,
+        top_stub=drill_start_index < upper_index,
+        bottom_stub=lower_index < drill_end_index,
+    )
 
 
 def _layer_span(stackup: Sequence[LayerZPosition], start: str, end: str) -> List[LayerZPosition]:
@@ -425,24 +484,27 @@ def _return_via_positions(config: Mapping[str, Any]) -> List[Point2D]:
     return []
 
 
-def _nearest_reference(stackup: Sequence[LayerZPosition], layer_name: str, side: str) -> Optional[LayerZPosition]:
-    """返回信号层内侧最近的参考平面（side 为 entry 侧向内方向）。"""
+def _nearest_reference(
+    stackup: Sequence[LayerZPosition], layer_name: str, toward_layer: str,
+) -> Optional[LayerZPosition]:
+    """返回从信号层朝另一功能连接层方向遇到的最近参考平面。"""
     names = [layer.name for layer in stackup]
-    if layer_name not in names:
+    if layer_name not in names or toward_layer not in names or layer_name == toward_layer:
         return None
     index = names.index(layer_name)
-    references = [layer for layer in stackup
-                  if layer.layer_type == "plane" and layer.is_reference_plane]
-    if side == "IN":
-        candidates = [layer for layer in references if names.index(layer.name) > index]
-        return candidates[0] if candidates else None
-    candidates = [layer for layer in references if names.index(layer.name) < index]
-    return candidates[-1] if candidates else None
+    toward_index = names.index(toward_layer)
+    step = 1 if toward_index > index else -1
+    stop = len(stackup) if step > 0 else -1
+    for candidate_index in range(index + step, stop, step):
+        candidate = stackup[candidate_index]
+        if candidate.layer_type == "plane" and candidate.is_reference_plane:
+            return candidate
+    return None
 
 
-def _resolve_backdrill(vt: Mapping[str, Any], entry_layer: str, exit_layer: str,
-                       drill_start: str, drill_end: str,
+def _resolve_backdrill(vt: Mapping[str, Any], drill_start: str, drill_end: str,
                        by_name: Dict[str, LayerZPosition],
+                       functional_span: FunctionalBarrelSpan,
                        errors: List[str]) -> Optional[Dict[str, Any]]:
     """计算 Phase 3 背钻：方向推导、工具 Z 范围、有效孔桶范围和残桩。
 
@@ -455,15 +517,13 @@ def _resolve_backdrill(vt: Mapping[str, Any], entry_layer: str, exit_layer: str,
     residual_stub = float(backdrill.get("residual_stub", 0.0))
     drill_d = float(vt["padstack"]["drill_diameter"])
 
-    entry_top = by_name[entry_layer].z_top
-    entry_bottom = by_name[entry_layer].z_bottom
-    exit_top = by_name[exit_layer].z_top
-    exit_bottom = by_name[exit_layer].z_bottom
+    upper = by_name[functional_span.upper_functional_layer]
+    lower = by_name[functional_span.lower_functional_layer]
     drill_top = by_name[drill_start].z_top
     drill_bottom = by_name[drill_end].z_bottom
 
-    top_stub = entry_layer != drill_start
-    bottom_stub = exit_layer != drill_end
+    top_stub = functional_span.top_stub
+    bottom_stub = functional_span.bottom_stub
 
     if not enabled:
         if top_stub or bottom_stub:
@@ -494,19 +554,21 @@ def _resolve_backdrill(vt: Mapping[str, Any], entry_layer: str, exit_layer: str,
             return None
     elif side == "top":
         if not top_stub:
-            errors.append("backdrill.from_side=top 但不存在顶部残桩（entry_layer 已位于 drill_start_layer）。")
+            errors.append(
+                "backdrill.from_side=top 但不存在顶部残桩（上方功能连接层已位于机械钻孔顶部）。")
             return None
     elif side == "bottom":
         if not bottom_stub:
-            errors.append("backdrill.from_side=bottom 但不存在底部残桩（exit_layer 已位于 drill_end_layer）。")
+            errors.append(
+                "backdrill.from_side=bottom 但不存在底部残桩（下方功能连接层已位于机械钻孔底部）。")
             return None
     else:
         errors.append(f"backdrill.from_side={from_side!r} 非法；仅支持 auto/top/bottom。")
         return None
 
     if side == "bottom":
-        # 底部残桩：exit 连接铜朝残桩一侧的边界是 exit 层下表面。
-        conn_boundary = exit_bottom
+        # Z 自板底向上增大。底部残桩从下方功能层的下铜边界朝 -Z 计算。
+        conn_boundary = lower.z_bottom
         effective_top = drill_top
         effective_bottom = conn_boundary - residual_stub
         tool_top = effective_bottom
@@ -514,11 +576,13 @@ def _resolve_backdrill(vt: Mapping[str, Any], entry_layer: str, exit_layer: str,
         if effective_bottom < drill_bottom:
             errors.append("backdrill.residual_stub 过大：背钻终点低于板底。")
             return None
-        if effective_bottom > exit_bottom:
-            errors.append("背钻越过 exit 连接铜。")
+        if effective_bottom > conn_boundary:
+            errors.append("背钻越过下方功能连接层铜边界。")
             return None
+        actual_stub = conn_boundary - effective_bottom
     else:  # top
-        conn_boundary = entry_top
+        # 顶部残桩从上方功能层的上铜边界朝 +Z 计算。
+        conn_boundary = upper.z_top
         effective_bottom = drill_bottom
         effective_top = conn_boundary + residual_stub
         tool_bottom = effective_top
@@ -526,11 +590,11 @@ def _resolve_backdrill(vt: Mapping[str, Any], entry_layer: str, exit_layer: str,
         if effective_top > drill_top:
             errors.append("backdrill.residual_stub 过大：背钻终点高于板顶。")
             return None
-        if effective_top < entry_top:
-            errors.append("背钻越过 entry 连接铜。")
+        if effective_top < conn_boundary:
+            errors.append("背钻越过上方功能连接层铜边界。")
             return None
+        actual_stub = effective_top - conn_boundary
 
-    actual_stub = residual_stub
     return {
         "side": side,
         "diameter": bd_diameter,
@@ -591,6 +655,14 @@ class ViaTransitionGeometryCalculator:
             errors.append(f"exit_layer {exit_layer!r} 不存在于叠层。")
         if drill_start not in by_name or drill_end not in by_name:
             errors.append("drill_start_layer/drill_end_layer 不存在于叠层。")
+        functional_span = None
+        if not errors:
+            functional_span = derive_functional_barrel_span(
+                [layer.name for layer in stackup], entry_layer, exit_layer,
+                drill_start, drill_end,
+            )
+            if functional_span is None:
+                errors.append("功能连接层必须位于自上而下的机械钻孔跨度内。")
         if errors:
             return ViaTransitionGeometryResult(
                 units="mm", stackup=stackup, pcb_top_z=pcb_top,
@@ -627,8 +699,9 @@ class ViaTransitionGeometryCalculator:
         center_x = float(vt["center_x"])
         center_y = float(vt["center_y"])
 
+        assert functional_span is not None
         backdrill_info = _resolve_backdrill(
-            vt, entry_layer, exit_layer, drill_start, drill_end, by_name, errors)
+            vt, drill_start, drill_end, by_name, functional_span, errors)
 
         signal_vias: List[SignalViaGeometry] = []
         for signal, sign in (("P", 1.0), ("N", -1.0)):
@@ -698,6 +771,10 @@ class ViaTransitionGeometryCalculator:
                 drill_end_layer=drill_end,
                 entry_layer=entry_layer,
                 exit_layer=exit_layer,
+                upper_functional_layer=functional_span.upper_functional_layer,
+                lower_functional_layer=functional_span.lower_functional_layer,
+                top_stub_present=functional_span.top_stub,
+                bottom_stub_present=functional_span.bottom_stub,
                 z_bottom=z_bottom,
                 z_top=z_top,
                 drill_diameter=drill_d,
@@ -825,8 +902,8 @@ class ViaTransitionGeometryCalculator:
 
         # ---- 端口 ----
         ports: List[ViaTransitionPort] = []
-        ref_in = _nearest_reference(stackup, entry_layer, "IN")
-        ref_out = _nearest_reference(stackup, exit_layer, "OUT")
+        ref_in = _nearest_reference(stackup, entry_layer, exit_layer)
+        ref_out = _nearest_reference(stackup, exit_layer, entry_layer)
         trace_pitch_ref = pair_pitch
         port_margin = float(cfg["simulation"].get("port_lateral_margin", 0.25))
         for signal, sign in (("P", 1.0), ("N", -1.0)):

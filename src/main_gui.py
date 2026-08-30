@@ -457,10 +457,13 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
               "residual_stub", "目标残桩长度控制（当前仅支持）")
         add("signal", frame, 3, "⑰ 背钻孔径", "via_transition.backdrill.drill_diameter", length=True)
         add("signal", frame, 4, "⑱ 目标残桩长度", "via_transition.backdrill.residual_stub", length=True)
-        _legacy.ttk.Label(
-            frame, text="残桩仍从 exit 连接铜边界起算；本次重构未改变背钻深度语义。",
+        self.backdrill_hint_label = _legacy.ttk.Label(
+            frame, text=("背钻孔径必须大于原始钻孔；残桩从背钻侧最近的功能连接层铜边界起算；"
+                         "entry/exit 仅表示信号方向。"),
             foreground="#64748b", wraplength=430,
-        ).grid(row=5, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 0))
+        )
+        self.backdrill_hint_label.grid(
+            row=5, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 0))
 
         frame = group("return", "回流地孔（Return VIA）· 布局与层连接")
         add("return", frame, 0, "启用回流地孔", "via_transition.return_vias.enabled", boolean=True)
