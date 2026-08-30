@@ -4766,8 +4766,13 @@ def _validate_embedded_via_transition(errors):
         if not via.get("functional_pad_layers"):
             errors.append("信号孔缺少功能焊盘层。")
         backdrilled = bool(via.get("backdrilled"))
-        has_stub = (str(via.get("entry_layer")) != str(via.get("drill_start_layer"))
-                    or str(via.get("exit_layer")) != str(via.get("drill_end_layer")))
+        if "top_stub_present" in via and "bottom_stub_present" in via:
+            has_stub = bool(via.get("top_stub_present") or via.get("bottom_stub_present"))
+        else:
+            # Backward-compatible fallback for geometry snapshots authored
+            # before the physical upper/lower functional-layer fields existed.
+            has_stub = (str(via.get("entry_layer")) != str(via.get("drill_start_layer"))
+                        or str(via.get("exit_layer")) != str(via.get("drill_end_layer")))
         if backdrilled:
             bd_diameter = float(via.get("backdrill_diameter", 0.0))
             if bd_diameter <= float(via.get("drill_diameter", 0.0)):

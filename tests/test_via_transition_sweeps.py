@@ -87,6 +87,19 @@ class ViaTransitionSweepsTests(unittest.TestCase):
         values = via_scan_values("via_transition.pair_pitch", {"start": 0.6, "stop": 0.8, "step": 0.1})
         self.assertEqual(values, [0.6, 0.7, 0.8])
 
+    def test_09_reversed_order_residual_sweep_uses_upper_functional_layer(self) -> None:
+        self.config["via_transition"].update(
+            {"entry_layer": "L14", "exit_layer": "L12",
+             "drill_start_layer": "L1", "drill_end_layer": "L14"})
+        self.config["via_transition"]["backdrill"].update(
+            {"enabled": True, "from_side": "auto"})
+        self.config["sweeps"]["via_transition.backdrill.residual_stub"] = {
+            "enabled": True, "start": 0.1, "stop": 1.4, "step": 1.3,
+        }
+        plan = inspect_via_sweep_plan(self.config)
+        self.assertTrue(any(level == "error" and "铜层" in message
+                            for level, message in plan.issues), plan.issues)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
