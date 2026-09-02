@@ -8,9 +8,9 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from config_manager import convert_length, format_length, format_number
 from gui_layout import (
-    CanvasLabelPlacer, WrappingButtonBar, attach_mousewheel, canvas_viewport,
-    debounce_after, ellipsize, font_linespace, mousewheel_steps, resolve_font,
-    responsive_grid_columns,
+    CanvasLabelPlacer, WrappingButtonBar, attach_mousewheel, bind_wraplength,
+    canvas_viewport, debounce_after, ellipsize, font_linespace, mousewheel_steps,
+    resolve_font, responsive_grid_columns,
 )
 from gnd_via_semantics import (
     ALL_LAYOUT_FIELDS,
@@ -678,8 +678,13 @@ class GndViaWorkbench(ttk.Frame):
             enabled_box, 2, "基线比较包含 GND VIA",
             "baseline_comparison.compare_gnd_vias", boolean=True,
         )
-        ttk.Label(enabled_box, text="不预设 VIA 一定改善性能；请对比 Sdd11/Sdd21、Sdc21/Scd21 与 TDR。",
-                  foreground="#475569", wraplength=690).grid(row=3, column=0, columnspan=4, sticky="w", padx=4, pady=(3, 1))
+        self.performance_hint = ttk.Label(
+            enabled_box,
+            text="不预设 VIA 一定改善性能；\n请对比 Sdd11/Sdd21、Sdc21/Scd21 与 TDR。",
+            foreground="#475569", wraplength=360, justify="left",
+        )
+        self.performance_hint.grid(row=3, column=0, columnspan=4, sticky="ew", padx=4, pady=(3, 1))
+        bind_wraplength(self.performance_hint, source=enabled_box, padding=24, min_width=280)
 
         mode_box = self._section(lroot, "布局模式")
         self.app._register_hidden_variable("gnd_vias.pattern")

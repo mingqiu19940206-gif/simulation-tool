@@ -11,7 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from build_info import about_message, product_title, ready_status_line
+from capacitor_editor import ScrollableFrame
 from gui_layout import bind_wraplength
+from scenario_semantics import VIA_TRANSITION_SWEEP_NOT_IMPLEMENTED
 
 
 class BuildIdentityCopyTests(unittest.TestCase):
@@ -70,6 +72,53 @@ class WraplengthHelperTests(unittest.TestCase):
         self.assertGreaterEqual(width, 200)
         self.assertLess(wrap, 1040)
         self.assertLessEqual(abs(wrap - (width - 24)), 8)
+
+    def test_bind_wraplength_ignores_collapsed_label_width(self) -> None:
+        self.root.geometry("400x200")
+        self.root.deiconify()
+        frame = tk.Frame(self.root, width=360, height=80)
+        frame.pack_propagate(False)
+        frame.pack(fill="x")
+        label = ttk.Label(
+            frame,
+            text="PROVISIONAL warning that must not wrap to twelve characters",
+            wraplength=80,
+            justify="left",
+        )
+        label.pack(anchor="w")
+        self.root.update()
+        self.root.update_idletasks()
+        bind_wraplength(label, source=frame, padding=24, min_width=360)
+        self.root.update()
+        self.root.update_idletasks()
+        wrap = int(float(label.cget("wraplength") or 0))
+        self.assertGreaterEqual(wrap, 200)
+        self.assertGreaterEqual(wrap, int(frame.winfo_width()) - 32)
+
+    def test_nested_mousewheel_reaches_inner_scroller(self) -> None:
+        self.root.geometry("320x240")
+        self.root.deiconify()
+        outer = ScrollableFrame(self.root, fill_viewport=True)
+        outer.pack(fill="both", expand=True)
+        inner = ScrollableFrame(outer.content)
+        inner.pack(fill="x")
+        inner.canvas.configure(height=72)
+        for index in range(24):
+            ttk.Label(inner.content, text=f"field {index}").pack(anchor="w")
+        self.root.update()
+        self.root.update_idletasks()
+        inner.canvas.yview_moveto(0)
+        outer.canvas.yview_moveto(0)
+        child = inner.content.winfo_children()[0]
+        child.event_generate("<Button-5>", x=4, y=4)
+        self.root.update()
+        if inner.canvas.yview()[0] == 0.0:
+            child.event_generate("<MouseWheel>", delta=-120, x=4, y=4)
+            self.root.update()
+        inner_pos = inner.canvas.yview()
+        outer_pos = outer.canvas.yview()
+        self.assertGreater(inner_pos[0], 0.0)
+        self.assertEqual(outer_pos[0], 0.0)
 
 
 class MainWindowCopyTests(unittest.TestCase):
@@ -166,6 +215,65 @@ class MainWindowCopyTests(unittest.TestCase):
             str(self.app.field_labels["capacitor.create_body_in_hfss"].cget("text")),
             "在 HFSS 中创建电容本体",
         )
+
+    def _map_720_window(self, tab: str) -> None:
+        self.app.geometry("1280x720+0+0")
+        self.app.deiconify()
+        self.app.notebook.select(self.app.tabs[tab])
+        self.app.update()
+        self.app.update_idletasks()
+
+    def test_status_bar_is_visible_under_toolbar_at_720(self) -> None:
+        self._map_720_window("电容与模型")
+        status = self.app.status_bar
+        notebook = self.app.notebook
+        toolbar = self.app.main_toolbar
+        self.assertTrue(status.winfo_ismapped())
+        self.assertGreater(status.winfo_y(), toolbar.winfo_y())
+        self.assertLess(status.winfo_y(), notebook.winfo_y())
+        self.assertLess(status.winfo_y(), 120)
+        self.assertIn("就绪 · V2.4.0 · 显示单位", self.app.status.get())
+        self.assertLess(status.winfo_y() + status.winfo_height(), 200)
+
+    def test_capacitor_warning_wraplength_follows_status_box(self) -> None:
+        self._map_720_window("电容与模型")
+        label = self.app.cap_detail_label
+        box = self.app.cap_status_box
+        wrap = int(float(label.cget("wraplength") or 0))
+        width = int(box.winfo_width())
+        self.assertGreaterEqual(width, 240)
+        self.assertGreaterEqual(wrap, 200)
+        self.assertLess(wrap, width)
+        self.assertGreater(wrap, 120)
+
+    def test_fanout_formula_matches_one_line_hint(self) -> None:
+        expected = "孔间距等于差分对中心距时，扇出三项自动停用。"
+        self.assertEqual(str(self.app.via_fanout_hint.cget("text")), expected)
+        self.assertEqual(
+            str(self.app.formula_labels["via_transition.fanout.style"].cget("text")),
+            expected,
+        )
+
+    def test_user_visible_copy_drops_leftover_english_and_json_keys(self) -> None:
+        self.assertNotIn("scenario.type", VIA_TRANSITION_SWEEP_NOT_IMPLEMENTED)
+        self.assertIn("请先把仿真场景切换为差分 VIA 换层", VIA_TRANSITION_SWEEP_NOT_IMPLEMENTED)
+        main_gui_text = (ROOT / "src" / "main_gui.py").read_text(encoding="utf-8")
+        self.assertNotIn("确认Validate警告", main_gui_text)
+        self.assertNotIn("快速Validate存在错误", main_gui_text)
+        preview = (ROOT / "src" / "model_preview.py").read_text(encoding="utf-8")
+        self.assertNotIn("未运行 Validate", preview)
+        self.assertNotIn("Validate检查结果", preview)
+        capacitor = (ROOT / "src" / "capacitor_editor.py").read_text(encoding="utf-8")
+        self.assertNotIn("PAD间隙", capacitor)
+        self.assertIn("焊盘间隙无铜桥", capacitor)
+
+    def test_gnd_performance_hint_keeps_sparam_tokens(self) -> None:
+        hint = self.app.gnd_via_workbench.performance_hint
+        text = str(hint.cget("text"))
+        self.assertIn("Sdd11/Sdd21", text)
+        self.assertIn("Sdc21/Scd21", text)
+        self.assertIn("；", text)
+        self.assertIn("\n", text)
 
 
 if __name__ == "__main__":

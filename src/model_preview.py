@@ -198,7 +198,7 @@ class SceneObject:
     layer_index: Optional[int] = None
     status: str = "本地预估"
     data_source: str = "本地统一几何计算"
-    validate_result: str = "未运行 Validate"
+    validate_result: str = "未运行模型检查"
 
     def fingerprint(self) -> str:
         data = {
@@ -554,7 +554,7 @@ def build_model_scene(config: Mapping[str, Any], geometry: Any,
             opacity=.55 if port_placeholders else .82,
             default_visible=True, layer_index=surface_signal_index,
             status="未启用" if port_placeholders else "本地预估",
-            validate_result="尚未启用，不会生成到HFSS" if port_placeholders else "未运行 Validate",
+            validate_result="尚未启用，不会生成到HFSS" if port_placeholders else "未运行模型检查",
             details={
                 "占位说明": "灰色预估占位；尚未启用，不会生成到HFSS" if port_placeholders else "实际待生成对象",
                 "端口类型": "Wave Port / Terminal",
@@ -601,7 +601,7 @@ def build_model_scene(config: Mapping[str, Any], geometry: Any,
             color_key="disabled" if airbox_is_placeholder else "airbox",
             opacity=.34 if airbox_is_placeholder else .72, default_visible=True,
             status="未启用" if airbox_is_placeholder else "本地预估",
-            validate_result="尚未启用，不会生成到HFSS" if airbox_is_placeholder else "未运行 Validate",
+            validate_result="尚未启用，不会生成到HFSS" if airbox_is_placeholder else "未运行模型检查",
             details={
                 "占位说明": "灰色预估占位；尚未启用，不会生成到HFSS" if airbox_is_placeholder else "实际待生成对象",
                 "显示模式": "仅线框（默认）",
@@ -629,7 +629,7 @@ def build_model_scene(config: Mapping[str, Any], geometry: Any,
                 "HFSS分配状态": "未启用，不会生成到HFSS" if airbox_is_placeholder else "待生成（本地预估）",
             },
             status="未启用" if airbox_is_placeholder else "本地预估",
-            validate_result="尚未启用，不会生成到HFSS" if airbox_is_placeholder else "未运行 Validate",
+            validate_result="尚未启用，不会生成到HFSS" if airbox_is_placeholder else "未运行模型检查",
         ))
 
     _apply_validation_states(objects, validation)
@@ -1644,7 +1644,7 @@ class ModelPreviewWorkbench(ttk.Frame):
         if item:
             self.hover_var.set(f"{item.name} · {item.category} · {item.status}")
         else:
-            self.hover_var.set("点击对象可查看名称、参数来源和 Validate 状态")
+            self.hover_var.set("点击对象可查看名称、参数来源和检查状态")
 
     @staticmethod
     def _normalize_vector(vector: Sequence[float]) -> Tuple[float, float, float]:
@@ -2424,7 +2424,7 @@ class ModelPreviewWorkbench(ttk.Frame):
     def _validation_summary(self) -> str:
         validation = self.current_validation
         if validation is None:
-            return "未运行"
+            return "未运行模型检查"
         if getattr(validation, "stale", False):
             return "已过期"
         counts = getattr(validation, "counts", None)
@@ -3000,7 +3000,7 @@ class ModelPreviewWorkbench(ttk.Frame):
                  f"真实厚度/高度：{self._shown_length(item.z_top-item.z_bottom)}",
                  "参数来源：" + (", ".join(item.source_paths) or "统一几何结果"),
                  f"当前状态：{item.status}", f"数据来源：{item.data_source}",
-                 f"Validate检查结果：{item.validate_result}"]
+                 f"检查结果：{item.validate_result}"]
         if item.outer_radius:
             lines.append(f"外径：{self._shown_length(item.outer_radius * 2.0)}")
             if item.inner_radius:
@@ -3172,7 +3172,7 @@ class ModelPreviewWorkbench(ttk.Frame):
                 keys.append(f"bridge:{name[-1]}")
         keys = list(dict.fromkeys(keys))
         if not keys:
-            self.status_var.set(f"{getattr(item, 'rule_id', 'Validate')} 没有可定位的3D对象")
+            self.status_var.set(f"{getattr(item, 'rule_id', '检查')} 没有可定位的3D对象")
             return
         relevant = set(keys)
         for key, obj in self.objects.items():
@@ -3184,7 +3184,7 @@ class ModelPreviewWorkbench(ttk.Frame):
             self.select_object(keys[0])
             category = str(getattr(item, "category", ""))
             self.set_view("顶视图" if category in {"信号几何", "反焊盘", "端口与边界"} else "等轴测")
-            self.status_var.set(f"已定位 {getattr(item, 'rule_id', 'Validate')} · {len(keys)} 个相关对象")
+            self.status_var.set(f"已定位 {getattr(item, 'rule_id', '检查')} · {len(keys)} 个相关对象")
             return
         category = str(getattr(item, "category", ""))
         if category in {"GND VIA", "叠层与材料"}:
@@ -3209,10 +3209,10 @@ class ModelPreviewWorkbench(ttk.Frame):
         self.select_object(keys[0])
         self._apply_appearance(render=False); self.set_view(view)
         self.detail_var.set(
-            f"{self.detail_var.get()}\n\nValidate {getattr(item, 'rule_id', '')}：{getattr(item, 'message', '')}"
+            f"{self.detail_var.get()}\n\n检查 {getattr(item, 'rule_id', '')}：{getattr(item, 'message', '')}"
             f"\n修改建议：{getattr(item, 'suggestion', '') or '复核相关结构。'}"
         )
-        self.status_var.set(f"已定位 {getattr(item, 'rule_id', 'Validate')} · {len(keys)} 个相关对象")
+        self.status_var.set(f"已定位 {getattr(item, 'rule_id', '检查')} · {len(keys)} 个相关对象")
 
     def goto_parameter(self) -> None:
         if self.selected_key and self.selected_key in self.objects:

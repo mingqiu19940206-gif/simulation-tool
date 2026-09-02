@@ -13,7 +13,8 @@ VIA_TRANSITION = "via_transition"
 SUPPORTED_SCENARIO_TYPES = (SURFACE_CAPACITOR, VIA_TRANSITION)
 
 VIA_TRANSITION_SWEEP_NOT_IMPLEMENTED = (
-    "scenario.type=via_transition 扫描只接受已登记的原生几何轴，"
+    "请先把仿真场景切换为差分 VIA 换层。"
+    "扫描只接受已登记的原生几何轴，"
     "或可通过独立 HFSS Design/case 重新计算的拓扑/逐层轴。"
 )
 

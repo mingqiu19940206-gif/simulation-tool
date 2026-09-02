@@ -225,6 +225,7 @@ class CanvasLabelPlacer:
                     tags=item_tags + ("label-background",),
                 )
                 self.canvas.tag_lower(background_id, text_id)
+        self.canvas.tag_raise(text_id)
         return text_id
 
 
@@ -244,6 +245,25 @@ def mousewheel_steps(event: tk.Event) -> int:
     return -1 if delta > 0 else 1
 
 
+def _wraplength_source(label: tk.Misc, source: Optional[tk.Misc]) -> tk.Misc:
+    """Measure a pane/frame, never the wrapping label itself.
+
+    A Label's ``winfo_width`` collapses to its current wraplength.  Using that
+    as the next wrap target locks the text to ~12 ASCII characters.
+    """
+
+    widget = source or getattr(label, "master", None) or label
+    try:
+        class_name = str(widget.winfo_class())
+    except tk.TclError:
+        class_name = ""
+    if class_name in {"TLabel", "Label"}:
+        parent = getattr(widget, "master", None)
+        if parent is not None:
+            return parent
+    return widget
+
+
 def bind_wraplength(
     label: tk.Misc,
     *,
@@ -254,23 +274,22 @@ def bind_wraplength(
     """Keep a Label ``wraplength`` aligned to the live pane/widget width."""
 
     def _apply() -> None:
-        widget = source or label
+        widget = _wraplength_source(label, source)
         try:
             width = int(widget.winfo_width())
         except tk.TclError:
             return
-        if width <= 2 and source is None:
-            parent = getattr(label, "master", None)
-            if parent is None:
-                return
-            try:
-                width = int(parent.winfo_width())
-            except tk.TclError:
-                return
+        if width <= 2:
+            return
         wrap = max(min_width, width - padding)
         try:
             current = int(float(label.cget("wraplength") or 0))
         except (tk.TclError, TypeError, ValueError):
+            return
+        # Never collapse a wide wrapping label down to a 12-character column
+        # if a Configure event measured a still-unmapped or already-wrapped
+        # child instead of the pane.
+        if wrap < 200 and current >= 360:
             return
         if abs(current - wrap) > 2:
             try:
@@ -304,7 +323,7 @@ def bind_existing_wraplength_labels(root: tk.Misc, *, padding: int = 24) -> None
                 wrap = int(float(widget.cget("wraplength") or 0))
             except (tk.TclError, TypeError, ValueError):
                 wrap = 0
-            if wrap > 0:
+            if wrap >= 360:
                 bind_wraplength(widget, padding=padding)
         try:
             children = widget.winfo_children()
@@ -317,14 +336,31 @@ def bind_existing_wraplength_labels(root: tk.Misc, *, padding: int = 24) -> None
 
 
 def raise_canvas_labels(canvas: tk.Canvas) -> None:
-    """Keep screen-space labels above filled geometry."""
+    """Keep screen-space labels above filled geometry.
 
-    for tag in ("label-background", "label-leader", "object-label",
-                "dimension-label", "axis-label", "hud-label"):
+    Background rectangles share ``object-label`` / ``dimension-label`` with the
+    text they sit under.  Raising those tags as a group would cover the glyphs
+    with empty boxes, so text items are raised individually afterwards.
+    """
+
+    for tag in ("label-background", "label-leader"):
         try:
             canvas.tag_raise(tag)
         except tk.TclError:
             continue
+    for tag in ("object-label", "dimension-label", "axis-label", "hud-label"):
+        try:
+            items = canvas.find_withtag(tag)
+        except tk.TclError:
+            continue
+        for item in items:
+            tags = canvas.gettags(item)
+            if "label-background" in tags or "label-leader" in tags:
+                continue
+            try:
+                canvas.tag_raise(item)
+            except tk.TclError:
+                continue
 
 
 def attach_mousewheel(scroller: tk.Misc, canvas: tk.Canvas, *roots: tk.Misc) -> None:
@@ -335,9 +371,18 @@ def attach_mousewheel(scroller: tk.Misc, canvas: tk.Canvas, *roots: tk.Misc) -> 
         setattr(scroller, "canvas", canvas)
 
     def _on_wheel(event: tk.Event) -> str:
+        # Nested ScrollableFrames both bind descendants.  Walk from the widget
+        # under the pointer so the innermost scroller receives the wheel.
+        target = canvas
+        owner = getattr(event, "widget", None)
+        while owner is not None:
+            if getattr(owner, "_forwards_mousewheel", False) and hasattr(owner, "canvas"):
+                target = owner.canvas
+                break
+            owner = getattr(owner, "master", None)
         steps = mousewheel_steps(event)
         if steps:
-            canvas.yview_scroll(steps, "units")
+            target.yview_scroll(steps, "units")
         return "break"
 
     def _bind_tree(widget: tk.Misc) -> None:

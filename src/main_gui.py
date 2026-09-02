@@ -50,6 +50,16 @@ def _enable_windows_dpi_awareness() -> None:
 
 _enable_windows_dpi_awareness()
 
+
+def _widget_is_under(widget: Any, ancestor: Any) -> bool:
+    owner = widget
+    while owner is not None:
+        if owner is ancestor:
+            return True
+        owner = getattr(owner, "master", None)
+    return False
+
+
 import main_gui_legacy as _legacy
 from antipad_editor import AntipadWorkbench
 from build_info import about_message, get_build_info, product_title, ready_status_line
@@ -124,7 +134,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
 
         for class_name in (
             "TCombobox", "TEntry", "TCheckbutton", "TRadiobutton", "TLabel",
-            "TLabelframe", "TFrame", "TButton", "TNotebook", "TPanedwindow",
+            "TLabelframe", "TFrame", "TButton", "TPanedwindow",
             "Frame", "Label", "Entry", "Checkbutton", "Button", "LabelFrame",
         ):
             self.bind_class(class_name, "<MouseWheel>", self._on_closed_combobox_wheel)
@@ -134,6 +144,11 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
     def _on_closed_combobox_wheel(self, event: tk.Event) -> Optional[str]:
         owner: tk.Misc | None = event.widget
         steps = mousewheel_steps(event)
+        cap = getattr(self, "cap_parameter_scroller", None)
+        if cap is not None and _widget_is_under(event.widget, cap):
+            if steps:
+                cap.canvas.yview_scroll(steps, "units")
+            return "break"
         while owner is not None:
             if getattr(owner, "_forwards_mousewheel", False) and hasattr(owner, "canvas"):
                 if steps:
@@ -344,6 +359,9 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
 
     def _build_capacitor(self) -> None:
         super()._build_capacitor()
+        bind_wraplength(
+            self.cap_detail_label, source=self.cap_status_box, padding=24, min_width=360,
+        )
         advanced = _legacy.ttk.LabelFrame(
             getattr(self, "cap_page_content", self.tabs["电容与模型"]),
             text="布尔连接容差", padding=(8, 5)
@@ -375,7 +393,8 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             page, content = sections[section]
             frame = _legacy.ttk.LabelFrame(content, text=title, padding=8)
             frame.pack(fill="x", padx=3, pady=4)
-            frame.columnconfigure(1, weight=1)
+            frame.columnconfigure(1, weight=1, minsize=176)
+            frame.columnconfigure(0, minsize=0)
             return frame
 
         def remember(section: str, path: str, widget: tk.Widget | None = None) -> None:
@@ -428,7 +447,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         frame = group("route", "走线扇出")
         add("route", frame, 0, "㉒ 扇出方式", "via_transition.fanout.style",
             values=("deg45", "arc"), display_values={"deg45": "45° 折线", "arc": "圆弧"},
-            formula="孔间距等于差分对间距时由其他参数决定")
+            formula="孔间距等于差分对中心距时，扇出三项自动停用。")
         add("route", frame, 1, "㉓ 扇出方向", "via_transition.fanout.direction",
             values=("auto", "expand", "contract"),
             display_values={"auto": "自动", "expand": "向外", "contract": "向内"})
@@ -1147,7 +1166,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         if not report or not report.counts["warnings"]:
             return True
         return messagebox.askyesno(
-            "确认Validate警告",
+            "确认模型检查警告",
             f"快速预检有 {report.counts['warnings']} 条警告。\n"
             "警告不会阻止生成，但建议先复核。是否确认并继续？",
             parent=self,
@@ -1157,7 +1176,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         snapshot = getattr(self, "_validated_snapshot", None)
         if snapshot is None:
             if not self.validate_model(show_dialog=False):
-                raise _legacy.ScriptGenerationError("快速Validate存在错误，已禁止生成HFSS脚本。")
+                raise _legacy.ScriptGenerationError("快速模型检查存在错误，已禁止生成 HFSS 脚本。")
             snapshot = getattr(self, "_validated_snapshot", None)
         if snapshot is None:
             raise _legacy.ScriptGenerationError("尚未生成有效的预览快照，已停止HFSS生成。")
@@ -1190,7 +1209,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         if preview_validation is not None and getattr(preview_validation, "errors", None):
             raise _legacy.ScriptGenerationError("当前预览快照存在几何/配置错误，已停止HFSS生成。")
         if not self._confirm_validate_warnings():
-            raise _legacy.ScriptGenerationError("用户未确认Validate警告，已取消生成。")
+            raise _legacy.ScriptGenerationError("用户未确认模型检查警告，已取消生成。")
         config = copy.deepcopy(self._validated_config)
         generated = _legacy.HfssScriptGenerator(config, _legacy.SOURCE_DIRECTORY).generate(snapshot=snapshot)
         self.config = config
@@ -1208,11 +1227,11 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         try:
             if not self.validate_model(show_dialog=False):
                 raise _legacy.ScriptGenerationError(
-                    "快速Validate存在错误，已禁止创建参数扫描。"
+                    "快速模型检查存在错误，已禁止创建参数扫描。"
                 )
             if not self._confirm_validate_warnings():
                 raise _legacy.ScriptGenerationError(
-                    "用户未确认Validate警告，已取消创建参数扫描。"
+                    "用户未确认模型检查警告，已取消创建参数扫描。"
                 )
             config = copy.deepcopy(self._validated_config)
             root = (self.manager.output_directory(config) /

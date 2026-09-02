@@ -163,10 +163,9 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._via_highlight_sync_job: Optional[str] = None
         self._via_diagram_redraw_job: Optional[str] = None
         self._configure_editor_styles()
+        self.status = tk.StringVar(value="就绪")
         self._build_menu_toolbar()
         self._build_tabs()
-        self.status = tk.StringVar(value="就绪：内部长度统一为 mm")
-        ttk.Label(self, textvariable=self.status, relief="sunken", anchor="w").pack(fill="x", side="bottom")
         self._load_to_widgets(self.config)
         self._refresh_job = self.after_idle(self.refresh_visuals)
 
@@ -219,6 +218,10 @@ class SurfaceCapAntipadApp(tk.Tk):
         )
         self.unit_hint_label.pack(side="left", padx=8)
         self.bind("<Configure>", lambda _event: self._apply_main_toolbar_layout(), add="+")
+        self.status_bar = ttk.Label(
+            self, textvariable=self.status, relief="sunken", anchor="w", padding=(8, 3),
+        )
+        self.status_bar.pack(fill="x")
 
     def _apply_main_toolbar_layout(self) -> None:
         compact = self.winfo_width() < 1320
@@ -301,9 +304,13 @@ class SurfaceCapAntipadApp(tk.Tk):
              numeric: bool = False, integer: bool = False, boolean: bool = False,
              values: Optional[Sequence[str]] = None, unit: str = "",
              display_values: Optional[Mapping[str, str]] = None, formula: str = "") -> tk.Widget:
-        label_widget = ttk.Label(parent, text=label)
-        label_widget.grid(row=row, column=0, sticky="w", padx=4, pady=3)
+        label_widget = ttk.Label(parent, text=label, justify="left", wraplength=168)
+        label_widget.grid(row=row, column=0, sticky="nw", padx=4, pady=3)
         self.field_labels[path] = label_widget
+        try:
+            parent.columnconfigure(1, weight=1, minsize=176)
+        except tk.TclError:
+            pass
         var: tk.Variable = tk.BooleanVar() if boolean else tk.StringVar()
         self.variables[path] = var
         if boolean:
@@ -313,7 +320,7 @@ class SurfaceCapAntipadApp(tk.Tk):
             labels = tuple(display_values.get(value, value) for value in values) if display_values else tuple(values)
             if display_values:
                 self.enum_labels[path] = dict(display_values)
-            widget = ttk.Combobox(parent, textvariable=var, values=labels, state="readonly")
+            widget = ttk.Combobox(parent, textvariable=var, values=labels, state="readonly", width=18)
             widget.grid(row=row, column=1, sticky="ew", padx=4)
             if path == "capacitor.package":
                 widget.bind("<<ComboboxSelected>>", self._package_changed)
@@ -329,8 +336,11 @@ class SurfaceCapAntipadApp(tk.Tk):
         elif unit:
             ttk.Label(parent, text=unit).grid(row=row, column=2, sticky="w")
         if formula:
-            formula_label = ttk.Label(parent, text=formula, foreground="#64748b", font=("TkDefaultFont", 8))
-            formula_label.grid(row=row, column=3, sticky="w", padx=(4, 2))
+            formula_label = ttk.Label(
+                parent, text=formula, foreground="#64748b", font=("TkDefaultFont", 8),
+                wraplength=160, justify="left",
+            )
+            formula_label.grid(row=row, column=3, sticky="nw", padx=(4, 2))
             self.formula_labels[path] = formula_label
         if numeric or length:
             self.numeric_paths.add(path)
@@ -351,11 +361,12 @@ class SurfaceCapAntipadApp(tk.Tk):
         ``_collect``/``_load_to_widgets`` 仍通过 ``self.variables[path]`` 往返读写，
         只是不再向用户提供可改动的下拉控件（避免"单选项"给人可改的错觉）。
         """
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=4, pady=3)
+        ttk.Label(parent, text=label, justify="left", wraplength=200).grid(
+            row=row, column=0, sticky="nw", padx=4, pady=3)
         var = tk.StringVar(value=backend_value)
         self.variables[path] = var
         var.trace_add("write", lambda *_: self._schedule_refresh())
-        value_label = ttk.Label(parent, text=display_text, foreground="#475569")
+        value_label = ttk.Label(parent, text=display_text, foreground="#475569", wraplength=280, justify="left")
         value_label.grid(row=row, column=1, sticky="w", padx=4)
         self.widgets[path] = value_label
 
@@ -550,13 +561,18 @@ class SurfaceCapAntipadApp(tk.Tk):
         self.cap_detail_var = tk.StringVar(value="自动派生字段将在输入后立即更新。")
         self.cap_status_label = ttk.Label(status_box, textvariable=self.cap_status_var, style="StatusGood.TLabel")
         self.cap_status_label.pack(anchor="w")
-        ttk.Label(status_box, textvariable=self.cap_detail_var, foreground="#475569", wraplength=1040).pack(anchor="w", pady=(2, 0))
+        self.cap_detail_label = ttk.Label(
+            status_box, textvariable=self.cap_detail_var, foreground="#475569",
+            wraplength=640, justify="left",
+        )
+        self.cap_detail_label.pack(anchor="w", fill="x", pady=(2, 0))
 
         panes = ttk.PanedWindow(tab, orient="horizontal")
         self.capacitor_panes = panes
         panes.pack(fill="both", expand=True)
         left = ttk.Frame(panes, padding=(2, 0))
         right = ttk.Frame(panes, padding=(4, 0))
+        self.cap_parameter_column = left
         panes.add(left, weight=3)
         panes.add(right, weight=2)
 

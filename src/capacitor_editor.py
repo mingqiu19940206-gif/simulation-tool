@@ -260,8 +260,9 @@ class ScrollableFrame(ttk.Frame):
         scrollbar.pack(side="right", fill="y")
         self.content.bind("<Configure>", self._schedule_layout)
         self.canvas.bind("<Configure>", self._schedule_layout)
-        self.canvas.bind("<MouseWheel>", self._wheel)
-        self.content.bind("<MouseWheel>", self._wheel)
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.canvas.bind(sequence, self._wheel)
+            self.content.bind(sequence, self._wheel)
         attach_mousewheel(self, self.canvas, self.content)
 
     def _schedule_layout(self, _event: Optional[tk.Event] = None) -> None:
@@ -805,7 +806,7 @@ class ElectricalModelDiagram(tk.Canvas):
             detail = (f"{touchstone.ports} 端口 · {touchstone.frequency_summary}" if touchstone else "等待有效的公共模型文件")
         else:
             title = "开路（仅焊盘）"
-            detail = "PAD间隙无铜桥、无RLC、无Touchstone组件"
+            detail = "焊盘间隙无铜桥、无RLC、无Touchstone组件"
 
         title_font = "ViaPreviewTitleFont"
         body_font = "ViaCanvasFont"

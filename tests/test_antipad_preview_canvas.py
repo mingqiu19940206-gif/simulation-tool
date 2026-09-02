@@ -99,6 +99,29 @@ class AntipadPreviewCanvasTests(unittest.TestCase):
             self.assertNotEqual(text.strip(), "mil")
             self.assertNotEqual(text.strip(), "mm")
 
+    def test_label_boxes_contain_text_raised_above_background(self) -> None:
+        canvas = self._render("independent_pad")
+        backgrounds = list(canvas.find_withtag("label-background"))
+        self.assertGreater(len(backgrounds), 0)
+        order = list(canvas.find_all())
+        for background in backgrounds:
+            bbox = canvas.bbox(background)
+            self.assertIsNotNone(bbox)
+            overlapping = [
+                item for item in canvas.find_overlapping(*bbox)
+                if canvas.type(item) == "text" and str(canvas.itemcget(item, "text")).strip()
+            ]
+            self.assertTrue(overlapping, canvas.bbox(background))
+            for text_id in overlapping:
+                self.assertGreater(order.index(text_id), order.index(background))
+                text = str(canvas.itemcget(text_id, "text"))
+                self.assertNotEqual(text.strip(), "")
+                self.assertNotEqual(text.strip(), "mil")
+                self.assertNotEqual(text.strip(), "mm")
+        texts = [canvas.itemcget(item, "text") for item in canvas.find_all() if canvas.type(item) == "text"]
+        self.assertTrue(any("电容" in text for text in texts), texts)
+        self.assertTrue(any(text.startswith("E=") and any(ch.isdigit() for ch in text) for text in texts), texts)
+
 
     def test_independent_openings_are_concentric_with_pads(self) -> None:
         config = copy.deepcopy(self.default)
