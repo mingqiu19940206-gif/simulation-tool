@@ -1084,14 +1084,12 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self._set_via_parameter_row_visible(
             "via_transition.padstack.nonfunctional_pad_diameter", nfp_keep)
         try:
-            signal_pitch = convert_length(
-                float(self.variables["via_transition.signal_via_pitch"].get()),
-                self.display_unit, "mm")
+            signal_pitch = self._length_var_mm("via_transition.signal_via_pitch")
             entry_c = self._via_side_center_mm("entry_trace")
             exit_c = self._via_side_center_mm("exit_trace")
             fanout_active = (
-                not math.isclose(signal_pitch, entry_c, abs_tol=1e-12)
-                or not math.isclose(signal_pitch, exit_c, abs_tol=1e-12)
+                not math.isclose(signal_pitch, entry_c, abs_tol=1e-9)
+                or not math.isclose(signal_pitch, exit_c, abs_tol=1e-9)
             )
         except (KeyError, TypeError, ValueError, tk.TclError):
             fanout_active = True

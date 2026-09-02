@@ -423,7 +423,10 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.app.refresh_visuals()
         contour = next(item for item in workbench.geometry.antipad_contours if item.layer == "L2")
         self.assertAlmostEqual(contour.length, 2.0)
-        self.assertIn("2", workbench.layer_effective_var.get())
+        self.assertIn(
+            format_length(2.0, self.app.display_unit),
+            workbench.layer_effective_var.get(),
+        )
         self.assertIn("采用手工尺寸/角度", workbench.layer_effective_var.get())
 
     def test_14_current_layer_clearance_edit_resizes_reference_envelope(self) -> None:
