@@ -458,7 +458,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         add("route", frame, 1, "⑧ 输入传输线宽度", "via_transition.entry_trace.width", length=True)
         add("route", frame, 2, "输入 GAP", "via_transition.entry_trace.gap", length=True)
         add("route", frame, 3, "输入中心距", "via_transition.entry_trace.center_to_center",
-            length=True, formula="= 宽度 + GAP")
+            length=True, formula="= 宽度 + GAP", derived=True)
         self._derived_display_paths.add("via_transition.entry_trace.center_to_center")
         self._set_derived_state(
             "via_transition.entry_trace.center_to_center", True, "= 宽度 + GAP")
@@ -466,7 +466,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         add("route", frame, 5, "⑩ 输出传输线宽度", "via_transition.exit_trace.width", length=True)
         add("route", frame, 6, "输出 GAP", "via_transition.exit_trace.gap", length=True)
         add("route", frame, 7, "输出中心距", "via_transition.exit_trace.center_to_center",
-            length=True, formula="= 宽度 + GAP")
+            length=True, formula="= 宽度 + GAP", derived=True)
         self._derived_display_paths.add("via_transition.exit_trace.center_to_center")
         self._set_derived_state(
             "via_transition.exit_trace.center_to_center", True, "= 宽度 + GAP")
@@ -849,7 +849,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         scroller.scroll_to_widget(widget)
         try:
             widget.focus_set()
-            if isinstance(widget, _legacy.ttk.Entry):
+            if isinstance(widget, (_legacy.ttk.Entry, tk.Entry)):
                 widget.selection_range(0, "end")
                 widget.icursor("end")
         except tk.TclError:
@@ -1154,7 +1154,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                         scroller.canvas.yview_moveto(max(0.0, min(1.0, (y - 20) / movable)))
                         break
             widget.focus_set()
-            if isinstance(widget, _legacy.ttk.Entry):
+            if isinstance(widget, (_legacy.ttk.Entry, tk.Entry)):
                 try:
                     widget.selection_range(0, "end")
                 except tk.TclError:

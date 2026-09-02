@@ -312,7 +312,8 @@ class SurfaceCapAntipadApp(tk.Tk):
     def _add(self, parent: ttk.Frame, row: int, label: str, path: str, *, length: bool = False,
              numeric: bool = False, integer: bool = False, boolean: bool = False,
              values: Optional[Sequence[str]] = None, unit: str = "",
-             display_values: Optional[Mapping[str, str]] = None, formula: str = "") -> tk.Widget:
+             display_values: Optional[Mapping[str, str]] = None, formula: str = "",
+             derived: bool = False) -> tk.Widget:
         label_widget = ttk.Label(parent, text=label, justify="left", wraplength=168)
         label_widget.grid(row=row, column=0, sticky="nw", padx=4, pady=3)
         self.field_labels[path] = label_widget
@@ -333,6 +334,17 @@ class SurfaceCapAntipadApp(tk.Tk):
             widget.grid(row=row, column=1, sticky="ew", padx=4)
             if path == "capacitor.package":
                 widget.bind("<<ComboboxSelected>>", self._package_changed)
+        elif derived:
+            # Classic Entry so readonlybackground is honored on Windows native
+            # ttk themes, which ignore Derived.TEntry fieldbackground.
+            widget = tk.Entry(
+                parent, textvariable=var, relief="sunken",
+                readonlybackground="#eef2f7", disabledbackground="#e2e8f0",
+                foreground="#334155", insertwidth=0, takefocus=0,
+            )
+            widget.configure(state="readonly")
+            widget.bind("<Key>", lambda event: "break")
+            widget.grid(row=row, column=1, sticky="ew", padx=4)
         else:
             widget = ttk.Entry(parent, textvariable=var)
             widget.grid(row=row, column=1, sticky="ew", padx=4)
@@ -458,7 +470,11 @@ class SurfaceCapAntipadApp(tk.Tk):
         try:
             if isinstance(widget, ttk.Combobox):
                 widget.configure(state="readonly" if enabled else "disabled")
-            elif isinstance(widget, (ttk.Entry, ttk.Checkbutton, ttk.Radiobutton)):
+            elif isinstance(widget, ttk.Entry):
+                widget.configure(state="normal" if enabled else "disabled")
+            elif isinstance(widget, tk.Entry):
+                widget.configure(state="readonly" if enabled else "disabled")
+            elif isinstance(widget, (ttk.Checkbutton, ttk.Radiobutton)):
                 widget.configure(state="normal" if enabled else "disabled")
         except tk.TclError:
             pass
@@ -1343,6 +1359,13 @@ class SurfaceCapAntipadApp(tk.Tk):
         if isinstance(widget, ttk.Entry):
             widget.configure(state="readonly" if derived else "normal",
                              style="Derived.TEntry" if derived else "TEntry")
+        elif isinstance(widget, tk.Entry):
+            widget.configure(
+                state="readonly" if derived else "disabled",
+                readonlybackground="#eef2f7",
+                disabledbackground="#e2e8f0",
+                foreground="#334155",
+            )
         label = self.formula_labels.get(path)
         if label:
             label.configure(text=formula)

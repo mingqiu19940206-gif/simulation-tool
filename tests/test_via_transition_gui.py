@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 try:
     import tkinter  # noqa: F401
+    from tkinter import ttk
     HAS_TK = True
 except ImportError:
     HAS_TK = False
@@ -141,7 +142,9 @@ class ViaTransitionGuiTests(unittest.TestCase):
         ):
             widget = self.app.widgets[path]
             self.assertEqual(str(widget.cget("state")), "readonly")
-            self.assertEqual(str(widget.cget("style")), "Derived.TEntry")
+            self.assertIsInstance(widget, tkinter.Entry)
+            self.assertNotIsInstance(widget, ttk.Entry)
+            self.assertEqual(str(widget.cget("readonlybackground")).lower(), "#eef2f7")
             self.assertIn("宽度 + GAP", str(self.app.formula_labels[path].cget("text")))
         self.assertIn("残桩从背钻侧最近功能连接层起算",
                       self.app.backdrill_hint_label.cget("text"))
@@ -716,10 +719,14 @@ class ViaTransitionGuiTests(unittest.TestCase):
             widget = self.app.widgets[path]
             before = str(self.app.variables[path].get())
             self.assertEqual(str(widget.cget("state")), "readonly")
-            self.assertEqual(str(widget.cget("style")), "Derived.TEntry")
+            self.assertIsInstance(widget, tkinter.Entry)
+            self.assertNotIsInstance(widget, ttk.Entry)
+            self.assertEqual(str(widget.cget("readonlybackground")).lower(), "#eef2f7")
             self.assertIn("宽度 + GAP", str(self.app.formula_labels[path].cget("text")))
             widget.focus_set()
             widget.event_generate("<KeyPress>", keysym="9", keycode=57)
+            with self.assertRaises(tkinter.TclError):
+                widget.insert("end", "9")
             self.app.update_idletasks()
             self.assertEqual(str(self.app.variables[path].get()), before)
 
