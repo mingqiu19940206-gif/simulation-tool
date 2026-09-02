@@ -36,6 +36,12 @@ class ViaTransitionGuiTests(unittest.TestCase):
         except Exception:
             pass
 
+    def _realize_desktop_layout(self) -> None:
+        self.app.geometry("1600x1000+0+0")
+        self.app.deiconify()
+        self.app.update()
+        self.app.update_idletasks()
+
     def test_01_via_tab_present(self) -> None:
         self.assertIn("VIA 换层", self.app.tabs)
         self.assertIn("反焊盘与叠层", self.app.tabs)
@@ -278,6 +284,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
                             for item in invalid))
 
     def test_12_current_layer_auto_modes_disable_ignored_inputs_and_explain_effective_geometry(self) -> None:
+        self._realize_desktop_layout()
         cfg = self.app._collect()
         cfg["scenario"]["type"] = "via_transition"
         cfg["via_transition"]["padstack"]["antipad"]["per_layer"]["L2"] = {
@@ -295,10 +302,13 @@ class ViaTransitionGuiTests(unittest.TestCase):
             "side_clearance": 0.11,
         }
         self.app._load_to_widgets(cfg)
+        self.app.notebook.select(self.app.tabs["反焊盘与叠层"])
+        self.app.update()
         self.app.refresh_visuals()
         workbench = self.app.antipad_workbench
         workbench.select_layer_by_name("L2")
         self.app.refresh_visuals()
+        self.app.update()
 
         self.assertEqual(workbench.via_layer_topology_var.get(), "P/N 合并开窗")
         self.assertEqual(workbench.via_layer_shape_var.get(), "胶囊形")
@@ -366,11 +376,15 @@ class ViaTransitionGuiTests(unittest.TestCase):
         }
         self.app._load_to_widgets(cfg)
         self.app.geometry("1600x1000+0+0")
+        self.app.deiconify()
+        self.app.notebook.select(self.app.tabs["反焊盘与叠层"])
+        self.app.update()
         self.app.refresh_visuals()
         workbench = self.app.antipad_workbench
         workbench.select_layer_by_name("L2")
         workbench._show_via_help("clearance", "本层覆盖")
         self.app.refresh_visuals()
+        self.app.update()
         self.app.update_idletasks()
 
         canvas = workbench.preview.canvas

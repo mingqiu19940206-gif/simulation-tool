@@ -745,8 +745,7 @@ class AntipadPreview(ttk.Frame):
                          (ax2 + 24, ay - 16),
                          (ax1 - 24, ay - 16)),
                         fill="#c2410c", background="#fff7ed", outline="#fdba74",
-                        tags=("dimension-label",), leader=((ax1 + ax2) / 2.0, ay),
-                        leader_color="#ea580c",
+                        tags=("dimension-label",), force=True,
                     )
             if not self.local_var.get():
                 model = self.geometry.model_bounds

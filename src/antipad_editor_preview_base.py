@@ -209,13 +209,13 @@ class AntipadPreview(_core.AntipadPreview):
             return
         if canvas.find_withtag("compact-preview"):
             return
-        for item in canvas.find_all():
-            item_type = canvas.type(item)
-            if item_type == "line" and canvas.itemcget(item, "fill") == "#ea580c":
-                canvas.delete(item)
-            elif (item_type == "text" and canvas.itemcget(item, "fill") == "#c2410c"
-                  and canvas.itemcget(item, "text").startswith("E=")):
-                canvas.delete(item)
+        doomed = [
+            item for item in canvas.find_all()
+            if canvas.type(item) == "line" and canvas.itemcget(item, "fill") == "#ea580c"
+        ]
+        doomed.extend(canvas.find_withtag("dimension-label"))
+        for item in doomed:
+            canvas.delete(item)
         viewport = canvas_viewport(canvas)
         if viewport is None:
             return
@@ -274,9 +274,7 @@ class AntipadPreview(_core.AntipadPreview):
                      (max(x1, x2) + 24, min(y1, y2) - 16),
                      (min(x1, x2) - 24, min(y1, y2) - 16)),
                     fill="#c2410c", background="#fff7ed", outline="#fdba74",
-                    tags=("dimension-label",),
-                    leader=((x1 + x2) / 2.0, (y1 + y2) / 2.0),
-                    leader_color="#ea580c",
+                    tags=("dimension-label",), force=True,
                 )
         if tools:
             connected = connected_window_count(tools)

@@ -49,6 +49,7 @@ class WraplengthHelperTests(unittest.TestCase):
 
     def test_bind_wraplength_follows_pane_width(self) -> None:
         self.root.geometry("320x160")
+        self.root.deiconify()
         frame = tk.Frame(self.root, width=280, height=80)
         frame.pack_propagate(False)
         frame.pack(fill="x")
@@ -59,9 +60,10 @@ class WraplengthHelperTests(unittest.TestCase):
             justify="left",
         )
         label.pack(fill="x")
-        bind_wraplength(label, source=frame, padding=24)
+        self.root.update()
         self.root.update_idletasks()
-        frame.event_generate("<Configure>")
+        bind_wraplength(label, source=frame, padding=24)
+        self.root.update()
         self.root.update_idletasks()
         wrap = int(float(label.cget("wraplength") or 0))
         width = int(frame.winfo_width())

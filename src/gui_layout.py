@@ -184,19 +184,24 @@ class CanvasLabelPlacer:
         leader_color: Optional[str] = None,
         padding: Tuple[int, int] = (4, 2),
         priority: int = 1,
+        force: bool = False,
     ) -> Optional[int]:
         chosen: Optional[Point] = None
         chosen_box: Optional[Box] = None
-        for candidate in candidates:
+        candidate_list = list(candidates)
+        for candidate in candidate_list:
             position, box = self._box(candidate, text, font, padding)
             if not any(boxes_intersect(box, old) for old in self.occupied):
                 chosen, chosen_box = position, box
                 break
         if chosen is None or chosen_box is None:
-            # No label is allowed to overwrite another one.  Hidden secondary
-            # details remain available through selection and hover text.
-            self.hidden.append(text)
-            return None
+            if force and candidate_list:
+                chosen, chosen_box = self._box(candidate_list[0], text, font, padding)
+            else:
+                # No label is allowed to overwrite another one.  Hidden secondary
+                # details remain available through selection and hover text.
+                self.hidden.append(text)
+                return None
         self.occupied.append(chosen_box)
         item_tags = tuple(tags)
         if leader is not None and (abs(leader[0]-chosen[0]) > 5 or abs(leader[1]-chosen[1]) > 5):
