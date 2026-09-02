@@ -7,6 +7,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -36,27 +37,22 @@ class ViaTransitionGuiTests(unittest.TestCase):
         except Exception:
             pass
 
-    def test_01_via_tab_present(self) -> None:
-        self.assertIn("VIA 换层", self.app.tabs)
-        self.assertIn("反焊盘与叠层", self.app.tabs)
-
-        # The VIA page is now the authoritative whole-transition editor.
+    def test_01_via_groups_present_without_retired_tabs(self) -> None:
+        for retired in ("VIA 换层", "反焊盘与叠层", "模型预览", "Validate结果"):
+            self.assertNotIn(retired, self.app.tabs)
+        self.assertEqual(tuple(self.app.via_parameter_groups), ("path", "signal", "backdrill", "return", "traces"))
         from tkinter import ttk
-        via_tab = self.app.tabs["VIA 换层"]
         editable = []
-        pending = list(via_tab.winfo_children())
+        pending = list(self.app.via_workspace.winfo_children())
         while pending:
             widget = pending.pop()
             pending.extend(widget.winfo_children())
-            if isinstance(widget, (ttk.Entry, ttk.Combobox, ttk.Checkbutton,
-                                   ttk.Radiobutton)):
+            if isinstance(widget, (ttk.Entry, ttk.Combobox, ttk.Checkbutton, ttk.Radiobutton, ttk.Button)):
                 editable.append(widget)
         self.assertGreater(len(editable), 20)
-        self.assertEqual(
-            tuple(self.app.via_parameter_notebook.tab(page, "text")
-                  for page in self.app.via_parameter_notebook.tabs()),
-            ("换层与传输线", "信号孔与背钻", "回流地孔"),
-        )
+        self.assertIn("项目与走线", self.app.tabs)
+        self.assertIn("电容与模型", self.app.tabs)
+        self.assertIn("GND VIA", self.app.tabs)
 
     def test_02_scenario_switch_round_trips_via_fields(self) -> None:
         self.app.variables["scenario.type"].set("via_transition")
@@ -189,7 +185,6 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.app.geometry("1600x1000+0+0")
         self.app.variables["scenario.type"].set("via_transition")
         self.app.refresh_visuals()
-        self.app.notebook.select(self.app.tabs["VIA 换层"])
         self.app.update_idletasks()
         self.app._redraw_via_diagrams()
 
@@ -290,6 +285,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
             "side_clearance": 0.11,
         }
         self.app._load_to_widgets(cfg)
+        self.app.open_stackup_drawer()
         self.app.refresh_visuals()
         workbench = self.app.antipad_workbench
         workbench.select_layer_by_name("L2")
@@ -361,6 +357,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
         }
         self.app._load_to_widgets(cfg)
         self.app.geometry("1600x1000+0+0")
+        self.app.open_stackup_drawer()
         self.app.refresh_visuals()
         workbench = self.app.antipad_workbench
         workbench.select_layer_by_name("L2")
@@ -410,14 +407,14 @@ class ViaTransitionGuiTests(unittest.TestCase):
     def test_16_via_and_layer_widgets_have_one_authoritative_owner(self) -> None:
         from tkinter import ttk
 
-        antipad_root = str(self.app.tabs["反焊盘与叠层"])
-        via_root = str(self.app.tabs["VIA 换层"])
+        drawer_root = str(self.app.drawer_host)
+        via_root = str(self.app.via_workspace)
         for path, widget in self.app.widgets.items():
             if not path.startswith("via_transition."):
                 continue
             layer_owned = (path.startswith("via_transition.padstack.antipad.")
                            or path.startswith("via_transition.padstack.antipad_per_layer"))
-            expected_root = antipad_root if layer_owned else via_root
+            expected_root = drawer_root if layer_owned else via_root
             self.assertTrue(str(widget).startswith(expected_root), (path, widget))
             self.assertIn(path, self.app.variables)
             if isinstance(widget, (ttk.Entry, ttk.Combobox, ttk.Checkbutton)):
@@ -430,25 +427,30 @@ class ViaTransitionGuiTests(unittest.TestCase):
             self.assertIn(path, self.app.widgets)
             self.assertTrue(str(self.app.widgets[path]).startswith(via_root), path)
 
-    def test_17_dimension_navigation_selects_authoritative_subtab(self) -> None:
+    def test_17_dimension_navigation_selects_authoritative_group(self) -> None:
         self.app.variables["scenario.type"].set("via_transition")
         cases = {
-            "via_transition.entry_trace.width": ("VIA 换层", "换层与传输线"),
-            "via_transition.backdrill.residual_stub": ("VIA 换层", "信号孔与背钻"),
-            "via_transition.return_vias.pad_diameter": ("VIA 换层", "回流地孔"),
-            "via_transition.padstack.antipad.diameter": ("反焊盘与叠层", None),
+            "via_transition.entry_trace.width": ("group", "traces"),
+            "via_transition.backdrill.residual_stub": ("group", "backdrill"),
+            "via_transition.return_vias.pad_diameter": ("group", "return"),
+            "via_transition.padstack.antipad.diameter": ("drawer", "stackup"),
+            "via_transition.padstack.antipad_diameter": ("group", "signal"),
+            "via_transition.pair_pitch": ("group", "path"),
+            "via_transition.signal_via_pitch": ("group", "path"),
+            "via_transition.padstack.drill_diameter": ("group", "signal"),
+            "via_transition.backdrill.drill_diameter": ("group", "backdrill"),
         }
-        for path, (expected_page, expected_tab) in cases.items():
+        for path, (kind, key) in cases.items():
             self.app._navigate_to_parameter(path)
             self.app.update_idletasks()
-            self.assertEqual(
-                self.app.notebook.select(), str(self.app.tabs[expected_page]), path)
-            if expected_tab is not None:
-                selected = self.app.via_parameter_notebook.select()
-                self.assertEqual(
-                    str(self.app.via_parameter_notebook.tab(selected, "text")),
-                    expected_tab, path)
+            if kind == "drawer":
+                self.assertTrue(self.app.stackup_drawer_open, path)
+            else:
+                self.assertEqual(self.app.via_active_group, key, path)
+                self.assertTrue(self.app.via_parameter_groups[key].expanded, path)
             self.assertIn(path, self.app.status.get())
+            self.assertNotIn("VIA 换层", self.app.tabs)
+            self.assertFalse(hasattr(self.app, "via_parameter_notebook"))
 
     def test_18_config_and_geometry_round_trip_are_unchanged_by_page_move(self) -> None:
         import copy
@@ -470,10 +472,10 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.app.variables["scenario.type"].set("surface_capacitor")
         self.app.variables["scenario.type"].set("via_transition")
         self.app.update_idletasks()
-        self.assertEqual(self.app.notebook.select(), str(self.app.tabs["VIA 换层"]))
-        selected = self.app.via_parameter_notebook.select()
-        self.assertEqual(self.app.via_parameter_notebook.tab(selected, "text"), "换层与传输线")
-        self.assertEqual(str(self.app.notebook.tab(self.app.tabs["GND VIA"], "state")), "hidden")
+        self.assertTrue(self.app.via_workspace.winfo_manager())
+        self.assertEqual(self.app.via_active_group, "path")
+        self.assertTrue(self.app.via_parameter_groups["path"].expanded)
+        self.assertFalse(bool(self.app.notebook.winfo_manager()))
 
     def test_20_plane_margins_are_editable_in_via_and_ac_scenarios(self) -> None:
         for scenario in ("via_transition", "surface_capacitor"):
@@ -481,6 +483,9 @@ class ViaTransitionGuiTests(unittest.TestCase):
             self.app.update_idletasks()
             for path in ("plane.margin_input", "plane.margin_output", "plane.margin_y"):
                 self.assertEqual(str(self.app.widgets[path].cget("state")), "normal", (scenario, path))
+        self.app.variables["scenario.type"].set("surface_capacitor")
+        self.app.update_idletasks()
+        self.assertTrue(self.app.notebook.winfo_manager())
         self.assertEqual(str(self.app.notebook.tab(self.app.tabs["GND VIA"], "state")), "normal")
         self.app.variables["scenario.type"].set("via_transition")
 
@@ -565,6 +570,55 @@ class ViaTransitionGuiTests(unittest.TestCase):
         paths = leaves(default_via)
         self.assertEqual(len(paths), 63)
         self.assertEqual([path for path in paths if path not in self.app.variables], [])
+
+    def test_26_dirty_offline_hfss_gate(self) -> None:
+        self.app._load_to_widgets(self.app.manager.default())
+        self.app.variables["scenario.type"].set("via_transition")
+        self.app.update_idletasks()
+        self.app._mark_preview_dirty()
+        self.assertTrue(self.app._preview_dirty)
+        self.assertIn("dirty", self.app.preview_dirty_var.get())
+        with mock.patch("main_gui.subprocess.Popen") as popen, \
+                mock.patch("main_gui.messagebox.showerror"), \
+                mock.patch("main_gui.messagebox.showinfo"):
+            self.app.generate_and_run()
+            popen.assert_not_called()
+        valid = self.app.validate_model(show_dialog=False)
+        self.assertTrue(valid)
+        self.assertFalse(self.app._preview_dirty)
+        self.app.variables["via_transition.center_x"].set(
+            repr(convert_length(0.01, "mm", self.app.display_unit))
+        )
+        self.app.update_idletasks()
+        self.assertTrue(self.app._preview_dirty)
+        with mock.patch("main_gui.subprocess.Popen") as popen, \
+                mock.patch("main_gui.messagebox.showerror"), \
+                mock.patch("main_gui.messagebox.showinfo"):
+            self.app.generate_hfss_offline()
+            popen.assert_not_called()
+            self.app.generate_and_run()
+            popen.assert_not_called()
+
+    def test_27_signal_more_section_hides_advanced_fields(self) -> None:
+        self.app.variables["scenario.type"].set("via_transition")
+        more = self.app.via_more_section
+        self.assertFalse(more.expanded)
+        self.assertEqual(more.body.winfo_manager(), "")
+        for path in (
+            "via_transition.padstack.finished_hole_diameter",
+            "via_transition.padstack.plating_thickness",
+            "via_transition.padstack.barrel_model",
+            "via_transition.padstack.material",
+        ):
+            self.assertIn(path, self.app.widgets)
+        more.expand()
+        self.app.update_idletasks()
+        self.assertTrue(more.expanded)
+        self.assertEqual(more.body.winfo_manager(), "pack")
+        self.assertEqual(
+            str(self.app.widgets["via_transition.padstack.antipad_diameter"].cget("state")),
+            "normal",
+        )
 
 
 if __name__ == "__main__":

@@ -521,7 +521,10 @@ class AntipadPreview(ttk.Frame):
         self.local_hint = ttk.Label(
             self, text="取消“局部视图”可查看完整参考平面", foreground="#64748b")
         self.local_hint.pack(fill="x", padx=4, pady=(0, 3))
-        self.canvas = tk.Canvas(self, background="#f8fafc", highlightthickness=1, highlightbackground="#cbd5e1")
+        self.canvas = tk.Canvas(
+            self, background="#f8fafc", highlightthickness=1, highlightbackground="#cbd5e1",
+            width=720, height=320,
+        )
         self.canvas.pack(fill="both", expand=True)
         self.canvas.bind("<Configure>", lambda _e: self.redraw())
         self.bind("<Configure>", lambda _event: self._apply_toolbar_layout(), add="+")
