@@ -29,17 +29,24 @@ class ViaTransitionFanoutTests(unittest.TestCase):
         cfg = _config()
         cfg["via_transition"].pop("signal_via_pitch", None)
         cfg["via_transition"].pop("fanout", None)
+        cfg["via_transition"]["entry_trace"].pop("gap", None)
+        cfg["via_transition"]["exit_trace"].pop("gap", None)
         normalized, messages = normalize_config(cfg)
         vt = normalized["via_transition"]
         self.assertEqual(vt["signal_via_pitch"], vt["pair_pitch"])
+        self.assertEqual(vt["entry_trace"]["width"] + vt["entry_trace"]["gap"],
+                         vt["pair_pitch"])
+        self.assertEqual(vt["exit_trace"]["width"] + vt["exit_trace"]["gap"],
+                         vt["pair_pitch"])
         self.assertEqual(vt["fanout"]["style"], "deg45")
         self.assertEqual(vt["fanout"]["direction"], "auto")
         self.assertTrue(any("signal_via_pitch" in message for message in messages))
 
     def test_equal_pitch_is_exact_legacy_rectangle(self) -> None:
         cfg = _config()
-        cfg["via_transition"]["pair_pitch"] = 0.8
         cfg["via_transition"]["signal_via_pitch"] = 0.8
+        cfg["via_transition"]["entry_trace"].update({"width": 0.1, "gap": 0.7})
+        cfg["via_transition"]["exit_trace"].update({"width": 0.1, "gap": 0.7})
         geometry = GeometryCalculator(cfg).calculate()
         self.assertFalse(geometry.errors, geometry.errors)
         for trace in geometry.entry_traces + geometry.exit_traces:
@@ -102,6 +109,41 @@ class ViaTransitionFanoutTests(unittest.TestCase):
         self.assertAlmostEqual(p_via.y, 0.5)
         self.assertAlmostEqual(next(port for port in geometry.ports
                                     if port.name == "PORT_IN_P").integration_line_start[1], 0.4)
+
+    def test_input_and_output_gaps_drive_independent_geometry_and_ports(self) -> None:
+        cfg = _config()
+        vt = cfg["via_transition"]
+        vt["pair_pitch"] = 1.7  # deprecated compatibility value must not drive geometry
+        vt["signal_via_pitch"] = 0.8
+        vt["entry_trace"].update({"width": 0.1, "gap": 0.5})  # pitch 0.6
+        vt["exit_trace"].update({"width": 0.2, "gap": 0.8})   # pitch 1.0
+        geometry = GeometryCalculator(cfg).calculate()
+        self.assertFalse(geometry.errors, geometry.errors)
+        p_via = next(via for via in geometry.signal_vias if via.signal == "P")
+        port_in = next(port for port in geometry.ports if port.name == "PORT_IN_P")
+        port_out = next(port for port in geometry.ports if port.name == "PORT_OUT_P")
+        self.assertAlmostEqual(p_via.y, 0.4)
+        self.assertAlmostEqual(port_in.integration_line_start[1], 0.3)
+        self.assertAlmostEqual(port_out.integration_line_start[1], 0.5)
+        entry_p = next(trace for trace in geometry.entry_traces if trace["signal"] == "P")
+        exit_p = next(trace for trace in geometry.exit_traces if trace["signal"] == "P")
+        entry_edge_x = min(point[0] for point in entry_p["points"])
+        exit_edge_x = max(point[0] for point in exit_p["points"])
+        entry_edge = [point for point in entry_p["points"]
+                      if math.isclose(point[0], entry_edge_x, abs_tol=1e-9)]
+        exit_edge = [point for point in exit_p["points"]
+                     if math.isclose(point[0], exit_edge_x, abs_tol=1e-9)]
+        self.assertAlmostEqual(sum(point[1] for point in entry_edge) / len(entry_edge), 0.3)
+        self.assertAlmostEqual(sum(point[1] for point in exit_edge) / len(exit_edge), 0.5)
+
+    def test_non_positive_gap_is_rejected_on_the_correct_side(self) -> None:
+        cfg = _config()
+        cfg["via_transition"]["exit_trace"]["gap"] = 0.0
+        geometry = GeometryCalculator(cfg).calculate()
+        issues = validate_via_transition(cfg, geometry)
+        self.assertTrue(any(item[0] == "VIA-TRN-075"
+                            and item[3] == "via_transition.exit_trace.gap"
+                            for item in issues), issues)
 
 
 if __name__ == "__main__":

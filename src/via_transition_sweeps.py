@@ -15,10 +15,13 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from config_manager import format_length
 from geometry_v1 import calculate_stackup_z_positions
+from via_transition_geometry import derive_functional_barrel_span
 
-# 规格 §11.1：拓扑不变的数值轴（可进入原生 Optimetrics）。
+# 规格 §11.1：拓扑不变的数值轴。可用于离线计划；只有
+# ``VIA_NATIVE_SWEEP_PATHS`` 中完成表达式绑定的子集可进入原生 Optimetrics。
 VIA_SAFE_SWEEP_PATHS: Tuple[str, ...] = (
-    "via_transition.pair_pitch",
+    "via_transition.entry_trace.gap",
+    "via_transition.exit_trace.gap",
     "via_transition.padstack.drill_diameter",
     "via_transition.padstack.connected_pad_diameter",
     "via_transition.padstack.antipad.diameter",
@@ -56,6 +59,15 @@ VIA_NATIVE_SWEEP_PATHS: Tuple[str, ...] = (
     "via_transition.padstack.antipad.width_increment",
 )
 
+# These dimensions drive the static geometry snapshot correctly, but are not
+# yet emitted as HFSS Design Variables.  The unified sweep manager may rebuild
+# one Design per value; the native Optimetrics path must continue to reject
+# them until coordinate expressions are implemented and validated in AEDT.
+VIA_DISCRETE_SWEEP_PATHS: Tuple[str, ...] = (
+    "via_transition.entry_trace.gap",
+    "via_transition.exit_trace.gap",
+)
+
 # 规格 §11.2：拓扑轴必须被阻止进入同一原生 Parametric Setup，
 # 但可由 sweep_manager 生成独立重算的 Design/case。
 VIA_TOPOLOGY_SWEEP_PATHS: Tuple[str, ...] = (
@@ -87,7 +99,8 @@ class ViaSweepSpec:
 
 # (label, minimum, maximum, signed) 保守默认界，mm 内部单位。
 _SPECS = {
-    "via_transition.pair_pitch": ("差分对中心距", 0.2, 2.0, False),
+    "via_transition.entry_trace.gap": ("输入 P/N 铜边间距 GAP", 0.001, 2.0, False),
+    "via_transition.exit_trace.gap": ("输出 P/N 铜边间距 GAP", 0.001, 2.0, False),
     "via_transition.padstack.drill_diameter": ("信号孔钻孔直径", 0.05, 1.0, False),
     "via_transition.padstack.connected_pad_diameter": ("功能焊盘直径", 0.1, 2.0, False),
     "via_transition.padstack.antipad.diameter": ("圆形反焊盘直径", 0.2, 3.0, False),
@@ -200,8 +213,12 @@ def _residual_stub_crossings(config: Mapping[str, Any]) -> List[Tuple[float, str
     if entry not in names or exit_layer not in names or drill_start not in names or drill_end not in names:
         return []
     by_name = {layer.name: layer for layer in stackup}
-    top_stub = entry != drill_start
-    bottom_stub = exit_layer != drill_end
+    functional_span = derive_functional_barrel_span(
+        names, entry, exit_layer, drill_start, drill_end)
+    if functional_span is None:
+        return []
+    top_stub = functional_span.top_stub
+    bottom_stub = functional_span.bottom_stub
     side = str(backdrill.get("from_side", "auto"))
     if side == "auto":
         if top_stub and bottom_stub:
@@ -210,14 +227,14 @@ def _residual_stub_crossings(config: Mapping[str, Any]) -> List[Tuple[float, str
     copper = [layer for layer in stackup if layer.layer_type in {"signal", "plane"}]
     crossings: List[Tuple[float, str]] = []
     if side == "bottom":
-        conn = by_name[exit_layer].z_bottom
+        conn = by_name[functional_span.lower_functional_layer].z_bottom
         for layer in copper:
-            if names.index(layer.name) > names.index(exit_layer) and names.index(layer.name) <= names.index(drill_end):
+            if functional_span.lower_index < layer.index <= functional_span.drill_end_index:
                 crossings.append((conn - layer.z_top, layer.name))
     elif side == "top":
-        conn = by_name[entry].z_top
+        conn = by_name[functional_span.upper_functional_layer].z_top
         for layer in copper:
-            if names.index(layer.name) < names.index(entry) and names.index(layer.name) >= names.index(drill_start):
+            if functional_span.drill_start_index <= layer.index < functional_span.upper_index:
                 crossings.append((layer.z_bottom - conn, layer.name))
     return sorted(crossings)
 

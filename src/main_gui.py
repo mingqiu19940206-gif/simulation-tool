@@ -56,7 +56,7 @@ from build_info import build_identity_line, get_build_info
 from capacitor_editor import ScrollableFrame
 from config_manager import (
     config_hash, convert_length, format_length, make_generation_snapshot,
-    normalize_config,
+    find_via_port_reference_layers, normalize_config,
 )
 from geometry_calculator import GeometryCalculator
 from gnd_via_editor import GndViaWorkbench
@@ -385,39 +385,43 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
               "差分对（当前仅支持）")
         add("route", frame, 1, "② 换层方向", "via_transition.route_axis",
             values=("x", "y"), display_values={"x": "X 方向", "y": "Y 方向"})
-        add("route", frame, 2, "① 差分对中心距（走线）", "via_transition.pair_pitch", length=True)
-        add("route", frame, 3, "㉑ 信号孔中心距（孔间距）", "via_transition.signal_via_pitch", length=True)
-        add("route", frame, 4, "中心 X", "via_transition.center_x", length=True)
-        add("route", frame, 5, "中心 Y", "via_transition.center_y", length=True)
-        add("route", frame, 6, "③ 输入层 (entry)", "via_transition.entry_layer", values=signal_layers)
-        add("route", frame, 7, "④ 输出层 (exit)", "via_transition.exit_layer", values=signal_layers)
-        add("route", frame, 8, "⑤ 机械钻孔起始层", "via_transition.drill_start_layer",
+        self._register_hidden_variable("via_transition.pair_pitch")
+        add("route", frame, 2, "㉑ 信号孔中心距（孔间距）", "via_transition.signal_via_pitch", length=True)
+        add("route", frame, 3, "中心 X", "via_transition.center_x", length=True)
+        add("route", frame, 4, "中心 Y", "via_transition.center_y", length=True)
+        add("route", frame, 5, "③ 输入层 (entry)", "via_transition.entry_layer", values=signal_layers)
+        add("route", frame, 6, "④ 输出层 (exit)", "via_transition.exit_layer", values=signal_layers)
+        add("route", frame, 7, "⑤ 机械钻孔起始层", "via_transition.drill_start_layer",
             values=conductive_layers)
-        add("route", frame, 9, "⑥ 机械钻孔终止层", "via_transition.drill_end_layer",
+        add("route", frame, 8, "⑥ 机械钻孔终止层", "via_transition.drill_end_layer",
             values=conductive_layers)
         _legacy.ttk.Label(
             frame, text="层名来自下方叠层；entry/exit 仅允许 signal，机械钻孔仅允许导体层。",
             foreground="#64748b", wraplength=430,
-        ).grid(row=10, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 0))
+        ).grid(row=9, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 0))
 
         frame = group("route", "走线扇出")
         add("route", frame, 0, "㉒ 扇出方式", "via_transition.fanout.style",
             values=("deg45", "arc"), display_values={"deg45": "45° 折线", "arc": "圆弧"},
             formula="孔间距等于差分对间距时由其他参数决定")
-        add("route", frame, 1, "㉓ 扇出方向", "via_transition.fanout.direction",
-            values=("auto", "expand", "contract"),
-            display_values={"auto": "自动", "expand": "向外", "contract": "向内"})
-        add("route", frame, 2, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
+        self._register_hidden_variable("via_transition.fanout.direction")
+        add("route", frame, 1, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
         _legacy.ttk.Label(
-            frame, text="孔间距等于走线中心距时扇出设置自动停用；几何规则保持原实现。",
+            frame, text="输入或输出走线中心距与信号孔间距不同时，按各侧实际间距差自动确定向内/向外扇出。",
             foreground="#64748b", wraplength=430,
-        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 0))
+        ).grid(row=2, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 0))
 
         frame = group("route", "输入/输出传输线")
         add("route", frame, 0, "⑦ 输入传输线长度", "via_transition.entry_trace.length", length=True)
         add("route", frame, 1, "⑧ 输入传输线宽度", "via_transition.entry_trace.width", length=True)
-        add("route", frame, 2, "⑨ 输出传输线长度", "via_transition.exit_trace.length", length=True)
-        add("route", frame, 3, "⑩ 输出传输线宽度", "via_transition.exit_trace.width", length=True)
+        add("route", frame, 2, "㉕ 输入 P/N 铜边间距 GAP", "via_transition.entry_trace.gap", length=True)
+        self.entry_trace_pitch_var = self._add_derived_length_label(
+            frame, 3, "输入 P/N 中心距（只读）")
+        add("route", frame, 4, "⑨ 输出传输线长度", "via_transition.exit_trace.length", length=True)
+        add("route", frame, 5, "⑩ 输出传输线宽度", "via_transition.exit_trace.width", length=True)
+        add("route", frame, 6, "㉖ 输出 P/N 铜边间距 GAP", "via_transition.exit_trace.gap", length=True)
+        self.exit_trace_pitch_var = self._add_derived_length_label(
+            frame, 7, "输出 P/N 中心距（只读）")
 
         frame = group("signal", "信号孔（Signal VIA）")
         add("signal", frame, 0, "⑪ 钻孔直径", "via_transition.padstack.drill_diameter", length=True)
@@ -457,29 +461,55 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
               "residual_stub", "目标残桩长度控制（当前仅支持）")
         add("signal", frame, 3, "⑰ 背钻孔径", "via_transition.backdrill.drill_diameter", length=True)
         add("signal", frame, 4, "⑱ 目标残桩长度", "via_transition.backdrill.residual_stub", length=True)
-        _legacy.ttk.Label(
-            frame, text="残桩仍从 exit 连接铜边界起算；本次重构未改变背钻深度语义。",
+        self.backdrill_hint_label = _legacy.ttk.Label(
+            frame, text=("背钻孔径必须大于原始钻孔；残桩从背钻侧最近的功能连接层铜边界起算；"
+                         "entry/exit 仅表示信号方向。"),
             foreground="#64748b", wraplength=430,
-        ).grid(row=5, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 0))
+        )
+        self.backdrill_hint_label.grid(
+            row=5, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 0))
 
-        frame = group("return", "回流地孔（Return VIA）· 布局与层连接")
+        frame = group("return", "回流地孔（Return VIA）· 标准布局")
         add("return", frame, 0, "启用回流地孔", "via_transition.return_vias.enabled", boolean=True)
-        add("return", frame, 1, "布局模式", "via_transition.return_vias.pattern",
+        add("return", frame, 1, "沿走线方向偏移",
+            "via_transition.return_vias.relative_offset_along_route", length=True)
+        self.return_along_label = next(iter(frame.grid_slaves(row=1, column=0)))
+        add("return", frame, 2, "横向偏移（正值向外，负值向内）",
+            "via_transition.return_vias.relative_offset_outward", length=True)
+        self.return_outward_label = next(iter(frame.grid_slaves(row=2, column=0)))
+        _legacy.ttk.Label(frame, text="只读摘要").grid(
+            row=3, column=0, sticky="w", padx=4, pady=5)
+        self.return_summary_var = tk.StringVar(value="固定生成 2 颗")
+        self.return_summary_label = _legacy.ttk.Label(
+            frame, textvariable=self.return_summary_var, foreground="#334155",
+            wraplength=430, justify="left")
+        self.return_summary_label.grid(
+            row=3, column=1, columnspan=3, sticky="w", padx=4, pady=5)
+        self.return_advanced_toggle = _legacy.ttk.Button(
+            frame, text="显示高级兼容参数", command=self._toggle_return_advanced)
+        self.return_advanced_toggle.grid(
+            row=4, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 0))
+
+        frame = group("return", "回流地孔（Return VIA）· 高级兼容布局")
+        self.return_legacy_layout_frame = frame
+        add("return", frame, 0, "布局语义", "via_transition.return_vias.layout_mode",
+            values=("standard", "advanced"),
+            display_values={"standard": "标准双孔（推荐）", "advanced": "旧版高级布局"})
+        add("return", frame, 1, "旧版布局模式", "via_transition.return_vias.pattern",
             values=("side_pair", "four_corner", "custom"),
             display_values={"side_pair": "两侧成对", "four_corner": "四角", "custom": "自定义"})
-        add("return", frame, 2, "数量", "via_transition.return_vias.count",
+        add("return", frame, 2, "旧版数量", "via_transition.return_vias.count",
             numeric=True, integer=True, formula="四角固定为 4；自定义由坐标行数自动计算")
-        add("return", frame, 3, "X 向偏移", "via_transition.return_vias.offset_x", length=True)
-        add("return", frame, 4, "Y 向偏移", "via_transition.return_vias.offset_y", length=True)
+        add("return", frame, 3, "旧版 X 向偏移", "via_transition.return_vias.offset_x", length=True)
+        add("return", frame, 4, "旧版 Y 向偏移", "via_transition.return_vias.offset_y", length=True)
         self.return_pitch_x_compat = add(
-            "return", frame, 5, "X 向节距（只读）",
+            "return", frame, 5, "旧版 X 向节距",
             "via_transition.return_vias.pitch_x", length=True,
-            formula="当前 side_pair 布局由 X 偏移和 Y 节距决定；兼容旧配置",
+            formula="仅高级兼容布局使用；标准双孔不参与位置计算",
         )
-        self.return_pitch_x_compat.configure(state="readonly")
-        add("return", frame, 6, "Y 向节距", "via_transition.return_vias.pitch_y", length=True)
-        add("return", frame, 7, "起始层", "via_transition.return_vias.start_layer", values=conductive_layers)
-        add("return", frame, 8, "终止层", "via_transition.return_vias.end_layer", values=conductive_layers)
+        add("return", frame, 6, "旧版 Y 向节距", "via_transition.return_vias.pitch_y", length=True)
+        add("return", frame, 7, "旧版起始层", "via_transition.return_vias.start_layer", values=conductive_layers)
+        add("return", frame, 8, "旧版终止层", "via_transition.return_vias.end_layer", values=conductive_layers)
         _legacy.ttk.Label(frame, text="参考连接层").grid(
             row=9, column=0, sticky="nw", padx=4, pady=5)
         self._register_hidden_variable("via_transition.return_vias.connect_layers")
@@ -529,7 +559,8 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self._via_parameter_rows["via_transition.return_vias.custom_coordinates"] = (frame, 10)
         remember("return", "via_transition.return_vias.custom_coordinates", self.return_coordinate_editor)
 
-        frame = group("return", "回流地孔（Return VIA）· 孔结构")
+        frame = group("return", "回流地孔（Return VIA）· 高级孔结构")
+        self.return_structure_frame = frame
         add("return", frame, 0, "钻孔直径", "via_transition.return_vias.drill_diameter", length=True)
         add("return", frame, 1, "成品孔直径",
             "via_transition.return_vias.finished_hole_diameter", length=True,
@@ -550,6 +581,30 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             frame, text="", foreground="#64748b", wraplength=430)
         self.return_structure_hint.grid(
             row=7, column=0, columnspan=4, sticky="w", padx=4, pady=(3, 0))
+        self._return_advanced_expanded = False
+
+    def _toggle_return_advanced(self) -> None:
+        self._return_advanced_expanded = not bool(
+            getattr(self, "_return_advanced_expanded", False))
+        self._set_return_advanced_visibility()
+
+    def _set_return_advanced_visibility(self) -> None:
+        layout_mode = self._backend_value("via_transition.return_vias.layout_mode")
+        visible = (layout_mode == "advanced"
+                   or bool(getattr(self, "_return_advanced_expanded", False)))
+        for frame in (getattr(self, "return_legacy_layout_frame", None),
+                      getattr(self, "return_structure_frame", None)):
+            if frame is None:
+                continue
+            if visible:
+                if not frame.winfo_manager():
+                    frame.pack(fill="x", padx=3, pady=4)
+            else:
+                frame.pack_forget()
+        toggle = getattr(self, "return_advanced_toggle", None)
+        if toggle is not None:
+            toggle.configure(text=("隐藏高级兼容参数" if visible
+                                   else "显示高级兼容参数"))
 
     def _return_connect_check_changed(self) -> None:
         if self._ui_sync:
@@ -733,10 +788,25 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         if location is None:
             return
         parent, row = location
-        for widget in parent.grid_slaves(row=row):
+        cache = getattr(self, "_via_parameter_row_widgets", None)
+        if cache is None:
+            cache = {}
+            self._via_parameter_row_widgets = cache
+        cache_key = (str(parent), int(row))
+        if cache_key not in cache:
+            cache[cache_key] = tuple(parent.grid_slaves(row=row))
+        for widget in cache[cache_key]:
             (widget.grid if visible else widget.grid_remove)()
 
     def _reveal_via_parameter(self, path: str, widget: tk.Widget) -> None:
+        if (path.startswith("via_transition.return_vias.")
+                and path not in {
+                    "via_transition.return_vias.enabled",
+                    "via_transition.return_vias.relative_offset_along_route",
+                    "via_transition.return_vias.relative_offset_outward",
+                }):
+            self._return_advanced_expanded = True
+            self._set_return_advanced_visibility()
         page = self._via_parameter_tab_by_path.get(path, self.via_parameter_tabs["route"])
         self.via_parameter_notebook.select(page)
         section = next((key for key, candidate in self.via_parameter_tabs.items()
@@ -918,8 +988,12 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         super()._sync_via_fields()
         return_enabled = bool(
             self.variables["via_transition.return_vias.enabled"].get())
+        layout_mode = self._backend_value("via_transition.return_vias.layout_mode")
+        standard_layout = layout_mode == "standard"
         pattern = self._backend_value("via_transition.return_vias.pattern")
         layout_fields = {
+            "via_transition.return_vias.relative_offset_along_route",
+            "via_transition.return_vias.relative_offset_outward",
             "via_transition.return_vias.offset_x",
             "via_transition.return_vias.offset_y",
             "via_transition.return_vias.pitch_x",
@@ -940,18 +1014,24 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             "custom": {"via_transition.return_vias.custom_coordinates"},
         }.get(pattern, set())
         for path in layout_fields:
-            self._set_via_parameter_row_visible(path, return_enabled and path in active)
+            if path.startswith("via_transition.return_vias.relative_offset_"):
+                visible = return_enabled and standard_layout
+            else:
+                visible = return_enabled and not standard_layout and path in active
+            self._set_via_parameter_row_visible(path, visible)
         for path in (
             "via_transition.return_vias.count",
             "via_transition.return_vias.start_layer",
             "via_transition.return_vias.end_layer",
             "via_transition.return_vias.connect_layers",
         ):
-            self._set_via_parameter_row_visible(path, return_enabled)
+            self._set_via_parameter_row_visible(
+                path, return_enabled and not standard_layout)
 
         for check in getattr(self, "return_connect_checks", ()):
-            check.configure(state="normal" if return_enabled else "disabled")
-        coordinate_active = return_enabled and pattern == "custom"
+            check.configure(state=("normal" if return_enabled and not standard_layout
+                                   else "disabled"))
+        coordinate_active = return_enabled and not standard_layout and pattern == "custom"
         coordinate_editor = getattr(self, "return_coordinate_editor", None)
         if coordinate_editor is not None:
             for child in coordinate_editor.winfo_children():
@@ -966,13 +1046,44 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                 self._configure_widget_state(widget, return_enabled)
         if hasattr(self, "return_pitch_x_compat"):
             self.return_pitch_x_compat.configure(
-                state="readonly" if return_enabled and pattern == "side_pair" else "disabled")
+                state=("normal" if return_enabled and not standard_layout
+                       and pattern in {"side_pair", "four_corner"} else "disabled"))
         if hasattr(self, "return_structure_hint"):
             self.return_structure_hint.configure(text=(
                 "回流地孔未启用：孔结构参数保留在配置中，当前模式不参与几何。"
                 if not return_enabled else
                 "成品孔径自动计算；实心筒壁仅用于趋势近似。"
             ))
+
+        route_axis = self._backend_value("via_transition.route_axis")
+        if hasattr(self, "return_along_label"):
+            self.return_along_label.configure(text=(
+                "沿走线方向偏移（板坐标 X）" if route_axis == "x"
+                else "沿走线方向偏移（板坐标 Y）"
+            ))
+        if hasattr(self, "return_outward_label"):
+            self.return_outward_label.configure(text=(
+                "横向偏移（板坐标 Y；正=向外，负=向内）" if route_axis == "x"
+                else "横向偏移（板坐标 X；正=两侧向外，P→−X / N→+X）"
+            ))
+        if hasattr(self, "return_summary_var"):
+            try:
+                start_layer = self._backend_value("via_transition.drill_start_layer")
+                end_layer = self._backend_value("via_transition.drill_end_layer")
+                entry_layer = self._backend_value("via_transition.entry_layer")
+                exit_layer = self._backend_value("via_transition.exit_layer")
+                input_ref, output_ref = find_via_port_reference_layers(
+                    self.config.get("stackup", []), entry_layer, exit_layer)
+                references = list(dict.fromkeys(
+                    name for name in (input_ref, output_ref) if name))
+                reference_text = "、".join(references) if references else "无"
+                self.return_summary_var.set(
+                    f"固定生成 2 颗；钻孔跨度 {start_layer}–{end_layer}；"
+                    f"连接参考层 {reference_text}"
+                )
+            except (KeyError, TypeError, ValueError, tk.TclError):
+                self.return_summary_var.set("固定生成 2 颗；层跨度与端口参考层自动派生")
+        self._set_return_advanced_visibility()
 
         nfp_keep = self._backend_value(
             "via_transition.padstack.nonfunctional_pad_mode") == "keep"
@@ -982,15 +1093,22 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             signal_pitch = convert_length(
                 float(self.variables["via_transition.signal_via_pitch"].get()),
                 self.display_unit, "mm")
-            pair_pitch = convert_length(
-                float(self.variables["via_transition.pair_pitch"].get()),
-                self.display_unit, "mm")
-            fanout_active = not math.isclose(signal_pitch, pair_pitch, abs_tol=1e-12)
+            trace_pitches = tuple(
+                convert_length(
+                    float(self.variables[f"via_transition.{side}_trace.width"].get()),
+                    self.display_unit, "mm")
+                + convert_length(
+                    float(self.variables[f"via_transition.{side}_trace.gap"].get()),
+                    self.display_unit, "mm")
+                for side in ("entry", "exit")
+            )
+            fanout_active = any(
+                not math.isclose(signal_pitch, pitch, abs_tol=1e-12)
+                for pitch in trace_pitches)
         except (KeyError, TypeError, ValueError, tk.TclError):
             fanout_active = True
         for path in (
             "via_transition.fanout.style",
-            "via_transition.fanout.direction",
             "via_transition.fanout.straight_length",
         ):
             self._set_via_parameter_row_visible(path, fanout_active)
@@ -1067,6 +1185,12 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         """Run the structured local preflight without starting AEDT."""
         validator = ModelValidator(self.manager)
         try:
+            # Trace callbacks are debounced for interactive redraws, but a
+            # user action must never depend on whether that callback already
+            # ran.  Commit every derived value synchronously before reading.
+            self._sync_derived_fields()
+            self._sync_via_fields()
+            self.update_idletasks()
             raw = self._collect()
         except Exception as exc:
             raw = copy.deepcopy(getattr(self, "config", {}))
@@ -1082,16 +1206,20 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self.validate_report = report
         self.validate_workbench.show_report(report)
         self.notebook.select(self.tabs["Validate结果"])
+        valid = report.can_continue
         if config is not None:
             self.config = config
             self._validated_config = copy.deepcopy(config)
             self._validated_geometry = geometry
             if geometry is not None:
-                self._validated_snapshot = make_generation_snapshot(config, geometry)
+                candidate_snapshot = make_generation_snapshot(config, geometry)
+                self._validated_snapshot = candidate_snapshot if valid else None
                 self._preview_validation = report
-                self.model_preview_workbench.show(config, geometry, report, self._validated_snapshot)
+                self.model_preview_workbench.show(
+                    config, geometry, report, candidate_snapshot)
                 self.model_preview_workbench.update_pending()
-        valid = report.counts["errors"] == 0 and not report.incomplete
+            else:
+                self._validated_snapshot = None
         if show_dialog:
             if not valid:
                 messagebox.showerror("Validate模型检查", "快速预检失败；存在阻止建模的错误。", parent=self)
@@ -1124,11 +1252,14 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         )
 
     def _generate(self):
+        # Generate and Run both enter here.  Re-run the synchronous preflight
+        # so a prior successful snapshot cannot bypass newly edited fields.
+        if not self.validate_model(show_dialog=False):
+            raise _legacy.ScriptGenerationError("快速Validate存在错误，已禁止生成HFSS脚本。")
+        report = getattr(self, "validate_report", None)
+        if report is None or not report.can_continue:
+            raise _legacy.ScriptGenerationError("快速Validate未通过，已禁止生成HFSS脚本。")
         snapshot = getattr(self, "_validated_snapshot", None)
-        if snapshot is None:
-            if not self.validate_model(show_dialog=False):
-                raise _legacy.ScriptGenerationError("快速Validate存在错误，已禁止生成HFSS脚本。")
-            snapshot = getattr(self, "_validated_snapshot", None)
         if snapshot is None:
             raise _legacy.ScriptGenerationError("尚未生成有效的预览快照，已停止HFSS生成。")
         try:
@@ -1157,7 +1288,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                     "当前3D预览尚未提交与生成相同的快照，请先刷新/更新预览后再生成HFSS工程。"
                 )
         preview_validation = getattr(self, "_preview_validation", None)
-        if preview_validation is not None and getattr(preview_validation, "errors", None):
+        if preview_validation is not None and not preview_validation.can_continue:
             raise _legacy.ScriptGenerationError("当前预览快照存在几何/配置错误，已停止HFSS生成。")
         if not self._confirm_validate_warnings():
             raise _legacy.ScriptGenerationError("用户未确认Validate警告，已取消生成。")
@@ -1320,6 +1451,11 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             messagebox.showerror("自动修复失败", str(exc), parent=self)
 
     def _load_to_widgets(self, config: Any) -> None:
+        if hasattr(self, "return_legacy_layout_frame"):
+            self._return_advanced_expanded = (
+                str(config.get("via_transition", {}).get(
+                    "return_vias", {}).get("layout_mode", "standard")) == "advanced"
+            )
         super()._load_to_widgets(config)
         if hasattr(self, "return_coordinate_tree"):
             points = self.config["via_transition"]["return_vias"].get(
@@ -1343,9 +1479,29 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         result = super()._collect()
         if hasattr(self, "return_coordinate_tree"):
             points = self._return_coordinate_points_mm()
-            result["via_transition"]["return_vias"]["custom_coordinates"] = points
-            if result["via_transition"]["return_vias"].get("pattern") == "custom":
-                result["via_transition"]["return_vias"]["count"] = len(points)
+            vt = result["via_transition"]
+            return_vias = vt["return_vias"]
+            return_vias["custom_coordinates"] = points
+            if return_vias.get("layout_mode") == "standard":
+                along = float(return_vias["relative_offset_along_route"])
+                outward = float(return_vias["relative_offset_outward"])
+                return_vias.update({
+                    "pattern": "side_pair",
+                    "count": 2,
+                    "offset_x": along,
+                    "offset_y": float(vt["signal_via_pitch"]) / 2.0 + outward,
+                    "start_layer": str(vt["drill_start_layer"]),
+                    "end_layer": str(vt["drill_end_layer"]),
+                })
+                input_ref, output_ref = find_via_port_reference_layers(
+                    result.get("stackup", []),
+                    str(vt["entry_layer"]), str(vt["exit_layer"]),
+                )
+                return_vias["connect_layers"] = list(dict.fromkeys(
+                    name for name in (input_ref, output_ref) if name
+                ))
+            elif return_vias.get("pattern") == "custom":
+                return_vias["count"] = len(points)
         return result
 
     def _refresh_stackup(self) -> None:

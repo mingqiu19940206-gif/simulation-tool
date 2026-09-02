@@ -99,7 +99,7 @@ class ViaTransitionGeometryTests(unittest.TestCase):
 
     def test_08_return_via_collision_detected(self) -> None:
         cfg = copy.deepcopy(self.cfg)
-        cfg["via_transition"]["return_vias"]["offset_y"] = 0.4
+        cfg["via_transition"]["return_vias"]["relative_offset_outward"] = 0.0
         geometry = GeometryCalculator(cfg).calculate()
         self.assertTrue(any("侵入" in error for error in geometry.errors))
 
@@ -119,18 +119,33 @@ class ViaTransitionGeometryTests(unittest.TestCase):
             self.assertIn("app.modeler.create_region", script_text)
             self.assertIn('name + "_BOARD_CUT_" + safe_identifier(layer_name)', script_text)
             self.assertIn("plane_parts + ground_parts", script_text)
+            self.assertIn('name + "_CONNECTED_HOLE_" + layer_name', script_text)
+            self.assertIn("full reference plane already supplies more copper", script_text)
             self.assertIn('"Sdd11": "St(IN_DIFF,IN_DIFF)"', script_text)
             self.assertIn("app.post.get_solution_data_per_variation", script_text)
-            self.assertIn("setup_sweep_name=setup_name + \" : \" + sweep_name", script_text)
+            self.assertIn("setup_sweep_name=setup_sweep_name", script_text)
             self.assertIn('solution_type="Terminal Solution Data"', script_text)
+            self.assertIn("actual_pairs = list(app.oboundary.GetDiffPairs() or [])", script_text)
+            self.assertIn('state["differential_pair_readback"] = actual_pairs', script_text)
+            self.assertIn("app.post.available_report_quantities", script_text)
+            self.assertIn('["Diff:=", "Differential Pairs", "Domain:=", "Sweep"]', script_text)
             self.assertIn("solution.get_expression_data", script_text)
             self.assertIn("_hfss_profile_convergence", script_text)
             self.assertIn('"solve_completed": solve_completed', script_text)
             self.assertIn('"convergence_evidence": convergence_evidence', script_text)
             self.assertIn("TDR requires a DC-anchored uniform grid", script_text)
+            self.assertIn('tdr_sweep = setup.add_sweep(name=tdr_sweep_name, sweep_type="Discrete")', script_text)
+            self.assertIn("_extract_tdr_sdd11", script_text)
+            self.assertIn('"tdr_source": None', script_text)
             self.assertIn("stale_tdr_path.unlink()", script_text)
-            self.assertIn('CONFIG.get("simulation", {}).get("generate_tdr", False)', script_text)
+            self.assertIn('simulation.get("generate_tdr", False)', script_text)
             self.assertIn("final TDR settings and fail-closed warnings", script_text)
+            self.assertIn("HFSS mixed-mode result export failed", script_text)
+            self.assertIn(
+                "solve_report = solve_via_transition_single_case(app, state)\n"
+                "        # Persist the post-solve solution/result linkage",
+                script_text,
+            )
             self.assertNotIn("dB(S(IN_DIFF,IN_DIFF))", script_text)
             self.assertNotIn("app.get_solution_data(expressions", script_text)
             self.assertNotIn("height = z_top - z_bottom", script_text)

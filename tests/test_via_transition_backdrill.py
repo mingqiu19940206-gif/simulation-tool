@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from config_manager import ConfigManager
+from config_manager import ConfigManager, normalize_config
 from geometry_calculator import GeometryCalculator
 from via_transition_semantics import validate_via_transition
 
@@ -23,6 +23,18 @@ def _phase3_cfg():
     cfg["via_transition"]["backdrill"]["enabled"] = True
     cfg["via_transition"]["backdrill"]["from_side"] = "auto"
     return cfg
+
+
+def _middle_span_cfg(entry_layer: str, exit_layer: str):
+    """L10/L14 transition with a single physical top stub in either flow direction."""
+    cfg = _phase3_cfg()
+    cfg["via_transition"].update({
+        "entry_layer": entry_layer,
+        "exit_layer": exit_layer,
+        "drill_start_layer": "L1",
+        "drill_end_layer": "L14",
+    })
+    return normalize_config(cfg)[0]
 
 
 class ViaTransitionBackdrillTests(unittest.TestCase):
@@ -88,6 +100,50 @@ class ViaTransitionBackdrillTests(unittest.TestCase):
         self.assertTrue(any("无法唯一" in e for e in geometry.errors), geometry.errors)
         issues = validate_via_transition(cfg, geometry)
         self.assertTrue(any(i[0] == "VIA-TRN-046" for i in issues))
+
+    def test_08_forward_l10_to_l14_auto_uses_physical_top_stub(self) -> None:
+        cfg = _middle_span_cfg("L10", "L14")
+        geometry = GeometryCalculator(cfg).calculate()
+        self.assertFalse(geometry.errors, geometry.errors)
+        self.assertFalse([item for item in validate_via_transition(cfg, geometry)
+                          if item[1] == "error"])
+        for via in geometry.signal_vias:
+            self.assertEqual(via.backdrill_from_side, "top")
+            self.assertEqual(via.upper_functional_layer, "L10")
+            self.assertEqual(via.lower_functional_layer, "L14")
+            self.assertTrue(via.top_stub_present)
+            self.assertFalse(via.bottom_stub_present)
+
+    def test_09_reverse_l14_to_l10_preserves_physical_backdrill(self) -> None:
+        forward = GeometryCalculator(_middle_span_cfg("L10", "L14")).calculate()
+        reverse_cfg = _middle_span_cfg("L14", "L10")
+        reverse = GeometryCalculator(reverse_cfg).calculate()
+        self.assertFalse(reverse.errors, reverse.errors)
+        self.assertFalse([item for item in validate_via_transition(reverse_cfg, reverse)
+                          if item[1] == "error"])
+        for forward_via, reverse_via in zip(forward.signal_vias, reverse.signal_vias):
+            self.assertEqual(reverse_via.backdrill_from_side, "top")
+            self.assertEqual(reverse_via.upper_functional_layer, "L10")
+            self.assertEqual(reverse_via.lower_functional_layer, "L14")
+            for field in ("backdrill_z_bottom", "backdrill_z_top",
+                          "effective_barrel_z_bottom", "effective_barrel_z_top",
+                          "actual_residual_stub"):
+                self.assertAlmostEqual(getattr(reverse_via, field),
+                                       getattr(forward_via, field), places=12)
+        self.assertEqual({trace["layer"] for trace in reverse.entry_traces}, {"L14"})
+        self.assertEqual({trace["layer"] for trace in reverse.exit_traces}, {"L10"})
+
+    def test_10_auto_reports_no_stub_when_drill_matches_functional_span(self) -> None:
+        cfg = _middle_span_cfg("L10", "L14")
+        cfg["via_transition"].update({
+            "drill_start_layer": "L10", "drill_end_layer": "L14",
+        })
+        cfg = normalize_config(cfg)[0]
+        geometry = GeometryCalculator(cfg).calculate()
+        self.assertTrue(any("不存在残桩" in error for error in geometry.errors),
+                        geometry.errors)
+        issues = validate_via_transition(cfg, geometry)
+        self.assertTrue(any(item[0] == "VIA-TRN-049" for item in issues), issues)
 
 
 if __name__ == "__main__":

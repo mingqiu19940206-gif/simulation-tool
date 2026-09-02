@@ -22,6 +22,7 @@ from simulation_sweep_semantics import (
     apply_frequency_preset,
     inspect_frequency_plan,
     inspect_sweep_plan,
+    inspect_tdr_sweep_plan,
     iter_materialized_variations,
     iter_variations,
     preflight_sweep_geometry,
@@ -283,9 +284,24 @@ class SimulationSweepWorkbench(ttk.Frame):
         for row, (name, label) in enumerate(REPORT_LABELS.items(), 1):
             self.report_widgets[name] = self.app._add(
                 reports, row, label, f"simulation.report_outputs.{name}", boolean=True)
-        self.tdr_request = self.app._add(reports, 5, "记录差分 TDR 复核请求", "simulation.generate_tdr", boolean=True)
-        ttk.Label(reports, text="脚本不会自动创建完整 TDR 报告，需要在 AEDT 中复核端口模式、时域变换、上升时间和参考阻抗。",
-                  foreground="#9a3412", wraplength=500).grid(row=6, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 1))
+        self.tdr_request = self.app._add(reports, 5, "生成差分 TDR", "simulation.generate_tdr", boolean=True)
+        self.tdr_sweep_enable = self.app._add(
+            reports, 6, "启用独立离散 Sweep", "simulation.tdr_sweep.enabled", boolean=True)
+        self.tdr_sweep_name = self.app._add(
+            reports, 7, "TDR Sweep 名称", "simulation.tdr_sweep.sweep_name")
+        self.tdr_start = self.app._add(
+            reports, 8, "TDR 起始频率", "simulation.tdr_sweep.start_frequency_ghz", numeric=True, unit="GHz")
+        self.tdr_stop = self.app._add(
+            reports, 9, "TDR 终止频率", "simulation.tdr_sweep.stop_frequency_ghz", numeric=True, unit="GHz")
+        self.tdr_step = self.app._add(
+            reports, 10, "TDR 离散步进", "simulation.tdr_sweep.step_frequency_ghz", numeric=True, unit="GHz")
+        self.tdr_max_points = self.app._add(
+            reports, 11, "TDR 最大频点数", "simulation.tdr_sweep.max_points", numeric=True, integer=True)
+        ttk.Label(
+            reports,
+            text="TDR 使用独立真实离散解；起始频率必须等于步进，终止频率必须为步进的整数倍。",
+            foreground="#9a3412", wraplength=500,
+        ).grid(row=12, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 1))
 
         summary = self._section(right.content, "仿真方案摘要")
         self.sim_summary_var = tk.StringVar()
@@ -301,6 +317,8 @@ class SimulationSweepWorkbench(ttk.Frame):
             self.preset_combo, self.sweep_type, self.start_frequency, self.stop_frequency,
             self.step_frequency, self.interp_tolerance, self.interp_max, self.save_fields,
             self.generate_reports, *self.report_widgets.values(), self.tdr_request,
+            self.tdr_sweep_enable, self.tdr_sweep_name, self.tdr_start,
+            self.tdr_stop, self.tdr_step, self.tdr_max_points,
         )
 
     def _build_design_sweep(self) -> None:
@@ -528,7 +546,14 @@ class SimulationSweepWorkbench(ttk.Frame):
         reports_enabled = enabled and bool(sim.get("generate_reports")) and bool(sim.get("create_differential_ports"))
         for widget in self.report_widgets.values():
             self._widget_state(widget, reports_enabled)
+        tdr_requested = enabled and bool(sim.get("generate_tdr"))
+        self._widget_state(self.tdr_sweep_enable, tdr_requested)
+        tdr_sweep_enabled = tdr_requested and bool(sim.get("tdr_sweep", {}).get("enabled"))
+        for widget in (self.tdr_sweep_name, self.tdr_start, self.tdr_stop,
+                       self.tdr_step, self.tdr_max_points):
+            self._widget_state(widget, tdr_sweep_enabled)
         plan = inspect_frequency_plan(sim)
+        tdr_plan = inspect_tdr_sweep_plan(sim)
         if sweep_type == "Discrete":
             last = "—" if plan.last_frequency_ghz is None else f"{plan.last_frequency_ghz:g} GHz"
             self.frequency_detail_var.set(f"离散频点：{plan.point_count or 0}；实际最后频点：{last}")
@@ -545,7 +570,12 @@ class SimulationSweepWorkbench(ttk.Frame):
             f"自动求解：{'开启' if enabled else '关闭'}",
             f"频率扫描：{SWEEP_TYPE_LABELS.get(sweep_type, sweep_type) if enabled else '不会创建'}",
             f"S 参数结果：{', '.join(selected) if enabled and sim.get('generate_reports') and sim.get('create_differential_ports') else '不会生成'}",
-            "TDR：仅记录复核请求" if sim.get("generate_tdr") else "TDR：不请求",
+            (
+                f"TDR：{tdr_plan.sweep_name}，{tdr_plan.point_count} 个真实离散频点"
+                if tdr_plan.enabled and tdr_plan.point_count is not None
+                else "TDR：已请求，但独立 Sweep 未就绪"
+                if sim.get("generate_tdr") else "TDR：不请求"
+            ),
         ]
         self.sim_summary_var.set("\n".join(lines))
         self.sim_issue_var.set("\n".join(("错误：" if level == "error" else "提示：") + message

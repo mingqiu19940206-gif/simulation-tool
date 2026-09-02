@@ -17,7 +17,11 @@ from config_manager import (
 )
 from geometry_calculator import GeometryCalculator
 from gnd_via_semantics import derive_via_values, validate_via_workbench
-from simulation_sweep_semantics import inspect_frequency_plan, inspect_sweep_plan
+from simulation_sweep_semantics import (
+    inspect_frequency_plan,
+    inspect_sweep_plan,
+    inspect_tdr_sweep_plan,
+)
 from scenario_semantics import VIA_TRANSITION, scenario_type
 from via_transition_semantics import validate_via_transition
 
@@ -856,8 +860,20 @@ class ModelValidator:
                 add("SETUP-002", "warning", "Setup与Sweep", "未创建端口，不能生成依赖端口的混合模报告。",
                     path="simulation.generate_reports", suggestion="启用端口或关闭报告。")
             if sim.get("generate_tdr"):
-                add("SETUP-003", "warning", "Setup与Sweep", "TDR当前只能记录复核请求，不能完整自动创建。",
-                    path="simulation.generate_tdr", suggestion="在HFSS中复核端口模式、时域变换和上升时间。")
+                tdr_plan = inspect_tdr_sweep_plan(sim)
+                if tdr_plan.enabled and not tdr_plan.issues:
+                    add(
+                        "SETUP-003", "info", "Setup与Sweep",
+                        f"独立 TDR Sweep 将使用 {tdr_plan.point_count} 个 DC 锚定离散频点。",
+                        path="simulation.tdr_sweep",
+                        suggestion="求解后仍需复核端口模式、上升时间和参考阻抗。",
+                    )
+                for level, message in tdr_plan.issues:
+                    add(
+                        "SETUP-003", level, "Setup与Sweep", message,
+                        path="simulation.tdr_sweep",
+                        suggestion="启用独立 TDR Sweep，并满足 start=step、stop 为 step 整数倍。",
+                    )
         plan = inspect_sweep_plan(config)
         for level, message in plan.issues:
             add("SWP-002", level, "Setup与Sweep", message, path="sweep_execution.max_cases",

@@ -738,17 +738,26 @@ def build_via_transition_scene(config: Mapping[str, Any], geometry: Any,
 
     # entry/exit 差分走线。
     for trace in list(geometry.entry_traces) + list(geometry.exit_traces):
-        category = "输入走线" if str(trace["name"]).startswith("ENTRY") else "输出走线"
+        is_entry = str(trace["name"]).startswith("ENTRY")
+        category = "输入走线" if is_entry else "输出走线"
+        trace_side = "entry_trace" if is_entry else "exit_trace"
+        trace_config = config.get("via_transition", {}).get(trace_side, {})
+        legacy_pair_pitch = float(config.get("via_transition", {}).get("pair_pitch", 0.0))
+        trace_gap = float(trace_config.get("gap", legacy_pair_pitch - float(trace["width"])))
+        trace_pitch = float(trace["width"]) + trace_gap
         objects.append(SceneObject(
             key=f"trace:{trace['name']}", name=str(trace["name"]), category=category,
             object_type="polygon_prism", layer=str(trace["layer"]), material=str(trace["material"]),
             z_bottom=float(trace["z_bottom"]), z_top=float(trace["z_top"]),
             points_xy=tuple((float(point[0]), float(point[1])) for point in trace["points"]),
-            source_paths=("via_transition.entry_trace", "via_transition.exit_trace",
+            source_paths=(f"via_transition.{trace_side}.length",
+                          f"via_transition.{trace_side}.width",
+                          f"via_transition.{trace_side}.gap",
                           "via_transition.signal_via_pitch", "via_transition.fanout.style",
                           "via_transition.fanout.straight_length"),
             color_key=str(trace["signal"]), layer_index=layer_indices[str(trace["layer"])],
             details={"信号": str(trace["signal"]), "宽度": float(trace["width"]),
+                     "GAP": trace_gap, "中心距": trace_pitch,
                      "长度": float(trace["length"])},
         ))
 

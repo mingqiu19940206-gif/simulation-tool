@@ -149,6 +149,22 @@ class ViaNativeOptimetricsTests(unittest.TestCase):
                       for item in result.cases]
             self.assertEqual(values, [0.05, 0.1])
 
+    def test_trace_gap_uses_recalculated_cases_and_never_native_optimetrics(self) -> None:
+        cfg = _via_config()
+        path = "via_transition.entry_trace.gap"
+        cfg["sweeps"][path] = {"enabled": True, "values": [0.5, 0.7]}
+        plan = inspect_sweep_plan(cfg)
+        self.assertEqual([item[0] for item in plan.topology_axes], [path])
+        self.assertFalse(plan.native_axes)
+        with tempfile.TemporaryDirectory() as directory:
+            result = generate_sweep_cases(cfg, Path(directory))
+            manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["backend"], "discrete_design_cases")
+            values = [json.loads(item.config_path.read_text(encoding="utf-8"))
+                      ["via_transition"]["entry_trace"]["gap"]
+                      for item in result.cases]
+            self.assertEqual(values, [0.5, 0.7])
+
     def test_per_layer_size_axis_is_registered_and_materialized(self) -> None:
         cfg = _via_config()
         cfg["via_transition"]["return_vias"]["enabled"] = False

@@ -69,11 +69,11 @@ powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 - 外层到外层贯通孔（Phase 2）：L1 entry、L14 exit、L1–L14 机械贯通、无背钻。示例见 `examples/via_transition_through.json`。
 - 内层退出 + 背钻（Phase 3）：L1 entry、L10 exit、L1–L14 机械通孔、bottom 背钻；支持 `backdrill.from_side=auto/top/bottom`，派生目标/实际残桩并校验一致性。示例见 `examples/via_transition_backdrill.json`。
 
-已实现：差分 P/N 信号孔、entry/exit 走线、回流孔、逐层圆形反焊盘、背钻铜/介质切除与腔体、四个 Terminal Port 与两个差分对、混合模 S 参数转换（SDD11/SDD21/SDC21/SCD21）、`via_results.json`/CSV 结果导出、差分 TDR（由复数 SDD11 离线 IFT 计算差分阻抗随时间/距离曲线，导出 `via_tdr.json`/CSV，保存完整 TDR 设置）、扫描计划（安全数值轴/拓扑护栏/残桩跨界护栏/预算）与目标评分（规格掩膜、加权目标、排名与帕累托）、Signal VIA 钻孔/功能焊盘/反焊盘三项 HFSS Design Variables 与原生 Parametric Setup 离线生成（含 3×3 结构门禁）、专属“VIA 换层”参数编辑器（进出层/Padstack/背钻/回流孔/走线 + 派生值校验 + 俯视图）、2D/3D 预览、本地 Validate 和独立 HFSS 脚本 `--validate-only`。
+已实现：差分 P/N 信号孔、输入/输出独立走线 GAP（中心距分别由 `width + gap` 派生）、回流孔、逐层圆形反焊盘、背钻铜/介质切除与腔体、四个 Terminal Port 与两个差分对、混合模 S 参数转换（SDD11/SDD21/SDC21/SCD21）、`via_results.json`/CSV 结果导出、差分 TDR（由独立 DC 锚定 Discrete Sweep 的真实复数 SDD11 做离线 IFT，导出 `via_tdr.json`/CSV，保存数据源和完整 TDR 设置）、扫描计划（安全数值轴/拓扑护栏/残桩跨界护栏/预算）与目标评分（规格掩膜、加权目标、排名与帕累托）、Signal VIA 钻孔/功能焊盘/反焊盘三项 HFSS Design Variables 与原生 Parametric Setup 离线生成（含 3×3 结构门禁）、专属“VIA 换层”参数编辑器（进出层/Padstack/背钻/回流孔/走线 + 派生值校验 + 俯视图）、2D/3D 预览、本地 Validate 和独立 HFSS 脚本 `--validate-only`。旧 `pair_pitch` 仅作为隐藏兼容输入；缺少 GAP 的旧配置会按 `pair_pitch - width` 无损迁移。旧配置不会自动开启新增的 TDR Sweep，避免导入后意外增加求解量。
 
 尚未实现或仍待真机验收：
 
-- VIA 原生 Optimetrics 的 `pair_pitch`、残桩与回流孔坐标表达式绑定；这些轴当前明确 fail closed。已绑定的 Signal VIA 钻孔/功能焊盘/反焊盘轴仍需真实 AEDT 3×3 求解验收。
-- `via_transition` 的真实 AEDT/HFSS 建模、原生 Validate、求解、3×3 Optimetrics 与端到端 TDR 验收；默认 `surface_capacitor` 最小方案的真机结果见 `verification/real_aedt_hfss_validation.json`。
+- VIA 原生 Optimetrics 的输入/输出 `gap`、残桩与回流孔坐标表达式绑定；这些轴当前明确 fail closed，旧 `pair_pitch` 扫描也会被拒绝。已绑定的 Signal VIA 钻孔/功能焊盘/反焊盘轴仍需真实 AEDT 3×3 求解验收。
+- `via_transition` 的真实 3×3 Optimetrics 与 AEDT 2023 R2 验收；反向 VIA 的 AEDT 2022 R2 生产全频建模、原生 Validate、求解、混模结果导出和输入端场图审查已完成。独立 TDR Sweep 已完成 0.1–1.6 GHz、16 点端到端真机验收；默认 0.05–32 GHz、640 点生产 TDR 和第三方算法交叉核对仍待执行。
 
 2026-08-21 的续做改动、命令退出码与下一阶段入口见 `docs/CONTINUATION_REPORT_2026-08-21.md`。

@@ -16,6 +16,7 @@ from simulation_sweep_semantics import (
     apply_frequency_preset,
     inspect_frequency_plan,
     inspect_sweep_plan,
+    inspect_tdr_sweep_plan,
     preset_is_modified,
 )
 from sweep_manager import expand_sweep_cases, generate_sweep_cases, summarize_sweep_results
@@ -31,13 +32,14 @@ class SimulationSweepSemanticTests(unittest.TestCase):
     def test_old_v2_json_receives_backward_compatible_optional_defaults(self) -> None:
         old = copy.deepcopy(self.config)
         for key in ("sweep_name", "max_delta_s", "automatically_use_causal_materials", "interpolating_tolerance",
-                    "interpolating_max_solutions", "save_fields", "report_outputs"):
+                    "interpolating_max_solutions", "save_fields", "report_outputs", "tdr_sweep"):
             old["simulation"].pop(key, None)
         old.pop("sweep_execution", None)
         normalized, _ = normalize_config(old)
         self.assertEqual(normalized["simulation"]["sweep_name"], "Sweep1")
         self.assertTrue(normalized["simulation"]["automatically_use_causal_materials"])
         self.assertEqual(normalized["simulation"]["report_outputs"]["Sdd21"], True)
+        self.assertFalse(normalized["simulation"]["tdr_sweep"]["enabled"])
         self.assertEqual(normalized["sweep_execution"]["max_cases"], 200)
 
     def test_frequency_preset_is_explicit_and_modified_state_is_detected(self) -> None:
@@ -68,6 +70,38 @@ class SimulationSweepSemanticTests(unittest.TestCase):
         _, validation = validate_config(self.config, ROOT, check_output_directory=False)
         self.assertTrue(any("自适应频率" in message for message in validation.errors))
 
+    def test_tdr_sweep_requires_dc_anchored_uniform_grid(self) -> None:
+        sim = copy.deepcopy(self.config["simulation"])
+        sim["generate_tdr"] = True
+        sim["tdr_sweep"].update(
+            enabled=True,
+            sweep_name="TDRSweep",
+            start_frequency_ghz=0.05,
+            stop_frequency_ghz=32.0,
+            step_frequency_ghz=0.05,
+            max_points=4096,
+        )
+        plan = inspect_tdr_sweep_plan(sim)
+        self.assertEqual(plan.point_count, 640)
+        self.assertFalse(plan.issues)
+        sim["tdr_sweep"]["start_frequency_ghz"] = 0.01
+        plan = inspect_tdr_sweep_plan(sim)
+        self.assertTrue(any(level == "error" and "start_frequency_ghz" in message
+                            for level, message in plan.issues))
+        sim["tdr_sweep"].update(start_frequency_ghz=0.05, stop_frequency_ghz=32.03)
+        plan = inspect_tdr_sweep_plan(sim)
+        self.assertTrue(any(level == "error" and "整数倍" in message
+                            for level, message in plan.issues))
+
+    def test_tdr_sweep_disabled_is_actionable_but_backward_compatible(self) -> None:
+        sim = copy.deepcopy(self.config["simulation"])
+        sim["generate_tdr"] = True
+        sim["tdr_sweep"]["enabled"] = False
+        plan = inspect_tdr_sweep_plan(sim)
+        self.assertFalse(plan.enabled)
+        self.assertTrue(any(level == "warning" and "不会输出" in message
+                            for level, message in plan.issues))
+
     def test_automatic_mixed_mode_reports_require_terminal_solution(self) -> None:
         self.config["simulation"]["enabled"] = True
         self.config["project"]["solution_type"] = "Modal"
@@ -85,6 +119,9 @@ class SimulationSweepSemanticTests(unittest.TestCase):
             self.assertIn('common_mode="OUT_COMM", differential_mode="OUT_DIFF"', script)
             self.assertIn('if sweep_type == "Discrete"', script)
             self.assertIn('sweep.props["InterpTolerance"]', script)
+            self.assertIn('tdr_sweep = setup.add_sweep(name=tdr_sweep_name, sweep_type="Discrete")', script)
+            self.assertIn('def _extract_tdr_sdd11(app, setup_name, sweep_name):', script)
+            self.assertIn('"tdr_source": None', script)
             self.assertIn('export_report_to_file(str(SCRIPT_DIRECTORY), name, ".csv")', script)
 
     def test_registry_dependency_and_package_apply_are_used_by_case_expansion(self) -> None:
@@ -134,6 +171,7 @@ class SimulationSweepGuiTests(unittest.TestCase):
             workbench.show(config, None, validation)
             self.assertNotEqual(str(workbench.setup_name.cget("state")), "disabled")
             self.assertEqual(str(workbench.step_frequency.cget("state")), "disabled")
+            self.assertNotEqual(str(workbench.tdr_sweep_name.cget("state")), "disabled")
             self.assertTrue(workbench.steps.winfo_viewable())
         finally:
             app.destroy()

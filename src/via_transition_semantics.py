@@ -5,7 +5,8 @@ import math
 from typing import Any, List, Mapping, Optional, Tuple
 
 from config_manager import format_length
-from via_transition_geometry import ViaTransitionGeometryResult
+from via_transition_geometry import (ViaTransitionGeometryResult,
+                                     derive_functional_barrel_span)
 from via_antipad import (DIRECTION_MODES, SHAPES, SIZE_MODES, TOPOLOGIES,
                          canonical_antipad, contains_circle,
                          minimum_merged_circle_diameter)
@@ -77,8 +78,10 @@ def validate_via_transition(
     residual_stub = float(backdrill.get("residual_stub", 0.0))
     drill_for_bd = float(vt.get("padstack", {}).get("drill_diameter", 0.0))
 
-    top_stub = bool(entry) and bool(drill_start) and entry != drill_start
-    bottom_stub = bool(exit_layer) and bool(drill_end) and exit_layer != drill_end
+    functional_span = derive_functional_barrel_span(
+        names, entry, exit_layer, drill_start, drill_end)
+    top_stub = bool(functional_span and functional_span.top_stub)
+    bottom_stub = bool(functional_span and functional_span.bottom_stub)
 
     if residual_stub < 0:
         issues.append(("VIA-TRN-043", "error",
@@ -93,23 +96,23 @@ def validate_via_transition(
             issues.append(("VIA-TRN-045", "error",
                            "backdrill.drill_diameter 必须大于原始 drill_diameter。",
                            "via_transition.backdrill.drill_diameter", "增大背钻孔径。"))
-        if from_side == "auto" and top_stub and bottom_stub:
+        if functional_span is not None and from_side == "auto" and top_stub and bottom_stub:
             issues.append(("VIA-TRN-046", "error",
                            "backdrill.from_side=auto 无法唯一推导方向：两侧都有残桩。",
                            "via_transition.backdrill.from_side", "显式指定 top 或 bottom。"))
-        elif from_side == "top" and not top_stub:
+        elif functional_span is not None and from_side == "top" and not top_stub:
             issues.append(("VIA-TRN-047", "error",
                            "backdrill.from_side=top 但不存在顶部残桩。",
-                           "via_transition.backdrill.from_side", "检查 entry_layer/drill_start_layer。"))
-        elif from_side == "bottom" and not bottom_stub:
+                           "via_transition.backdrill.from_side", "检查上方功能连接层与机械钻孔顶部。"))
+        elif functional_span is not None and from_side == "bottom" and not bottom_stub:
             issues.append(("VIA-TRN-048", "error",
                            "backdrill.from_side=bottom 但不存在底部残桩。",
-                           "via_transition.backdrill.from_side", "检查 exit_layer/drill_end_layer。"))
-        elif not top_stub and not bottom_stub:
+                           "via_transition.backdrill.from_side", "检查下方功能连接层与机械钻孔底部。"))
+        elif functional_span is not None and not top_stub and not bottom_stub:
             issues.append(("VIA-TRN-049", "error",
                            "backdrill.enabled=true 但不存在残桩（外层到外层贯通孔无需背钻）。",
                            "via_transition.backdrill.enabled", "外层到外层贯通孔应禁用背钻。"))
-    elif top_stub or bottom_stub:
+    elif functional_span is not None and (top_stub or bottom_stub):
         issues.append(("VIA-TRN-050", "error",
                        "存在未背钻残桩：内层退出必须启用 backdrill。",
                        "via_transition.backdrill.enabled", "启用 backdrill 或改为外层到外层贯通孔。"))
@@ -247,9 +250,9 @@ def validate_via_transition(
                                    f"逐层反焊盘 {layer_name!r} 的 clearance 必须为有限非负数。",
                                    prefix + ".clearance", "输入明确的最小铜边净距。"))
 
-    # 信号孔中心距（孔间距）独立于走线中心距；扇出（45°/弧）可行性校验。
-    pair_pitch = float(vt.get("pair_pitch", 0.0))
-    signal_via_pitch = float(vt.get("signal_via_pitch", pair_pitch))
+    # 信号孔中心距独立；输入/输出走线中心距分别由 width + GAP 派生。
+    legacy_pair_pitch = float(vt.get("pair_pitch", 0.0))
+    signal_via_pitch = float(vt.get("signal_via_pitch", legacy_pair_pitch))
     if signal_via_pitch <= 0:
         issues.append(("VIA-TRN-070", "error",
                        "signal_via_pitch 必须大于 0。",
@@ -274,35 +277,71 @@ def validate_via_transition(
         issues.append(("VIA-TRN-071", "error",
                        "fanout.straight_length 必须 >= 0。",
                        "via_transition.fanout.straight_length", "耦合直线段长不能为负。"))
-    delta = (signal_via_pitch - pair_pitch) / 2.0
-    if abs(delta) > 1e-12 and straight_length >= 0:
+    side_geometry = []
+    for side, label in (("entry", "输入"), ("exit", "输出")):
+        trace = vt.get(f"{side}_trace", {})
+        width = float(trace.get("width", 0.0))
+        gap = float(trace.get("gap", legacy_pair_pitch - width))
+        length = float(trace.get("length", 0.0))
+        if gap <= 0:
+            issues.append(("VIA-TRN-075", "error",
+                           f"{label}走线 P/N 铜边间距 GAP 必须大于 0。",
+                           f"via_transition.{side}_trace.gap", "输入大于 0 的铜边净距。"))
+        side_geometry.append((side, label, length, width + gap))
+
+    for side, label, length, trace_pitch in side_geometry:
+        delta = (signal_via_pitch - trace_pitch) / 2.0
+        if abs(delta) <= 1e-12 or straight_length < 0:
+            continue
         fanout_x = abs(delta)
-        entry_len = float(vt.get("entry_trace", {}).get("length", 0.0))
-        exit_len = float(vt.get("exit_trace", {}).get("length", 0.0))
-        for side, length in (("entry", entry_len), ("exit", exit_len)):
-            if length + 1e-9 < fanout_x + straight_length:
-                issues.append(("VIA-TRN-071", "error",
-                               f"{side} 走线长度 {shown_length(length)} 不足以容纳扇出"
-                               f"（X 投影 {shown_length(fanout_x)}）与耦合直线段"
-                               f"（{shown_length(straight_length)}）。",
-                               "via_transition.fanout.straight_length",
-                               "增大走线长度、减小孔间距与走线中心距之差，或减小耦合直线段长。"))
+        if length + 1e-9 < fanout_x + straight_length:
+            issues.append(("VIA-TRN-071", "error",
+                           f"{label}走线长度 {shown_length(length)} 不足以容纳扇出"
+                           f"（X 投影 {shown_length(fanout_x)}）与耦合直线段"
+                           f"（{shown_length(straight_length)}）。",
+                           f"via_transition.{side}_trace.length",
+                           "增大走线长度、减小孔间距与走线中心距之差，或减小耦合直线段长。"))
         derived = "expand" if delta > 0 else "contract"
         if fanout_direction != "auto" and fanout_direction != derived:
             issues.append(("VIA-TRN-072", "warning",
-                           f"扇出方向被强制为 {fanout_direction!r}，但按孔间距差推导应为 {derived!r}；"
+                           f"旧配置的扇出方向为 {fanout_direction!r}，但{label}侧按实际间距差"
+                           f"推导应为 {derived!r}；"
                            "几何仍按实际间距差生成。",
                            "via_transition.fanout.direction",
-                           "选择 auto 或与间距差一致的方向。"))
+                           "保存时保留 auto，方向由输入/输出各侧间距差自动确定。"))
 
     rv = vt.get("return_vias", {})
     if rv.get("enabled"):
+        layout_mode = str(rv.get("layout_mode", "advanced"))
+        if layout_mode not in {"standard", "advanced"}:
+            issues.append(("VIA-TRN-093", "error",
+                           f"return_vias.layout_mode={layout_mode!r} 非法。",
+                           "via_transition.return_vias.layout_mode",
+                           "选择 standard 或 advanced。"))
         pattern = str(rv.get("pattern", ""))
         if pattern not in {"side_pair", "four_corner", "custom"}:
             issues.append(("VIA-TRN-023", "error", f"return_vias.pattern={pattern!r} 非法。",
                            "via_transition.return_vias.pattern", "选择 side_pair/four_corner/custom。"))
         count = int(rv.get("count", 0))
         coordinates = list(rv.get("custom_coordinates", []))
+        if layout_mode == "standard":
+            along = float(rv.get("relative_offset_along_route", 0.0))
+            outward = float(rv.get("relative_offset_outward", 0.0))
+            if not math.isfinite(along):
+                issues.append(("VIA-TRN-094", "error",
+                               "回流孔沿走线方向相对偏移必须为有限数。",
+                               "via_transition.return_vias.relative_offset_along_route",
+                               "输入有限长度值。"))
+            if not math.isfinite(outward):
+                issues.append(("VIA-TRN-095", "error",
+                               "回流孔向外相对偏移必须为有限数。",
+                               "via_transition.return_vias.relative_offset_outward",
+                               "输入有限长度值；正值向外、负值向内。"))
+            if pattern != "side_pair" or count != 2:
+                issues.append(("VIA-TRN-096", "error",
+                               "标准回流孔布局必须派生为 side_pair/count=2。",
+                               "via_transition.return_vias.layout_mode",
+                               "重新加载配置以恢复标准双孔派生值。"))
         if pattern == "side_pair" and (count <= 0 or count % 2):
             issues.append(("VIA-TRN-024", "error", "side_pair 的 count 必须为正偶数，且实际生成数等于配置数。",
                            "via_transition.return_vias.count", "输入 2、4、6…颗。"))
@@ -364,7 +403,7 @@ def validate_via_transition(
         if len(geometry.signal_vias) != 2:
             issues.append(("VIA-TRN-032", "error",
                            f"期望2个信号孔（P/N），实际 {len(geometry.signal_vias)} 个。",
-                           "via_transition.pair_pitch", "检查差分信号孔生成。"))
+                           "via_transition.signal_via_pitch", "检查差分信号孔生成。"))
         for via in geometry.signal_vias:
             if via.backdrilled and abs(via.actual_residual_stub - via.target_residual_stub) > 1e-9:
                 issues.append(("VIA-TRN-051", "error",

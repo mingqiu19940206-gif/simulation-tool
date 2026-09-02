@@ -3136,8 +3136,31 @@ def create_simulation_setup(app, state):
                     common_mode="OUT_COMM", differential_mode="OUT_DIFF")
                 if input_pair is False or output_pair is False:
                     raise RuntimeError("set_differential_pair返回False")
+            actual_pairs = list(app.oboundary.GetDiffPairs() or [])
+            actual_pair_text = json.dumps(actual_pairs, ensure_ascii=False, default=str)
+            missing_pair_fields = [
+                value
+                for value in (
+                    state["port_terminals"]["PORT_IN_P"],
+                    state["port_terminals"]["PORT_IN_N"],
+                    state["port_terminals"]["PORT_OUT_P"],
+                    state["port_terminals"]["PORT_OUT_N"],
+                    "IN_DIFF", "IN_COMM", "OUT_DIFF", "OUT_COMM",
+                )
+                if value not in actual_pair_text
+            ]
+            if missing_pair_fields or len(actual_pairs) != 2:
+                raise RuntimeError(
+                    "AEDT差分对回读与请求不一致：missing={} actual={}".format(
+                        missing_pair_fields, actual_pairs
+                    )
+                )
+            state["differential_pair_readback"] = actual_pairs
             state["differential_pairs_created"] = True
-            LOGGER.info("输入/输出差分对创建完成：IN_DIFF/IN_COMM、OUT_DIFF/OUT_COMM")
+            LOGGER.info(
+                "输入/输出差分对创建并回读确认：IN_DIFF/IN_COMM、OUT_DIFF/OUT_COMM；%s",
+                actual_pairs,
+            )
         except Exception as exc:
             raise RuntimeError("自动差分端口创建失败：{}；未静默跳过。".format(exc)) from exc
     setup = app.create_setup(name=sim.get("setup_name", "Setup1"))
@@ -3165,6 +3188,25 @@ def create_simulation_setup(app, state):
             sweep.props["InterpMaxSolns"] = int(sim.get("interpolating_max_solutions", 250))
             sweep.props["SaveFields"] = bool(sim.get("save_fields", False))
         sweep.update()
+        tdr_sweep_config = sim.get("tdr_sweep", {})
+        if sim.get("generate_tdr") and bool(tdr_sweep_config.get("enabled", False)):
+            tdr_sweep_name = str(tdr_sweep_config.get("sweep_name", "TDRSweep"))
+            tdr_sweep = setup.add_sweep(name=tdr_sweep_name, sweep_type="Discrete")
+            if tdr_sweep is False or tdr_sweep is None:
+                raise RuntimeError("独立 TDR Sweep 创建失败：{}".format(tdr_sweep_name))
+            tdr_sweep.props["RangeType"] = "LinearStep"
+            tdr_sweep.props["RangeStart"] = "{}GHz".format(
+                tdr_sweep_config["start_frequency_ghz"]
+            )
+            tdr_sweep.props["RangeEnd"] = "{}GHz".format(
+                tdr_sweep_config["stop_frequency_ghz"]
+            )
+            tdr_sweep.props["RangeStep"] = "{}GHz".format(
+                tdr_sweep_config["step_frequency_ghz"]
+            )
+            tdr_sweep.props["SaveFields"] = False
+            tdr_sweep.update()
+            state["tdr_sweep"] = tdr_sweep_name
         create_optimetrics_parametric_setup(app)
     except Exception as exc:
         raise RuntimeError("Setup或扫频配置失败：{}".format(exc)) from exc
@@ -3201,10 +3243,13 @@ def create_simulation_setup(app, state):
     elif sim.get("generate_reports"):
         LOGGER.warning("未创建差分端口，已跳过混合模S参数报告。")
     if sim.get("generate_tdr"):
-        LOGGER.warning(
-            "已记录差分TDR复核请求；脚本不会自动创建完整TDR报告，"
-            "需要在AEDT中复核端口模式、时域变换、上升时间和参考阻抗。"
-        )
+        if state.get("tdr_sweep"):
+            LOGGER.info(
+                "已创建独立 DC 锚定离散 TDR Sweep：%s；求解后从真实复数 SDD11 计算 TDR。",
+                state["tdr_sweep"],
+            )
+        else:
+            LOGGER.warning("已请求 TDR，但独立 TDR Sweep 未启用；不会输出 TDR 曲线。")
 
 def create_optional_capacitor_bodies(app, state):
     """按可选参数创建仅供示意的陶瓷本体，不赋予电容/RLC属性。"""
@@ -4281,6 +4326,19 @@ def validate_created_objects(app, state):
                                     path="simulation.sweep_name", suggestion="检查Sweep创建和update返回值。"))
         else:
             items.append(_hfss_item("HFSS-007", "info", "Sweep已创建：" + expected_sweep))
+        tdr_sweep_config = sim.get("tdr_sweep", {})
+        if sim.get("generate_tdr") and bool(tdr_sweep_config.get("enabled", False)):
+            expected_tdr_sweep = str(tdr_sweep_config.get("sweep_name", "TDRSweep"))
+            if expected_tdr_sweep not in sweeps:
+                items.append(_hfss_item(
+                    "HFSS-008", "error", "实际HFSS工程缺少独立TDR Sweep：" + expected_tdr_sweep,
+                    path="simulation.tdr_sweep.sweep_name",
+                    suggestion="检查独立Discrete Sweep创建和update返回值。",
+                ))
+            else:
+                items.append(_hfss_item(
+                    "HFSS-008", "info", "独立TDR Sweep已创建：" + expected_tdr_sweep
+                ))
     boundaries = list(getattr(app, "boundaries", []) or [])
     boundary_names = [str(getattr(boundary, "name", boundary)) for boundary in boundaries]
     mode = str(CONFIG.get("capacitor_model", {}).get("mode", "ideal_bridge"))
@@ -4543,6 +4601,7 @@ def _new_state():
         "port_boundaries": {},
         "port_terminals": {},
         "differential_pairs_created": False,
+        "tdr_sweep": None,
         "top_ground_object": None,
         "airbox": None,
         "open_boundary": None,
@@ -4766,8 +4825,13 @@ def _validate_embedded_via_transition(errors):
         if not via.get("functional_pad_layers"):
             errors.append("信号孔缺少功能焊盘层。")
         backdrilled = bool(via.get("backdrilled"))
-        has_stub = (str(via.get("entry_layer")) != str(via.get("drill_start_layer"))
-                    or str(via.get("exit_layer")) != str(via.get("drill_end_layer")))
+        if "top_stub_present" in via and "bottom_stub_present" in via:
+            has_stub = bool(via.get("top_stub_present") or via.get("bottom_stub_present"))
+        else:
+            # Backward-compatible fallback for snapshots authored before the
+            # physical upper/lower functional-layer fields existed.
+            has_stub = (str(via.get("entry_layer")) != str(via.get("drill_start_layer"))
+                        or str(via.get("exit_layer")) != str(via.get("drill_end_layer")))
         if backdrilled:
             bd_diameter = float(via.get("backdrill_diameter", 0.0))
             if bd_diameter <= float(via.get("drill_diameter", 0.0)):
@@ -5096,6 +5160,23 @@ def _create_return_vias(app, state):
             layer_name = str(layer_name)
             if layer_name not in connected_layers:
                 connected_layers.append(layer_name)
+            plane_name = state["plane_objects"].get(layer_name)
+            if plane_name:
+                # A full reference plane already supplies more copper than an
+                # annular pad.  Creating an exactly overlapping pad and then
+                # uniting it produced sub-mil sliver edges in AEDT's mesh.
+                # For a hollow via, cut the real finished hole directly from
+                # the plane; the barrel annulus then joins that plane without
+                # a redundant coincident solid.
+                if via.get("barrel_model") == "hollow":
+                    plane_hole = create_cylinder_compat(
+                        app, [x, y, _layer_z_bottom_variable(layer_name)],
+                        length(float(via["finished_hole_diameter"]) / 2.0),
+                        _layer_thickness_variable(layer_name),
+                        name + "_CONNECTED_HOLE_" + layer_name, "vacuum")
+                    subtract_compat(app, plane_name, [plane_hole], keep_originals=False)
+                    require_object(app, plane_name, "回流孔连接参考层成品孔Subtract后检查")
+                continue
             pad = create_cylinder_compat(
                 app, [x, y, _layer_z_bottom_variable(layer_name)],
                 length(float(via["pad_diameter"]) / 2.0),
@@ -5395,11 +5476,66 @@ def _hfss_profile_convergence(app, setup_name, solve_report=None):
     return bool(solve_report), False, "AEDT profile unavailable"
 
 
+def _extract_tdr_sdd11(app, setup_name, sweep_name):
+    """Read complex SDD11 from the dedicated solved Discrete TDR sweep."""
+
+    setup_sweep_name = str(setup_name) + " : " + str(sweep_name)
+    expression = "St(IN_DIFF,IN_DIFF)"
+    available = list(app.post.available_report_quantities(
+        report_category="Terminal Solution Data",
+        display_type="Rectangular Plot",
+        solution=setup_sweep_name,
+    ) or [])
+    if expression not in available:
+        raise RuntimeError(
+            "独立TDR Sweep缺少必需quantity：{}；available={}".format(expression, available)
+        )
+    solution = None
+    solution_context = None
+    for context_candidate in (
+        [],
+        ["Diff:=", "Differential Pairs", "Domain:=", "Sweep"],
+    ):
+        solution = app.post.get_solution_data_per_variation(
+            solution_type="Terminal Solution Data",
+            setup_sweep_name=setup_sweep_name,
+            context=context_candidate,
+            sweeps={"Freq": "All"},
+            expressions=[expression],
+        )
+        if solution:
+            solution_context = context_candidate
+            break
+    if not solution:
+        raise RuntimeError("独立TDR Sweep没有返回复数SDD11 trace data")
+
+    frequency_unit = str(
+        getattr(solution, "units_sweeps", {}).get(
+            getattr(solution, "primary_sweep", "Freq"), ""
+        ) or ""
+    ).strip().lower()
+    to_ghz = {"hz": 1e-9, "khz": 1e-6, "mhz": 1e-3, "ghz": 1.0}.get(frequency_unit)
+    if to_ghz is None:
+        raise RuntimeError("unsupported TDR frequency sweep unit: {!r}".format(frequency_unit))
+    real_axis, real_values = solution.get_expression_data(expression=expression, formula="real")
+    imag_axis, imag_values = solution.get_expression_data(expression=expression, formula="imag")
+    real_axis = list(real_axis)
+    imag_axis = list(imag_axis)
+    real_values = list(real_values)
+    imag_values = list(imag_values)
+    if (not real_axis or real_axis != imag_axis
+            or len(real_axis) != len(real_values) or len(real_axis) != len(imag_values)):
+        raise RuntimeError("独立TDR Sweep返回的复数SDD11数据不完整")
+    frequencies = [float(value) * to_ghz for value in real_axis]
+    sdd11 = [complex(float(re), float(im)) for re, im in zip(real_values, imag_values)]
+    return frequencies, sdd11, available, solution_context
+
+
 def export_via_transition_results(app, state, solve_report=None):
     """导出混合模 S 参数到 via_results.json 与 CSV（规格 §10.2）。
 
     由环境变量 ``SURFACE_CAP_EXPORT_RESULTS=1`` 门控。无法提取真实 S 参数时
-    fail closed：只写出带 warnings 的占位结构，不伪造曲线。
+    fail closed：写出诊断 JSON 后抛出异常，使本次 HFSS 运行明确失败且不伪造曲线。
     """
     if str(os.environ.get("SURFACE_CAP_EXPORT_RESULTS", "")).strip() != "1":
         return None
@@ -5415,22 +5551,53 @@ def export_via_transition_results(app, state, solve_report=None):
     sdd11_db, sdd21_db, sdc21_db, scd21_db = [], [], [], []
     sdd11_re, sdd11_im = [], []
     warnings = []
+    extraction_error = ""
+    available_quantities = []
+    solution_context = None
     try:
+        setup_sweep_name = setup_name + " : " + sweep_name
+        available_quantities = list(app.post.available_report_quantities(
+            report_category="Terminal Solution Data",
+            display_type="Rectangular Plot",
+            solution=setup_sweep_name,
+        ) or [])
+        missing_quantities = [
+            expression for expression in expressions.values()
+            if expression not in available_quantities
+        ]
+        if missing_quantities:
+            raise RuntimeError(
+                "AEDT Terminal Solution Data缺少必需quantity：missing={} available={}".format(
+                    missing_quantities, available_quantities
+                )
+            )
         # PyAEDT 1.3's high-level ``get_solution_data`` first enumerates and
         # evaluates every AEDT design variable.  With AEDT 2022 R2 that path
         # can lose the design/project OO handles and fail even though the
         # solved Terminal data is present.  The per-variation API calls AEDT's
         # report module directly and is reliable on both the tested 2022 R2
         # stack and newer PyAEDT versions.
-        solution = app.post.get_solution_data_per_variation(
-            solution_type="Terminal Solution Data",
-            setup_sweep_name=setup_name + " : " + sweep_name,
-            context=[],
-            sweeps={"Freq": "All"},
-            expressions=list(expressions.values()),
+        solution = None
+        context_candidates = (
+            [],
+            ["Diff:=", "Differential Pairs", "Domain:=", "Sweep"],
         )
+        for context_candidate in context_candidates:
+            solution = app.post.get_solution_data_per_variation(
+                solution_type="Terminal Solution Data",
+                setup_sweep_name=setup_sweep_name,
+                context=context_candidate,
+                sweeps={"Freq": "All"},
+                expressions=list(expressions.values()),
+            )
+            if solution:
+                solution_context = context_candidate
+                break
         if not solution:
-            raise RuntimeError("PyAEDT did not return solution data")
+            raise RuntimeError(
+                "PyAEDT/AEDT 2022 R2 did not return trace data for either the default "
+                "or Differential Pairs report context"
+            )
 
         frequency_unit = str(
             getattr(solution, "units_sweeps", {}).get(
@@ -5466,6 +5633,7 @@ def export_via_transition_results(app, state, solve_report=None):
         sdd11_re = [value.real for value in complex_curves["Sdd11"]]
         sdd11_im = [value.imag for value in complex_curves["Sdd11"]]
     except Exception as exc:
+        extraction_error = str(exc)
         warnings.append(f"S 参数提取失败，未写入结果曲线：{exc}")
 
     solve_completed, converged, convergence_evidence = _hfss_profile_convergence(
@@ -5486,6 +5654,9 @@ def export_via_transition_results(app, state, solve_report=None):
         "setup": setup_name,
         "sweep": sweep_name,
         "variation": {},
+        "report_quantities": available_quantities,
+        "solution_context": solution_context,
+        "differential_pair_readback": state.get("differential_pair_readback", []),
         "frequency_ghz": frequencies,
         "Sdd11_db": sdd11_db,
         "Sdd21_db": sdd21_db,
@@ -5508,6 +5679,7 @@ def export_via_transition_results(app, state, solve_report=None):
         },
         "deembed_settings": {},
         "tdr_settings": _tdr_settings(),
+        "tdr_source": None,
         "warnings": warnings,
     }
     json_path = SCRIPT_DIRECTORY / (PROJECT_NAME + "_via_results.json")
@@ -5529,33 +5701,56 @@ def export_via_transition_results(app, state, solve_report=None):
                 stale_tdr_path.unlink()
         except OSError as exc:
             LOGGER.warning("Unable to remove stale TDR output %s: %s", stale_tdr_path, exc)
-    if (sdd11_re and frequencies
-            and bool(CONFIG.get("simulation", {}).get("generate_tdr", False))):
-        try:
-            tdr_settings = _tdr_settings()
-            tdr = _tdr_from_sdd11(
-                frequencies,
-                [complex(re, im) for re, im in zip(sdd11_re, sdd11_im)],
-                tdr_settings,
-            )
-            result["tdr_settings"] = tdr["settings"]
-            tdr_json_path.write_text(json.dumps(tdr, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            header = "time_ns" + (",distance_mm" if tdr["distance_mm"] else "") + ",reflection,impedance_ohm"
-            rows = [header]
-            for index, t in enumerate(tdr["time_ns"]):
-                row = f"{t:.9g}"
-                if tdr["distance_mm"]:
-                    row += f",{tdr['distance_mm'][index]:.9g}"
-                row += f",{tdr['reflection'][index]:.9g},{tdr['impedance_ohm'][index]:.9g}"
-                rows.append(row)
-            tdr_csv_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
-            LOGGER.info("via_tdr 导出完成：%s / %s", tdr_json_path.name, tdr_csv_path.name)
-        except Exception as exc:
-            warnings.append(f"TDR 计算失败，未写入 TDR 曲线：{exc}")
+    simulation = CONFIG.get("simulation", {})
+    tdr_sweep_config = simulation.get("tdr_sweep", {})
+    if bool(simulation.get("generate_tdr", False)):
+        if not bool(tdr_sweep_config.get("enabled", False)):
+            warnings.append("TDR 未输出：独立 DC 锚定 TDR Sweep 未启用。")
             result["warnings"] = warnings
+        else:
+            tdr_sweep_name = str(tdr_sweep_config.get("sweep_name", "TDRSweep"))
+            try:
+                tdr_frequencies, tdr_sdd11, tdr_quantities, tdr_context = _extract_tdr_sdd11(
+                    app, setup_name, tdr_sweep_name
+                )
+                tdr_settings = _tdr_settings()
+                tdr = _tdr_from_sdd11(tdr_frequencies, tdr_sdd11, tdr_settings)
+                tdr_source = {
+                    "setup": setup_name,
+                    "sweep": tdr_sweep_name,
+                    "report_quantity": "St(IN_DIFF,IN_DIFF)",
+                    "available_quantities": tdr_quantities,
+                    "solution_context": tdr_context,
+                    "point_count": len(tdr_frequencies),
+                    "start_frequency_ghz": tdr_frequencies[0],
+                    "stop_frequency_ghz": tdr_frequencies[-1],
+                }
+                result["tdr_source"] = tdr_source
+                result["tdr_settings"] = tdr["settings"]
+                tdr["source"] = tdr_source
+                tdr_json_path.write_text(json.dumps(tdr, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                header = "time_ns" + (",distance_mm" if tdr["distance_mm"] else "") + ",reflection,impedance_ohm"
+                rows = [header]
+                for index, t in enumerate(tdr["time_ns"]):
+                    row = f"{t:.9g}"
+                    if tdr["distance_mm"]:
+                        row += f",{tdr['distance_mm'][index]:.9g}"
+                    row += f",{tdr['reflection'][index]:.9g},{tdr['impedance_ohm'][index]:.9g}"
+                    rows.append(row)
+                tdr_csv_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+                LOGGER.info("via_tdr 导出完成：%s / %s", tdr_json_path.name, tdr_csv_path.name)
+            except Exception as exc:
+                warnings.append(f"TDR 计算失败，未写入 TDR 曲线：{exc}")
+                result["warnings"] = warnings
     # The S-parameter JSON is created before optional TDR processing.  Persist
     # final TDR settings and fail-closed warnings as the authoritative result.
     json_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if extraction_error:
+        raise RuntimeError(
+            "HFSS mixed-mode result export failed; diagnostic JSON was written to {}: {}".format(
+                json_path, extraction_error
+            )
+        )
     return result
 
 
@@ -5576,6 +5771,11 @@ def build_via_transition_model():
         run_native_optimetrics_if_requested(app, state)
         save_aedt_project(app)
         solve_report = solve_via_transition_single_case(app, state)
+        # Persist the post-solve solution/result linkage before the AEDT 2022
+        # R2 reporter reads variations and traces.  The historical failure
+        # project was last saved before solve and reopened with Sweep metadata
+        # but no readable trace data.
+        save_aedt_project(app)
         export_via_transition_results(app, state, solve_report)
         _publish_project_copy(AEDT_PROJECT_PATH, REQUESTED_AEDT_PROJECT_PATH, "validated")
         LOGGER.info("via_transition HFSS几何建模全部完成。")

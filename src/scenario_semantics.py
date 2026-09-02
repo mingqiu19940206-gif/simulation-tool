@@ -55,13 +55,19 @@ def require_sweep_supported_scenario(config: Mapping[str, Any]) -> None:
     """放行已绑定的原生轴和可重算的离散轴；未实现轴 fail closed。"""
 
     if scenario_type(config) == VIA_TRANSITION:
-        from via_transition_sweeps import VIA_NATIVE_SWEEP_PATHS, VIA_TOPOLOGY_SWEEP_PATHS
+        from via_transition_sweeps import (
+            VIA_DISCRETE_SWEEP_PATHS,
+            VIA_NATIVE_SWEEP_PATHS,
+            VIA_TOPOLOGY_SWEEP_PATHS,
+        )
 
         enabled = [
             str(path) for path, sweep in config.get("sweeps", {}).items()
             if isinstance(sweep, Mapping) and sweep.get("enabled")
         ]
-        supported = set(VIA_NATIVE_SWEEP_PATHS) | set(VIA_TOPOLOGY_SWEEP_PATHS)
+        supported = (set(VIA_NATIVE_SWEEP_PATHS)
+                     | set(VIA_DISCRETE_SWEEP_PATHS)
+                     | set(VIA_TOPOLOGY_SWEEP_PATHS))
         per_layer_prefix = "via_transition.padstack.antipad.per_layer."
         per_layer_fields = {
             "diameter", "length", "width", "corner_radius", "rotation_deg", "clearance",

@@ -98,7 +98,7 @@ class ViaRepairAcceptanceTests(unittest.TestCase):
     def test_return_via_pattern_counts_and_finished_hole_are_canonical(self) -> None:
         raw = config()
         rv = raw["via_transition"]["return_vias"]
-        rv.update({"pattern": "four_corner", "count": 99,
+        rv.update({"layout_mode": "advanced", "pattern": "four_corner", "count": 99,
                    "finished_hole_diameter": 0.19})
         normalized, messages = normalize_config(raw)
         self.assertEqual(normalized["via_transition"]["return_vias"]["count"], 4)
@@ -108,7 +108,8 @@ class ViaRepairAcceptanceTests(unittest.TestCase):
 
         side = config()
         side["via_transition"]["return_vias"].update(
-            {"enabled": True, "pattern": "side_pair", "count": 6})
+            {"enabled": True, "layout_mode": "advanced",
+             "pattern": "side_pair", "count": 6})
         self.assertEqual(len(GeometryCalculator(side).calculate().return_vias), 6)
         side["via_transition"]["return_vias"]["count"] = 3
         report, _cfg, _geometry = ModelValidator(ConfigManager(ROOT)).run_local(side)
@@ -116,7 +117,7 @@ class ViaRepairAcceptanceTests(unittest.TestCase):
 
         custom = config()
         custom["via_transition"]["return_vias"].update({
-            "pattern": "custom", "count": 20,
+            "layout_mode": "advanced", "pattern": "custom", "count": 20,
             "custom_coordinates": [[-1.0, 0.0], [0.0, 1.0], [1.0, 0.0]],
         })
         normalized, _messages = normalize_config(custom)

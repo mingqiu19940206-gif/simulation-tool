@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import math
+import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -78,6 +79,99 @@ class FrequencyPlan:
     point_count: Optional[int]
     last_frequency_ghz: Optional[float]
     issues: Tuple[Tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class TdrSweepPlan:
+    enabled: bool
+    sweep_name: str
+    point_count: Optional[int]
+    first_frequency_ghz: Optional[float]
+    last_frequency_ghz: Optional[float]
+    step_frequency_ghz: Optional[float]
+    issues: Tuple[Tuple[str, str], ...]
+
+
+def inspect_tdr_sweep_plan(simulation: Mapping[str, Any]) -> TdrSweepPlan:
+    """Validate the dedicated DC-anchored sweep used by offline TDR.
+
+    The main S-parameter sweep may remain interpolating.  TDR is allowed only
+    from an explicit discrete grid ``freq[k] = (k + 1) * df`` so the export
+    path never invents samples by silently resampling the solved response.
+    """
+
+    if not bool(simulation.get("generate_tdr", False)):
+        return TdrSweepPlan(False, "", None, None, None, None, ())
+    raw = simulation.get("tdr_sweep", {})
+    if not isinstance(raw, Mapping):
+        return TdrSweepPlan(
+            False, "", None, None, None, None,
+            (("error", "simulation.tdr_sweep 必须是对象。"),),
+        )
+    enabled = bool(raw.get("enabled", False))
+    name = str(raw.get("sweep_name", "TDRSweep")).strip()
+    if not enabled:
+        return TdrSweepPlan(
+            False, name, None, None, None, None,
+            (("warning", "已请求 TDR，但独立 DC 锚定 TDR Sweep 未启用；不会输出 TDR 曲线。"),),
+        )
+
+    issues: List[Tuple[str, str]] = []
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", name):
+        issues.append(("error", "TDR Sweep 名称必须以字母开头且只包含字母、数字和下划线。"))
+    if name == str(simulation.get("sweep_name", "Sweep1")):
+        issues.append(("error", "TDR Sweep 名称必须与主 S 参数 Sweep 名称不同。"))
+    try:
+        start = float(raw.get("start_frequency_ghz", 0))
+        stop = float(raw.get("stop_frequency_ghz", 0))
+        step = float(raw.get("step_frequency_ghz", 0))
+        point_limit = int(raw.get("max_points", 4096))
+    except (TypeError, ValueError):
+        return TdrSweepPlan(
+            True, name, None, None, None, None,
+            tuple(issues + [("error", "TDR Sweep 的频率和 max_points 必须为数值。")]),
+        )
+
+    if start <= 0 or step <= 0:
+        issues.append(("error", "TDR Sweep 起始频率和步进必须大于 0 GHz。"))
+    if stop <= start:
+        issues.append(("error", "TDR Sweep 终止频率必须大于起始频率。"))
+    if point_limit < 2:
+        issues.append(("error", "TDR Sweep max_points 必须至少为 2。"))
+    if start > 0 and step > 0 and not math.isclose(start, step, rel_tol=0, abs_tol=1e-9):
+        issues.append((
+            "error",
+            "TDR Sweep 必须 DC 锚定：start_frequency_ghz 必须等于 step_frequency_ghz。",
+        ))
+
+    point_count: Optional[int] = None
+    last: Optional[float] = None
+    if step > 0 and stop > 0:
+        nearest = int(round(stop / step))
+        last = nearest * step
+        if nearest < 2:
+            issues.append(("error", "TDR Sweep 至少需要 2 个频点。"))
+        elif not math.isclose(last, stop, rel_tol=0, abs_tol=1e-9):
+            issues.append((
+                "error",
+                "TDR Sweep 终止频率必须是步进的整数倍，不能补点或插值。",
+            ))
+        else:
+            point_count = nearest
+            if point_count > point_limit:
+                issues.append((
+                    "error",
+                    f"TDR Sweep 将生成 {point_count} 个频点，超过安全上限 {point_limit}。",
+                ))
+            elif point_count > 1000:
+                issues.append((
+                    "warning",
+                    f"TDR Sweep 将求解 {point_count} 个离散频点，预计耗时较长。",
+                ))
+
+    return TdrSweepPlan(
+        True, name, point_count, start, last, step, tuple(issues)
+    )
 
 
 def inspect_frequency_plan(simulation: Mapping[str, Any], point_limit: int = 20001) -> FrequencyPlan:
@@ -565,6 +659,10 @@ SWEEP_PARAMETER_REGISTRY: Dict[str, SweepParameterSpec] = {
         _spec("gnd_vias.pad_diameter", "GND VIA 焊盘直径", "GND VIA", deps=(_need_vias,)),
         _spec("gnd_vias.antipad_diameter", "GND VIA 非连接层避空直径", "GND VIA", deps=(_need_vias,)),
         _spec("capacitor.package", "电容封装方案", "电容与模型", "choice", "none", ("values",), None, None, apply=_apply_package),
+        _spec("via_transition.entry_trace.gap", "输入 P/N 铜边间距 GAP", "VIA 换层",
+              minimum=0.001, maximum=2.0, deps=(_need_via_transition,)),
+        _spec("via_transition.exit_trace.gap", "输出 P/N 铜边间距 GAP", "VIA 换层",
+              minimum=0.001, maximum=2.0, deps=(_need_via_transition,)),
         _spec("via_transition.padstack.drill_diameter", "信号孔钻孔直径", "VIA 换层",
               minimum=0.05, maximum=1.0, deps=(_need_via_transition,), apply=_apply_via_signal_drill),
         _spec("via_transition.padstack.connected_pad_diameter", "信号孔功能焊盘直径", "VIA 换层",

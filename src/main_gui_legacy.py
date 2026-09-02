@@ -41,10 +41,8 @@ APP_TITLE = f"PCIe AC耦合电容区域无源优化工具 V{APP_VERSION}"
 # VIA 换层页：几何尺寸参数 → 编号（方案 B 编号表，见示意图编号联动提示词 §四）。
 # 编号只用于 label 文本与图上标注，不改变 path / variables / widgets 映射。
 VIA_PARAM_NUMBERS: Dict[str, str] = {
-    "via_transition.pair_pitch": "①",
     "via_transition.signal_via_pitch": "㉑",
     "via_transition.fanout.style": "㉒",
-    "via_transition.fanout.direction": "㉓",
     "via_transition.fanout.straight_length": "㉔",
     "via_transition.route_axis": "②",
     "via_transition.entry_layer": "③",
@@ -53,8 +51,10 @@ VIA_PARAM_NUMBERS: Dict[str, str] = {
     "via_transition.drill_end_layer": "⑥",
     "via_transition.entry_trace.length": "⑦",
     "via_transition.entry_trace.width": "⑧",
+    "via_transition.entry_trace.gap": "㉕",
     "via_transition.exit_trace.length": "⑨",
     "via_transition.exit_trace.width": "⑩",
+    "via_transition.exit_trace.gap": "㉖",
     "via_transition.padstack.drill_diameter": "⑪",
     "via_transition.padstack.finished_hole_diameter": "⑫",
     "via_transition.padstack.plating_thickness": "⑬",
@@ -337,6 +337,18 @@ class SurfaceCapAntipadApp(tk.Tk):
         var = tk.StringVar()
         self.variables[path] = var
         var.trace_add("write", lambda *_: self._schedule_refresh())
+
+    def _add_derived_length_label(self, parent: ttk.Frame, row: int,
+                                  label: str) -> tk.StringVar:
+        """Add a display-only length row without creating a config field."""
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=4, pady=3)
+        var = tk.StringVar()
+        ttk.Label(parent, textvariable=var, foreground="#475569").grid(
+            row=row, column=1, sticky="w", padx=4)
+        unit_label = ttk.Label(parent, text=self.display_unit, width=5)
+        unit_label.grid(row=row, column=2, sticky="w")
+        self.unit_labels.append(unit_label)
+        return var
 
     def _add_fixed_label(self, parent: ttk.Frame, row: int, label: str, path: str,
                          backend_value: str, display_text: str) -> None:
@@ -838,33 +850,34 @@ class SurfaceCapAntipadApp(tk.Tk):
                               "差分对（当前仅支持）")
         self._add(f, 1, "② 走线方向", "via_transition.route_axis", values=("x", "y"),
                   display_values={"x": "X 方向", "y": "Y 方向"})
-        self._add(f, 2, "① 差分对中心距（走线）", "via_transition.pair_pitch", length=True)
-        self._add(f, 3, "㉑ 信号孔中心距（孔间距）", "via_transition.signal_via_pitch", length=True)
-        self._add(f, 4, "中心 X", "via_transition.center_x", length=True)
-        self._add(f, 5, "中心 Y", "via_transition.center_y", length=True)
-        self._add(f, 6, "③ 输入层 (entry)", "via_transition.entry_layer", values=signal_layers)
-        self._add(f, 7, "④ 输出层 (exit)", "via_transition.exit_layer", values=signal_layers)
-        self._add(f, 8, "⑤ 机械钻孔起始层", "via_transition.drill_start_layer", values=conductive_layers)
-        self._add(f, 9, "⑥ 机械钻孔终止层", "via_transition.drill_end_layer", values=conductive_layers)
+        self._register_hidden_variable("via_transition.pair_pitch")
+        self._add(f, 2, "㉑ 信号孔中心距（孔间距）", "via_transition.signal_via_pitch", length=True)
+        self._add(f, 3, "中心 X", "via_transition.center_x", length=True)
+        self._add(f, 4, "中心 Y", "via_transition.center_y", length=True)
+        self._add(f, 5, "③ 输入层 (entry)", "via_transition.entry_layer", values=signal_layers)
+        self._add(f, 6, "④ 输出层 (exit)", "via_transition.exit_layer", values=signal_layers)
+        self._add(f, 7, "⑤ 机械钻孔起始层", "via_transition.drill_start_layer", values=conductive_layers)
+        self._add(f, 8, "⑥ 机械钻孔终止层", "via_transition.drill_end_layer", values=conductive_layers)
         ttk.Label(f, text="层名需与“反焊盘与叠层”页的叠层一致（entry/exit 须为 signal 层）。",
-                  foreground="#64748b", font=("TkDefaultFont", 8)).grid(row=10, column=0, columnspan=3, sticky="w", pady=(2, 0))
+                  foreground="#64748b", font=("TkDefaultFont", 8)).grid(row=9, column=0, columnspan=3, sticky="w", pady=(2, 0))
 
         f = group("走线扇出")
         self._add(f, 0, "㉒ 扇出方式", "via_transition.fanout.style",
                   values=("deg45", "arc"), display_values={"deg45": "45° 折线", "arc": "圆弧"})
-        self._add(f, 1, "㉓ 扇出方向", "via_transition.fanout.direction",
-                  values=("auto", "expand", "contract"),
-                  display_values={"auto": "自动", "expand": "向外", "contract": "向内"})
-        self._add(f, 2, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
-        ttk.Label(f, text="信号孔间距 ≠ 走线中心距时，走线从孔 45° 折出/圆弧过渡到耦合直线段；"
-                          "同值时自动直连（扇出设置不生效）。",
-                  foreground="#64748b", font=("TkDefaultFont", 8)).grid(row=3, column=0, columnspan=3, sticky="w", pady=(2, 0))
+        self._register_hidden_variable("via_transition.fanout.direction")
+        self._add(f, 1, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
+        ttk.Label(f, text="输入或输出走线中心距与信号孔间距不同时，按各侧实际间距差自动确定向内/向外扇出。",
+                  foreground="#64748b", font=("TkDefaultFont", 8)).grid(row=2, column=0, columnspan=3, sticky="w", pady=(2, 0))
 
         f = group("输入/输出走线")
         self._add(f, 0, "⑦ 输入走线长度", "via_transition.entry_trace.length", length=True)
         self._add(f, 1, "⑧ 输入走线宽度", "via_transition.entry_trace.width", length=True)
-        self._add(f, 2, "⑨ 输出走线长度", "via_transition.exit_trace.length", length=True)
-        self._add(f, 3, "⑩ 输出走线宽度", "via_transition.exit_trace.width", length=True)
+        self._add(f, 2, "㉕ 输入 P/N 铜边间距 GAP", "via_transition.entry_trace.gap", length=True)
+        self.entry_trace_pitch_var = self._add_derived_length_label(f, 3, "输入 P/N 中心距（只读）")
+        self._add(f, 4, "⑨ 输出走线长度", "via_transition.exit_trace.length", length=True)
+        self._add(f, 5, "⑩ 输出走线宽度", "via_transition.exit_trace.width", length=True)
+        self._add(f, 6, "㉖ 输出 P/N 铜边间距 GAP", "via_transition.exit_trace.gap", length=True)
+        self.exit_trace_pitch_var = self._add_derived_length_label(f, 7, "输出 P/N 中心距（只读）")
 
         f = group("Signal VIA Padstack")
         self._add(f, 0, "⑪ 钻孔直径", "via_transition.padstack.drill_diameter", length=True)
@@ -887,8 +900,12 @@ class SurfaceCapAntipadApp(tk.Tk):
                               "residual_stub", "目标残桩长度控制（当前仅支持）")
         self._add(f, 3, "⑰ 背钻孔径", "via_transition.backdrill.drill_diameter", length=True)
         self._add(f, 4, "⑱ 目标残桩长度", "via_transition.backdrill.residual_stub", length=True)
-        ttk.Label(f, text="背钻孔径必须大于原始钻孔；残桩从 exit 连接铜边界算起。",
-                  foreground="#64748b", font=("TkDefaultFont", 8)).grid(row=5, column=0, columnspan=3, sticky="w", pady=(2, 0))
+        self.backdrill_hint_label = ttk.Label(
+            f, text=("背钻孔径必须大于原始钻孔；残桩从背钻侧最近的功能连接层铜边界起算；"
+                     "entry/exit 仅表示信号方向。"),
+            foreground="#64748b", font=("TkDefaultFont", 8))
+        self.backdrill_hint_label.grid(
+            row=5, column=0, columnspan=3, sticky="w", pady=(2, 0))
 
         f = group("Return VIA 回流孔")
         self._add(f, 0, "启用回流孔", "via_transition.return_vias.enabled", boolean=True)
@@ -1426,18 +1443,30 @@ class SurfaceCapAntipadApp(tk.Tk):
                 finally:
                     self._ui_sync = False
 
-        # 扇出字段联动：孔间距 == 走线中心距时无需扇出，禁用扇出相关控件。
+        # 输入/输出中心距分别由 width + GAP 派生。任一侧与孔间距不同，
+        # 都需要启用共享的扇出方式和耦合直线段参数。
         try:
             svp = convert_length(
                 float(self.variables["via_transition.signal_via_pitch"].get()),
                 self.display_unit, "mm")
-            pp = convert_length(
-                float(self.variables["via_transition.pair_pitch"].get()),
-                self.display_unit, "mm")
-            fanout_active = not math.isclose(svp, pp, abs_tol=1e-12)
+            side_pitches = []
+            for side in ("entry", "exit"):
+                width = convert_length(
+                    float(self.variables[f"via_transition.{side}_trace.width"].get()),
+                    self.display_unit, "mm")
+                gap = convert_length(
+                    float(self.variables[f"via_transition.{side}_trace.gap"].get()),
+                    self.display_unit, "mm")
+                pitch = width + gap
+                side_pitches.append(pitch)
+                getattr(self, f"{side}_trace_pitch_var").set(
+                    format_length(pitch, self.display_unit))
+            fanout_active = any(
+                not math.isclose(svp, pitch, abs_tol=1e-12)
+                for pitch in side_pitches)
         except (TypeError, ValueError, tk.TclError, KeyError):
             fanout_active = True
-        for path in ("via_transition.fanout.style", "via_transition.fanout.direction",
+        for path in ("via_transition.fanout.style",
                      "via_transition.fanout.straight_length"):
             widget = self.widgets.get(path)
             if widget is None:
@@ -1757,18 +1786,22 @@ class SurfaceCapAntipadApp(tk.Tk):
 
         center_x = float(vt.get("center_x", 0.0))
         center_y = float(vt.get("center_y", 0.0))
-        pair_pitch = float(vt.get("pair_pitch", 0.0))
-        signal_via_pitch = float(vt.get("signal_via_pitch", pair_pitch))
+        legacy_pair_pitch = float(vt.get("pair_pitch", 0.0))
+        signal_via_pitch = float(vt.get("signal_via_pitch", legacy_pair_pitch))
         entry_w = float(vt.get("entry_trace", {}).get("width", 0.0))
+        entry_gap = float(vt.get("entry_trace", {}).get(
+            "gap", legacy_pair_pitch - entry_w))
+        entry_pitch = entry_w + entry_gap
         entry_len = float(vt.get("entry_trace", {}).get("length", 0.0))
         exit_w = float(vt.get("exit_trace", {}).get("width", 0.0))
+        exit_gap = float(vt.get("exit_trace", {}).get(
+            "gap", legacy_pair_pitch - exit_w))
+        exit_pitch = exit_w + exit_gap
         exit_len = float(vt.get("exit_trace", {}).get("length", 0.0))
         fanout_cfg = vt.get("fanout") if isinstance(vt.get("fanout"), Mapping) else {}
         fanout_style = str(fanout_cfg.get("style", "deg45"))
-        fanout_direction = str(fanout_cfg.get("direction", "auto"))
-        fanout_delta = (signal_via_pitch - pair_pitch) / 2.0
-        # 耦合直线段位于 y = pair_pitch/2（走线中心距），尺寸标注沿该段放置。
-        trace_y = pair_pitch / 2.0
+        entry_trace_y = entry_pitch / 2.0
+        exit_trace_y = exit_pitch / 2.0
 
         placer = CanvasLabelPlacer(canvas, width, height, safe=10)
         # 先把已绘制的走线/信号孔/回流孔包围盒标记为占位，使标签自动避让图形。
@@ -1782,60 +1815,72 @@ class SurfaceCapAntipadApp(tk.Tk):
 
         # (path, label, p1, p2, dashed, lane)
         dims: List[Tuple[str, str, Tuple[float, float], Tuple[float, float], bool, int]] = []
-        # ① 差分对中心距：标注在端口端（走线端），走线按 pair_pitch 布线。
-        dims.append(("via_transition.pair_pitch",
-                     f"① 差分对中心距（走线） {fmt(pair_pitch)} {unit}",
-                     (center_x - entry_len, center_y - pair_pitch / 2.0),
-                     (center_x - entry_len, center_y + pair_pitch / 2.0), False, 0))
+        dims.append(("via_transition.entry_trace.gap",
+                     f"输入中心距 W+GAP {fmt(entry_pitch)} {unit}",
+                     (center_x - entry_len, center_y - entry_pitch / 2.0),
+                     (center_x - entry_len, center_y + entry_pitch / 2.0), False, 0))
+        dims.append(("via_transition.exit_trace.gap",
+                     f"输出中心距 W+GAP {fmt(exit_pitch)} {unit}",
+                     (center_x + exit_len, center_y - exit_pitch / 2.0),
+                     (center_x + exit_len, center_y + exit_pitch / 2.0), False, 0))
         # ㉑ 信号孔中心距：标注在孔端，与走线中心距相互独立。
         dims.append(("via_transition.signal_via_pitch",
                      f"㉑ 信号孔间距 {fmt(signal_via_pitch)} {unit}",
                      (center_x, center_y - signal_via_pitch / 2.0),
                      (center_x, center_y + signal_via_pitch / 2.0), False, 0))
-        gap = pair_pitch - entry_w
-        if gap > 0.0:
-            dims.append(("via_transition.entry_trace.width",
-                         f"① 线距 gap {fmt(gap)} {unit}",
-                         (center_x - entry_len, center_y + pair_pitch / 2.0 - entry_w / 2.0),
-                         (center_x - entry_len, center_y - pair_pitch / 2.0 + entry_w / 2.0),
+        if entry_gap > 0.0:
+            dims.append(("via_transition.entry_trace.gap",
+                         f"㉕ 输入 GAP {fmt(entry_gap)} {unit}",
+                         (center_x - entry_len, center_y + entry_pitch / 2.0 - entry_w / 2.0),
+                         (center_x - entry_len, center_y - entry_pitch / 2.0 + entry_w / 2.0),
+                         True, 0))
+        if exit_gap > 0.0:
+            dims.append(("via_transition.exit_trace.gap",
+                         f"㉖ 输出 GAP {fmt(exit_gap)} {unit}",
+                         (center_x + exit_len, center_y + exit_pitch / 2.0 - exit_w / 2.0),
+                         (center_x + exit_len, center_y - exit_pitch / 2.0 + exit_w / 2.0),
                          True, 0))
         dims.append(("via_transition.entry_trace.width",
                      f"⑧ entry 宽 {fmt(entry_w)} {unit}",
-                     (center_x - entry_len / 2.0, center_y + trace_y - entry_w / 2.0),
-                     (center_x - entry_len / 2.0, center_y + trace_y + entry_w / 2.0),
+                     (center_x - entry_len / 2.0, center_y + entry_trace_y - entry_w / 2.0),
+                     (center_x - entry_len / 2.0, center_y + entry_trace_y + entry_w / 2.0),
                      False, 0))
         dims.append(("via_transition.entry_trace.length",
                      f"⑦ entry 长 {fmt(entry_len)} {unit}",
-                     (center_x - entry_len, center_y + trace_y + entry_w / 2.0),
-                     (center_x, center_y + trace_y + entry_w / 2.0),
+                     (center_x - entry_len, center_y + entry_trace_y + entry_w / 2.0),
+                     (center_x, center_y + entry_trace_y + entry_w / 2.0),
                      False, 1))
         dims.append(("via_transition.exit_trace.width",
                      f"⑩ exit 宽 {fmt(exit_w)} {unit}",
-                     (center_x + exit_len / 2.0, center_y + trace_y - exit_w / 2.0),
-                     (center_x + exit_len / 2.0, center_y + trace_y + exit_w / 2.0),
+                     (center_x + exit_len / 2.0, center_y + exit_trace_y - exit_w / 2.0),
+                     (center_x + exit_len / 2.0, center_y + exit_trace_y + exit_w / 2.0),
                      False, 0))
         dims.append(("via_transition.exit_trace.length",
                      f"⑨ exit 长 {fmt(exit_len)} {unit}",
-                     (center_x, center_y + trace_y + exit_w / 2.0),
-                     (center_x + exit_len, center_y + trace_y + exit_w / 2.0),
+                     (center_x, center_y + exit_trace_y + exit_w / 2.0),
+                     (center_x + exit_len, center_y + exit_trace_y + exit_w / 2.0),
                      False, 1))
-        # 扇出标注：孔间距 ≠ 走线中心距时，标注 45°/弧扇出段与耦合直线段。
-        if not math.isclose(signal_via_pitch, pair_pitch, abs_tol=1e-9):
+        # 输入、输出分别按各自中心距标注扇出，不再共享一个中心距。
+        for side, trace_pitch, trace_len, direction in (
+                ("输入", entry_pitch, entry_len, -1.0),
+                ("输出", exit_pitch, exit_len, 1.0)):
+            fanout_delta = (signal_via_pitch - trace_pitch) / 2.0
+            if math.isclose(fanout_delta, 0.0, abs_tol=1e-9):
+                continue
             fanout_x = abs(fanout_delta)
             style_label = "弧" if fanout_style == "arc" else "45°"
             direction_label = "向外" if fanout_delta > 0 else "向内"
-            if fanout_direction != "auto":
-                direction_label = "向外" if fanout_direction == "expand" else "向内"
-            fold_x = center_x - fanout_x
+            fold_x = center_x + direction * fanout_x
+            trace_y = center_y + trace_pitch / 2.0
+            port_x = center_x + direction * trace_len
             dims.append(("via_transition.fanout.style",
-                         f"㉒ {style_label}扇出·{direction_label}",
+                         f"㉒ {side}{style_label}扇出·{direction_label}",
                          (center_x, center_y + signal_via_pitch / 2.0),
-                         (fold_x, center_y + pair_pitch / 2.0), True, 1))
-            straight_len = max(0.0, entry_len - fanout_x)
+                         (fold_x, trace_y), True, 1))
+            straight_len = max(0.0, trace_len - fanout_x)
             dims.append(("via_transition.fanout.straight_length",
-                         f"㉔ 耦合直线 {fmt(straight_len)} {unit}",
-                         (fold_x, center_y + pair_pitch / 2.0),
-                         (center_x - entry_len, center_y + pair_pitch / 2.0), False, 2))
+                         f"㉔ {side}耦合直线 {fmt(straight_len)} {unit}",
+                         (fold_x, trace_y), (port_x, trace_y), False, 2))
 
         signal_vias = list(getattr(geometry, "signal_vias", []))
         if signal_vias:
@@ -2257,13 +2302,20 @@ class SurfaceCapAntipadApp(tk.Tk):
                            f"回流避空 {fmtv(float(rv_cfg.get('antipad_diameter', 0.0)))} {unit}"))
         legend.append(("㉑", "via_transition.signal_via_pitch",
                        f"信号孔间距 {fmtv(float(vt.get('signal_via_pitch', vt.get('pair_pitch', 0.0)) or 0.0))} {unit}"))
+        entry_legend = vt.get("entry_trace", {})
+        exit_legend = vt.get("exit_trace", {})
+        entry_gap = float(entry_legend.get("gap", 0.0) or 0.0)
+        exit_gap = float(exit_legend.get("gap", 0.0) or 0.0)
+        legend.append(("㉕", "via_transition.entry_trace.gap",
+                       f"输入 GAP {fmtv(entry_gap)} {unit}；中心距 "
+                       f"{fmtv(float(entry_legend.get('width', 0.0) or 0.0) + entry_gap)} {unit}"))
+        legend.append(("㉖", "via_transition.exit_trace.gap",
+                       f"输出 GAP {fmtv(exit_gap)} {unit}；中心距 "
+                       f"{fmtv(float(exit_legend.get('width', 0.0) or 0.0) + exit_gap)} {unit}"))
         fanout_legend = vt.get("fanout") if isinstance(vt.get("fanout"), Mapping) else {}
         fanout_style_label = {"deg45": "45° 折线", "arc": "圆弧"}.get(
             str(fanout_legend.get("style", "deg45")), str(fanout_legend.get("style", "deg45")))
-        fanout_direction_label = {"auto": "自动", "expand": "向外", "contract": "向内"}.get(
-            str(fanout_legend.get("direction", "auto")), str(fanout_legend.get("direction", "auto")))
         legend.append(("㉒", "via_transition.fanout.style", f"扇出方式 {fanout_style_label}"))
-        legend.append(("㉓", "via_transition.fanout.direction", f"扇出方向 {fanout_direction_label}"))
         legend.append(("㉔", "via_transition.fanout.straight_length",
                        f"耦合直线段长 {fmtv(float(fanout_legend.get('straight_length', 1.0) or 0.0))} {unit}"))
 

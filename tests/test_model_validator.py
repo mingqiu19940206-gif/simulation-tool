@@ -5,10 +5,13 @@ import tempfile
 import tkinter as tk
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 from config_manager import ConfigManager
 from geometry_calculator import GeometryCalculator
 from hfss_script_generator import HfssScriptGenerator, ScriptGenerationError
+import main_gui
 from main_gui import SurfaceCapAntipadApp
 from model_validator import (
     ModelValidator, ValidationItem, ValidationReport, config_revision,
@@ -176,6 +179,39 @@ class ValidateGuiTests(unittest.TestCase):
             self.app.model_preview_workbench.objects[self.app.model_preview_workbench.selected_key].details.get("信号"),
             {"P", None},
         )
+
+    def test_generate_and_run_are_blocked_by_current_validation_error(self) -> None:
+        config = ConfigManager(ROOT).default()
+        config["scenario"]["type"] = "via_transition"
+        config["via_transition"]["exit_layer"] = config["via_transition"]["entry_layer"]
+        self.app._load_to_widgets(config)
+
+        with mock.patch.object(
+                main_gui._legacy.HfssScriptGenerator, "generate") as generate:
+            with self.assertRaises(ScriptGenerationError):
+                self.app._generate()
+            generate.assert_not_called()
+
+        with (mock.patch.object(main_gui.subprocess, "Popen") as popen,
+              mock.patch.object(main_gui.messagebox, "showerror") as showerror):
+            self.app.generate_and_run()
+            popen.assert_not_called()
+            showerror.assert_called_once()
+        self.assertGreater(self.app.validate_report.counts["errors"], 0)
+        self.assertFalse(self.app.validate_report.can_continue)
+
+    def test_generate_continues_when_current_report_can_continue(self) -> None:
+        config = ConfigManager(ROOT).default()
+        self.app._load_to_widgets(config)
+        generated = SimpleNamespace(script_path=Path("mock_hfss.py"), warnings=[])
+        with (mock.patch.object(
+                main_gui._legacy.HfssScriptGenerator, "generate",
+                return_value=generated) as generate,
+              mock.patch.object(self.app, "_confirm_validate_warnings", return_value=True)):
+            result = self.app._generate()
+        self.assertIs(result, generated)
+        generate.assert_called_once()
+        self.assertTrue(self.app.validate_report.can_continue)
 
 
 if __name__ == "__main__":

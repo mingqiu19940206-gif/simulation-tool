@@ -68,7 +68,24 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.assertIsInstance(vt["return_vias"]["connect_layers"], list)
         self.assertEqual(vt["return_vias"]["connect_layers"], ["L2", "L9"])
         self.assertTrue(vt["backdrill"]["enabled"])
-        self.assertEqual(vt["signal_via_pitch"], vt["pair_pitch"])
+        self.assertAlmostEqual(vt["signal_via_pitch"],
+                               vt["entry_trace"]["width"] + vt["entry_trace"]["gap"])
+        self.assertAlmostEqual(vt["signal_via_pitch"],
+                               vt["exit_trace"]["width"] + vt["exit_trace"]["gap"])
+        self.assertNotIn("via_transition.pair_pitch", self.app.widgets)
+        self.assertNotIn("via_transition.fanout.direction", self.app.widgets)
+        self.assertIn("via_transition.entry_trace.gap", self.app.widgets)
+        self.assertIn("via_transition.exit_trace.gap", self.app.widgets)
+        self.assertEqual(
+            self.app.entry_trace_pitch_var.get(),
+            format_length(vt["entry_trace"]["width"] + vt["entry_trace"]["gap"],
+                          self.app.display_unit),
+        )
+        self.assertEqual(
+            self.app.exit_trace_pitch_var.get(),
+            format_length(vt["exit_trace"]["width"] + vt["exit_trace"]["gap"],
+                          self.app.display_unit),
+        )
         self.assertEqual(vt["fanout"]["style"], "deg45")
         self.assertEqual(vt["fanout"]["direction"], "auto")
         self.assertGreaterEqual(vt["fanout"]["straight_length"], 0.0)
@@ -498,6 +515,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
         original = copy.deepcopy(self.app._collect())
         try:
             config = copy.deepcopy(original)
+            config["via_transition"]["return_vias"]["layout_mode"] = "advanced"
             config["via_transition"]["return_vias"]["pattern"] = "custom"
             config["via_transition"]["return_vias"]["custom_coordinates"] = [
                 [0.1, 0.2], [0.3, 0.4]]
@@ -563,8 +581,104 @@ class ViaTransitionGuiTests(unittest.TestCase):
 
         default_via = self.app.manager.default()["via_transition"]
         paths = leaves(default_via)
-        self.assertEqual(len(paths), 63)
+        self.assertEqual(len(paths), 68)
         self.assertEqual([path for path in paths if path not in self.app.variables], [])
+
+    def test_26_standard_return_via_view_shows_relative_inputs_and_summary(self) -> None:
+        from config_manager import ConfigManager
+
+        config = ConfigManager(ROOT).default()
+        config["scenario"]["type"] = "via_transition"
+        self.app._load_to_widgets(config)
+        self.app.variables["scenario.type"].set("via_transition")
+        self.app._sync_via_fields()
+        self.app.update_idletasks()
+        # Drain refresh jobs inherited from prior shared-window GUI tests, then
+        # assert the final steady-state linkage.
+        self.app._sync_via_fields()
+        self.app.update_idletasks()
+
+        self.assertEqual(
+            self.app.widgets[
+                "via_transition.return_vias.relative_offset_along_route"
+            ].winfo_manager(), "grid")
+        self.assertEqual(
+            self.app.widgets[
+                "via_transition.return_vias.relative_offset_outward"
+            ].winfo_manager(), "grid")
+        for path in (
+            "via_transition.return_vias.count",
+            "via_transition.return_vias.offset_x",
+            "via_transition.return_vias.offset_y",
+            "via_transition.return_vias.pitch_x",
+            "via_transition.return_vias.pitch_y",
+            "via_transition.return_vias.start_layer",
+            "via_transition.return_vias.end_layer",
+            "via_transition.return_vias.connect_layers",
+        ):
+            self.assertEqual(self.app.widgets[path].winfo_manager(), "", path)
+        self.assertEqual(self.app.return_legacy_layout_frame.winfo_manager(), "")
+        self.assertEqual(self.app.return_structure_frame.winfo_manager(), "")
+        self.assertIn("固定生成 2 颗", self.app.return_summary_var.get())
+        self.assertIn("钻孔跨度 L1–L14", self.app.return_summary_var.get())
+        self.assertIn("连接参考层 L2、L9", self.app.return_summary_var.get())
+        self.assertIn("板坐标 X", self.app.return_along_label.cget("text"))
+        self.assertIn("板坐标 Y", self.app.return_outward_label.cget("text"))
+
+        self.app.variables["via_transition.route_axis"].set("Y 方向")
+        self.app._sync_via_fields()
+        self.assertIn("板坐标 Y", self.app.return_along_label.cget("text"))
+        self.assertIn("P→−X", self.app.return_outward_label.cget("text"))
+
+    def test_27_standard_collect_derives_legacy_aliases_span_and_port_planes(self) -> None:
+        from config_manager import ConfigManager
+
+        config = ConfigManager(ROOT).default()
+        config["scenario"]["type"] = "via_transition"
+        self.app._load_to_widgets(config)
+        self.app.variables["via_transition.return_vias.relative_offset_along_route"].set(
+            repr(convert_length(0.25, "mm", self.app.display_unit)))
+        self.app.variables["via_transition.return_vias.relative_offset_outward"].set(
+            repr(convert_length(0.35, "mm", self.app.display_unit)))
+        self.app.variables["via_transition.return_vias.pitch_x"].set(
+            repr(convert_length(99.0, "mm", self.app.display_unit)))
+        self.app.variables["via_transition.return_vias.pitch_y"].set(
+            repr(convert_length(88.0, "mm", self.app.display_unit)))
+        collected = self.app._collect()
+        rv = collected["via_transition"]["return_vias"]
+        self.assertEqual((rv["pattern"], rv["count"]), ("side_pair", 2))
+        self.assertAlmostEqual(rv["offset_x"], 0.25)
+        self.assertAlmostEqual(
+            rv["offset_y"],
+            collected["via_transition"]["signal_via_pitch"] / 2.0 + 0.35)
+        self.assertEqual((rv["start_layer"], rv["end_layer"]), ("L1", "L14"))
+        self.assertEqual(rv["connect_layers"], ["L2", "L9"])
+
+    def test_28_immediate_validate_flushes_signal_finished_hole(self) -> None:
+        from config_manager import ConfigManager
+
+        config = ConfigManager(ROOT).default()
+        config["scenario"]["type"] = "via_transition"
+        self.app._load_to_widgets(config)
+        self.app._ui_sync = True
+        try:
+            self.app.variables["via_transition.padstack.drill_diameter"].set(
+                repr(convert_length(0.254, "mm", self.app.display_unit)))
+            self.app.variables["via_transition.padstack.plating_thickness"].set(
+                repr(convert_length(0.0254, "mm", self.app.display_unit)))
+            # Deliberately leave the old 6 mil value in the derived widget to
+            # emulate clicking Validate before the debounce callback runs.
+            self.app.variables["via_transition.padstack.finished_hole_diameter"].set(
+                repr(convert_length(0.1524, "mm", self.app.display_unit)))
+        finally:
+            self.app._ui_sync = False
+
+        self.assertTrue(self.app.validate_model(show_dialog=False))
+        padstack = self.app._validated_config["via_transition"]["padstack"]
+        self.assertAlmostEqual(padstack["drill_diameter"], 0.254, places=12)
+        self.assertAlmostEqual(padstack["plating_thickness"], 0.0254, places=12)
+        self.assertAlmostEqual(padstack["finished_hole_diameter"], 0.2032, places=12)
+        self.assertEqual(self.app.validate_report.counts["errors"], 0)
 
 
 if __name__ == "__main__":

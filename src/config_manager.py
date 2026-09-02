@@ -201,8 +201,8 @@ _SECTION_LENGTH_FIELDS: Dict[str, set[str]] = {
     "via_transition": {
         "pair_pitch", "signal_via_pitch", "center_x", "center_y",
         "fanout.straight_length",
-        "entry_trace.length", "entry_trace.width",
-        "exit_trace.length", "exit_trace.width",
+        "entry_trace.length", "entry_trace.width", "entry_trace.gap",
+        "exit_trace.length", "exit_trace.width", "exit_trace.gap",
         "padstack.drill_diameter", "padstack.finished_hole_diameter",
         "padstack.plating_thickness", "padstack.connected_pad_diameter",
         "padstack.nonfunctional_pad_diameter", "padstack.antipad_diameter",
@@ -212,6 +212,8 @@ _SECTION_LENGTH_FIELDS: Dict[str, set[str]] = {
         "padstack.antipad.side_clearance", "padstack.antipad.length_increment",
         "padstack.antipad.width_increment",
         "backdrill.drill_diameter", "backdrill.residual_stub",
+        "return_vias.relative_offset_along_route",
+        "return_vias.relative_offset_outward",
         "return_vias.offset_x", "return_vias.offset_y",
         "return_vias.pitch_x", "return_vias.pitch_y",
         "return_vias.drill_diameter", "return_vias.finished_hole_diameter",
@@ -235,6 +237,11 @@ _LENGTH_SWEEPS = {
     "via_transition.padstack.antipad.length_increment",
     "via_transition.padstack.antipad.width_increment",
     "via_transition.padstack.antipad_diameter",
+    # ``pair_pitch`` stays here only so legacy enabled scans are converted to
+    # internal mm before the sweep layer rejects the deprecated axis.
+    "via_transition.pair_pitch",
+    "via_transition.entry_trace.gap",
+    "via_transition.exit_trace.gap",
 }
 
 
@@ -326,6 +333,43 @@ def find_nearest_reference_plane(stackup: Sequence[Any], mount_side: str) -> Opt
                 and bool(_layer_value(layer, "is_reference_plane", False))):
             return layer
     return None
+
+
+def find_via_port_reference_layers(
+    stackup: Sequence[Any], entry_layer: str, exit_layer: str,
+) -> Tuple[str, str]:
+    """Return each VIA port's nearest reference toward the other signal layer.
+
+    Stackup order is top-to-bottom, while ``entry``/``exit`` describe signal
+    flow and may appear in either physical order.  Searching from each port
+    toward the other functional connection keeps a bottom-entry transition
+    physically equivalent to the same two layers with the names swapped.
+    """
+
+    layers = list(stackup)
+    names = [str(_layer_value(layer, "name", "")) for layer in layers]
+    references = {
+        index for index, layer in enumerate(layers)
+        if (_layer_value(layer, "type") == "plane"
+            and bool(_layer_value(layer, "is_reference_plane", False)))
+    }
+
+    def inward_reference(layer_name: str, toward_layer: str) -> str:
+        if (layer_name not in names or toward_layer not in names
+                or layer_name == toward_layer):
+            return ""
+        index = names.index(layer_name)
+        toward_index = names.index(toward_layer)
+        step = 1 if toward_index > index else -1
+        start = index + step
+        indices = (range(start, len(layers)) if step > 0
+                   else range(start, -1, -1))
+        return next((names[index] for index in indices if index in references), "")
+
+    return (
+        inward_reference(str(entry_layer), str(exit_layer)),
+        inward_reference(str(exit_layer), str(entry_layer)),
+    )
 
 
 def synchronize_antipad_mount_side(
@@ -782,6 +826,16 @@ def normalize_config(raw_config: Mapping[str, Any]) -> Tuple[Dict[str, Any], Lis
             str(_layer_value(nearest_reference, "name", ""))
             if nearest_reference is not None else ""
         )
+    if "tdr_sweep" not in supplied_simulation:
+        # Loading an older config must not silently add hundreds of solved
+        # frequencies.  Keep its former behaviour (no TDR curve) until the
+        # user explicitly enables the new dedicated sweep.
+        converted["simulation"]["tdr_sweep"]["enabled"] = False
+        if bool(converted["simulation"].get("generate_tdr", False)):
+            corrections.append(
+                "旧配置缺少 simulation.tdr_sweep；为避免意外增加离散求解量，"
+                "已保持禁用。启用后才会生成真实 TDR 曲线。"
+            )
     if source_schema_version < 2 and ("gnd_vias" not in raw_config or
                                       "simulation" not in raw_config):
         corrections.append(
@@ -868,6 +922,93 @@ def normalize_config(raw_config: Mapping[str, Any]) -> Tuple[Dict[str, Any], Lis
         corrections.append(
             "旧配置缺少 via_transition.signal_via_pitch，已回填为 pair_pitch（信号孔与走线同中心距，无扇出）。"
         )
+    # Input and output copper gaps are now authoritative.  Older files stored
+    # one common centre pitch; derive both gaps from that pitch and each side's
+    # own width so their copper centreline/polygon geometry remains equivalent
+    # after normalization.  ``pair_pitch`` remains a read-only compatibility value
+    # and is deliberately not recomputed from either new side.
+    legacy_pair_pitch = float(converted["via_transition"]["pair_pitch"])
+    for side, label in (("entry_trace", "输入"), ("exit_trace", "输出")):
+        supplied_trace = (supplied_via_transition.get(side)
+                          if isinstance(supplied_via_transition.get(side), Mapping) else {})
+        if "gap" not in supplied_trace:
+            trace = converted["via_transition"][side]
+            trace["gap"] = legacy_pair_pitch - float(trace["width"])
+            corrections.append(
+                f"旧配置缺少 via_transition.{side}.gap，已按 pair_pitch - width "
+                f"派生{label}线距，保持原走线中心距与几何不变。"
+            )
+    # One shared direction cannot represent opposite entry/exit transitions.
+    # Geometry has always followed the actual pitch delta, so canonicalizing
+    # this deprecated hint to auto changes no copper and prevents a hidden,
+    # unresolvable warning after loading an older file.
+    fanout = converted["via_transition"]["fanout"]
+    if str(fanout.get("direction", "auto")) != "auto":
+        fanout["direction"] = "auto"
+        corrections.append(
+            "旧 fanout.direction 已规范化为 auto；输入/输出扇出方向分别由各侧中心距与信号孔间距自动推导。"
+        )
+
+    # Standard Return VIA layout is expressed relative to each P/N signal via
+    # in route-local coordinates.  Legacy layout fields remain in the saved
+    # object for round-trip compatibility and for explicitly advanced layouts.
+    # Presence is checked against the supplied payload (before defaults merge)
+    # so an old side_pair/count=2 file can be migrated without moving copper.
+    supplied_return_vias = (
+        supplied_via_transition.get("return_vias")
+        if isinstance(supplied_via_transition.get("return_vias"), Mapping) else {}
+    )
+    return_vias = converted["via_transition"]["return_vias"]
+    if "layout_mode" not in supplied_return_vias:
+        legacy_pattern = str(supplied_return_vias.get(
+            "pattern", return_vias.get("pattern", "side_pair")))
+        legacy_count = int(supplied_return_vias.get(
+            "count", return_vias.get("count", 2)))
+        return_vias["layout_mode"] = (
+            "standard" if legacy_pattern == "side_pair" and legacy_count == 2
+            else "advanced"
+        )
+        corrections.append(
+            "旧 Return VIA 布局已分类为"
+            + ("标准双孔模式。" if return_vias["layout_mode"] == "standard"
+               else "高级兼容模式；原 pattern/count/坐标保持不变。")
+        )
+    if str(return_vias.get("layout_mode", "")) == "standard":
+        if ("relative_offset_along_route" not in supplied_return_vias
+                or "relative_offset_outward" not in supplied_return_vias):
+            old_offset_x = float(return_vias.get("offset_x", 0.0))
+            old_offset_y = float(return_vias.get("offset_y", 0.0))
+            return_vias["relative_offset_along_route"] = old_offset_x
+            return_vias["relative_offset_outward"] = old_offset_y - (
+                float(converted["via_transition"]["signal_via_pitch"]) / 2.0
+            )
+            corrections.append(
+                "旧 side_pair/count=2 Return VIA 已迁移为相对信号孔坐标："
+                "along=offset_x，outward=offset_y-signal_via_pitch/2；实际孔坐标不变。"
+            )
+
+        # Keep old aliases coherent for old readers, but never consume their
+        # pitch values in standard geometry.  Mechanical span and connection
+        # planes are derived from the same inputs used by signal vias/ports.
+        return_vias["pattern"] = "side_pair"
+        return_vias["count"] = 2
+        return_vias["offset_x"] = float(return_vias["relative_offset_along_route"])
+        return_vias["offset_y"] = (
+            float(converted["via_transition"]["signal_via_pitch"]) / 2.0
+            + float(return_vias["relative_offset_outward"])
+        )
+        return_vias["start_layer"] = str(
+            converted["via_transition"]["drill_start_layer"])
+        return_vias["end_layer"] = str(
+            converted["via_transition"]["drill_end_layer"])
+        input_reference, output_reference = find_via_port_reference_layers(
+            converted["stackup"],
+            str(converted["via_transition"]["entry_layer"]),
+            str(converted["via_transition"]["exit_layer"]),
+        )
+        return_vias["connect_layers"] = list(dict.fromkeys(
+            name for name in (input_reference, output_reference) if name
+        ))
     # Re-normalize arbitrary per-layer keys retained by the extensible schema,
     # then derive legacy read-only aliases in one direction.
     padstack = converted["via_transition"]["padstack"]
@@ -879,10 +1020,23 @@ def normalize_config(raw_config: Mapping[str, Any]) -> Tuple[Dict[str, Any], Lis
         if (not bool(item.get("inherit_global", False))
             and str(item.get("shape", padstack["antipad"]["shape"])) == "circle")
     }
+    # Signal VIA follows the same manufacturing contract as GND/Return VIA:
+    # drill diameter and plating are authoritative, finished hole is derived.
+    # Normalize imported legacy files here so geometry, preview and HFSS never
+    # consume three mutually inconsistent dimensions.
+    expected_signal_hole = (float(padstack["drill_diameter"])
+                            - 2.0 * float(padstack["plating_thickness"]))
+    if not math.isclose(float(padstack["finished_hole_diameter"]),
+                        expected_signal_hole, abs_tol=_EPS):
+        old_hole = float(padstack["finished_hole_diameter"])
+        padstack["finished_hole_diameter"] = expected_signal_hole
+        corrections.append(
+            "Signal VIA 旧配置的成品孔直径与钻孔/镀铜厚度不一致："
+            f"{shown_length(old_hole)} 已按 drill_diameter - 2×plating_thickness 更新为 "
+            f"{shown_length(expected_signal_hole)}。")
     # Return VIA uses the same finished-hole contract as every other plated
     # through hole.  Derived-pattern counts are read-only canonical values;
     # side_pair remains user-authoritative and odd values are rejected later.
-    return_vias = converted["via_transition"]["return_vias"]
     expected_return_hole = (float(return_vias["drill_diameter"])
                             - 2.0 * float(return_vias["plating_thickness"]))
     if not math.isclose(float(return_vias["finished_hole_diameter"]),
@@ -1361,10 +1515,10 @@ def _validate_model_sim_sweeps(config: Mapping[str, Any], result: ValidationResu
             result.add_error("simulation.report_outputs 必须是对象。")
         elif simulation.get("generate_reports") and not any(bool(outputs.get(name)) for name in ("Sdd11", "Sdd21", "Sdc21", "Scd21")):
             result.add_warning("已启用报告生成，但未选择任何 S 参数报告。")
-        if simulation.get("generate_tdr"):
-            result.add_warning("差分 TDR 当前仅记录复核请求；脚本不会自动创建完整 TDR 报告。")
     try:
-        from simulation_sweep_semantics import inspect_sweep_plan
+        from simulation_sweep_semantics import inspect_sweep_plan, inspect_tdr_sweep_plan
+        for level, message in inspect_tdr_sweep_plan(simulation).issues:
+            (result.add_error if level == "error" else result.add_warning)(message)
         for level, message in inspect_sweep_plan(config).issues:
             (result.add_error if level == "error" else result.add_warning)(message)
     except (ImportError, ValueError):

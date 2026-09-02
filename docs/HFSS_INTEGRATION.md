@@ -26,6 +26,42 @@ Sdd11、Sdd21、Sdc21、Scd21 全部为有限值。退出后 AEDT 进程数为 0
 许可证或机器标识。本基线不覆盖 `via_transition`、原生 3×3 Optimetrics、背钻、
 Touchstone、RLC、底层安装、TDR、AEDT 2023 R2 或人工端口场分布审查。
 
+## 2026-08-31 反向 VIA 最小真实验收
+
+Windows 上使用 AEDT 2022 R2、PyAEDT 1.4.0 与 Python 3.14.7，验证
+`entry_layer=L14`、`exit_layer=L10`、钻孔 L1→L14、auto→top 背钻。
+本地门禁为 0 error；真实 AEDT 原生 Validate 为 18 passed、0 error、0 warning。
+脚本回读确认两组差分对和四个 Terminal，枚举出 16 个混模 `St(...)` quantity；
+1.0–1.1 GHz 两点最小扫频自适应收敛，Sdd11、Sdd21、Sdc21、Scd21 均成功导出。
+
+历史 `No trace data` 工程的差分对和 quantity 实际存在，但工程最后一次保存发生在
+solve 之前；重开后只有 Sweep 频点元数据，Sweep/LastAdaptive 的单端和混模 trace
+都无法由 AEDT reporter 读取。生成脚本现在在 solve 后再次保存，再提取结果；同时
+记录差分对回读、实际 quantity 和命中的 solution context。提取失败会写诊断 JSON
+并使运行返回失败，不会把空 CSV/JSON 当作成功。随后同一反向 VIA 配置已完成生产
+0.01–32 GHz 插值扫频：250 个频点和四条混模曲线均为有限值，历史 `No trace data`
+没有复现。该生产验收仍不替代网格/场分布人工审查或 AEDT 2023 R2 验收。
+
+TDR 不复用主插值扫频。生成器会按 `simulation.tdr_sweep` 创建独立离散
+`TDRSweep`，要求首点等于步进且终点为步进的整数倍，从而得到
+`freq[k]=(k+1)·Δf`。结果导出只读取该已求解上下文中的真实复数
+`St(IN_DIFF,IN_DIFF)`；专用扫频关闭、网格无效、quantity 缺失或 trace 为空都会
+明确失败，不会重采样主扫频或输出占位曲线。旧配置导入时该新增扫频保持关闭，
+避免兼容迁移后无提示地增加数百个离散求解点。
+
+同日使用相同 L14→L10、L1→L14、auto→top 反向 VIA 配置完成了专用 TDR
+真机门禁：主 `Sweep1` 为 1.0/1.1 GHz 两点，`TDRSweep` 为 0.1–1.6 GHz、
+0.1 GHz 步进的 16 个离散点。AEDT 原生 Validate 为 19 passed、0 error、
+0 warning、0 not checked；自适应求解收敛，导出源明确记录为
+`Setup1 : TDRSweep / St(IN_DIFF,IN_DIFF)`。输出包含 17 个有限时域/阻抗点，
+`via_results.json` 与 `via_tdr.json` 均无 warning。该小规模门禁证明端到端 API
+兼容性，不代表默认 0.05–32 GHz、640 点生产 TDR 已完成。
+
+同一次求解还验证了回流孔连接平面的几何修正。移除完全重叠的连接层 pad、直接
+从完整参考平面切除成品孔后，`nominalmesh.g3derr` 的 small-segment 记录从旧工程
+94 条降到 30 条，`PLANE_L13` 与顶层阻焊记录消失；剩余 30 条均属于 AIRBOX
+内部实体交界，求解仍正常收敛。该剩余网格告警尚待进一步定位。
+
 ## 真实 AEDT 联调顺序
 
 1. 在安装 AEDT 2022 R2 或 2023 R2 的机器上选择一致的目标版本。
@@ -42,7 +78,7 @@ Touchstone、RLC、底层安装、TDR、AEDT 2023 R2 或人工端口场分布审
 - 已完成脚本表达式绑定的轴：`via_transition.padstack.drill_diameter`、`connected_pad_diameter`、`antipad.diameter`（仅 circle）。钻孔变化时成品孔由 `drill - 2*plating` 派生，不能冻结为常数。
 - 离线 3×3 门禁只证明生成结果为一个 Project、一个 Design、一个 Parametric Setup、9 个 Variation，且 `--validate-only` 通过；它不证明 AEDT 已创建对象或完成求解。
 - 真机验收优先用功能焊盘直径 × 反焊盘直径各 3 点。脚本会读回 Design Variable/Optimetrics Setup，并通过平面或信号导体体积随变量变化且恢复名义值来证明几何绑定。
-- `pair_pitch`、`backdrill.residual_stub` 和 Return VIA 位置/节距虽可用于离线计划/评分，但当前原生坐标表达式尚未完成，生成入口会明确拒绝，不会创建几何不动的假扫描。
+- 输入/输出 `entry_trace.gap`、`exit_trace.gap`、`backdrill.residual_stub` 和 Return VIA 位置/节距虽可用于离散重建计划/评分，但当前原生坐标表达式尚未完成，原生生成入口会明确拒绝，不会创建几何不动的假扫描。旧 `pair_pitch` 扫描已弃用并直接拒绝。
 - `ellipse`、`capsule`、`rounded_rectangle` 使用统一轮廓点沿铜层厚度拉伸后 Subtract；`merged_pair` 每层一个工具，`independent` 每层 P/N 各一个。非圆形 length/width/corner/rotation 暂不进入原生 Optimetrics，直到真实 AEDT 变量化几何验收完成。
 
 ## 版本/API 风险

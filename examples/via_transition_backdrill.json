@@ -9,17 +9,20 @@
     "center_x": 0.0,
     "center_y": 0.0,
     "pair_pitch": 0.8,
+    "signal_via_pitch": 0.8,
     "entry_layer": "L1",
     "exit_layer": "L10",
     "drill_start_layer": "L1",
     "drill_end_layer": "L14",
     "entry_trace": {
       "length": 3.0,
-      "width": 0.1
+      "width": 0.1,
+      "gap": 0.7
     },
     "exit_trace": {
       "length": 3.0,
-      "width": 0.1
+      "width": 0.1,
+      "gap": 0.7
     },
     "padstack": {
       "drill_diameter": 0.2,

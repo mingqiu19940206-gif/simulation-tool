@@ -30,7 +30,9 @@ class ViaTransitionSweepsTests(unittest.TestCase):
         # 基础轴 + 非圆形尺寸/角度/制造净距轴。
         self.assertGreaterEqual(len(VIA_SAFE_SWEEP_PATHS), 14)
         self.assertGreaterEqual(len(VIA_TOPOLOGY_SWEEP_PATHS), 14)
-        self.assertIn("via_transition.pair_pitch", VIA_SAFE_SWEEP_PATHS)
+        self.assertIn("via_transition.entry_trace.gap", VIA_SAFE_SWEEP_PATHS)
+        self.assertIn("via_transition.exit_trace.gap", VIA_SAFE_SWEEP_PATHS)
+        self.assertNotIn("via_transition.pair_pitch", VIA_SAFE_SWEEP_PATHS)
         self.assertIn("via_transition.backdrill.residual_stub", VIA_SAFE_SWEEP_PATHS)
         self.assertIn("via_transition.exit_layer", VIA_TOPOLOGY_SWEEP_PATHS)
         self.assertIn("via_transition.return_vias.count", VIA_TOPOLOGY_SWEEP_PATHS)
@@ -41,7 +43,7 @@ class ViaTransitionSweepsTests(unittest.TestCase):
         self.assertIn("via_transition.padstack.antipad.clearance", VIA_TOPOLOGY_SWEEP_PATHS)
 
     def test_02_three_by_three_gives_nine_variations(self) -> None:
-        self.config["sweeps"]["via_transition.pair_pitch"] = {"enabled": True, "start": 0.6, "stop": 1.0, "step": 0.2}
+        self.config["sweeps"]["via_transition.entry_trace.gap"] = {"enabled": True, "start": 0.5, "stop": 0.9, "step": 0.2}
         self.config["sweeps"]["via_transition.padstack.antipad_diameter"] = {"enabled": True, "start": 0.6, "stop": 0.8, "step": 0.1}
         plan = inspect_via_sweep_plan(self.config)
         self.assertEqual(plan.case_count, 9)
@@ -49,7 +51,7 @@ class ViaTransitionSweepsTests(unittest.TestCase):
         variations = iter_via_variations(plan)
         self.assertEqual(len(variations), 9)
         for variation in variations:
-            self.assertIn("via_transition.pair_pitch", variation)
+            self.assertIn("via_transition.entry_trace.gap", variation)
             self.assertIn("via_transition.padstack.antipad_diameter", variation)
 
     def test_03_topology_axis_blocked_with_reason(self) -> None:
@@ -60,7 +62,7 @@ class ViaTransitionSweepsTests(unittest.TestCase):
 
     def test_04_budget_exceeded_blocked(self) -> None:
         # 10 值 × 10 值 = 100 > 50 上限。
-        self.config["sweeps"]["via_transition.pair_pitch"] = {"enabled": True, "start": 0.2, "stop": 2.0, "step": 0.2}
+        self.config["sweeps"]["via_transition.entry_trace.gap"] = {"enabled": True, "start": 0.1, "stop": 1.0, "step": 0.1}
         self.config["sweeps"]["via_transition.padstack.antipad_diameter"] = {"enabled": True, "start": 0.2, "stop": 2.0, "step": 0.2}
         plan = inspect_via_sweep_plan(self.config, max_cases=50)
         self.assertTrue(any(level == "error" and "上限" in message for level, message in plan.issues))
@@ -83,8 +85,8 @@ class ViaTransitionSweepsTests(unittest.TestCase):
 
     def test_08_scan_values_respect_bounds(self) -> None:
         with self.assertRaises(ValueError):
-            via_scan_values("via_transition.pair_pitch", {"start": 0.0, "stop": 1.0, "step": 0.5})
-        values = via_scan_values("via_transition.pair_pitch", {"start": 0.6, "stop": 0.8, "step": 0.1})
+            via_scan_values("via_transition.entry_trace.gap", {"start": 0.0, "stop": 1.0, "step": 0.5})
+        values = via_scan_values("via_transition.entry_trace.gap", {"start": 0.6, "stop": 0.8, "step": 0.1})
         self.assertEqual(values, [0.6, 0.7, 0.8])
 
 

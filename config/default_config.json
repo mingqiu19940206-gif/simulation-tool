@@ -13,8 +13,8 @@
     "exit_layer": "L10",
     "drill_start_layer": "L1",
     "drill_end_layer": "L14",
-    "entry_trace": {"length": 3.0, "width": 0.1},
-    "exit_trace": {"length": 3.0, "width": 0.1},
+    "entry_trace": {"length": 3.0, "width": 0.1, "gap": 0.7},
+    "exit_trace": {"length": 3.0, "width": 0.1, "gap": 0.7},
     "padstack": {
       "drill_diameter": 0.2,
       "finished_hole_diameter": 0.15,
@@ -53,6 +53,9 @@
     },
     "return_vias": {
       "enabled": true,
+      "layout_mode": "standard",
+      "relative_offset_along_route": 0.0,
+      "relative_offset_outward": 0.7,
       "pattern": "side_pair",
       "count": 2,
       "offset_x": 0.0,
@@ -83,7 +86,7 @@
   "geometry": {"overlap": 0.001, "trace_join": "limited_miter", "miter_limit": 2.0},
   "gnd_vias": {"enabled": false, "pattern": "four_corner", "count": 4, "side_orientation": "top_bottom", "clearance_x": 0.35, "clearance_y": 0.35, "pitch_x": 0.8, "pitch_y": 0.8, "drill_diameter": 0.2, "finished_hole_diameter": 0.15, "plating_thickness": 0.025, "pad_diameter": 0.4, "antipad_diameter": 0.6, "start_layer": "L1", "end_layer": "L14", "connect_layers": ["L2"], "material": "copper", "barrel_model": "hollow", "create_top_ground_copper": false, "top_ground_clearance": 0.2, "custom_coordinates": []},
   "baseline_comparison": {"enabled": false, "compare_gnd_vias": true},
-  "simulation": {"enabled": true, "pcie_generation_preset": "custom", "create_differential_ports": true, "port_reference_mode": "auto_nearest", "port_reference_layer": "L2", "port_size_mode": "auto", "port_lateral_margin": 0.25, "create_airbox": true, "airbox_margin": 1.0, "open_boundary": "Radiation", "setup_name": "Setup1", "sweep_name": "Sweep1", "adaptive_frequency_ghz": 16.0, "max_passes": 12, "max_delta_s": 0.02, "automatically_use_causal_materials": true, "sweep_type": "Interpolating", "start_frequency_ghz": 0.01, "stop_frequency_ghz": 32.0, "step_frequency_ghz": 0.05, "interpolating_tolerance": 0.5, "interpolating_max_solutions": 250, "save_fields": false, "generate_reports": true, "report_outputs": {"Sdd11": true, "Sdd21": true, "Sdc21": true, "Scd21": true}, "generate_tdr": true},
+  "simulation": {"enabled": true, "pcie_generation_preset": "custom", "create_differential_ports": true, "port_reference_mode": "auto_nearest", "port_reference_layer": "L2", "port_size_mode": "auto", "port_lateral_margin": 0.25, "create_airbox": true, "airbox_margin": 1.0, "open_boundary": "Radiation", "setup_name": "Setup1", "sweep_name": "Sweep1", "adaptive_frequency_ghz": 16.0, "max_passes": 12, "max_delta_s": 0.02, "automatically_use_causal_materials": true, "sweep_type": "Interpolating", "start_frequency_ghz": 0.01, "stop_frequency_ghz": 32.0, "step_frequency_ghz": 0.05, "interpolating_tolerance": 0.5, "interpolating_max_solutions": 250, "save_fields": false, "generate_reports": true, "report_outputs": {"Sdd11": true, "Sdd21": true, "Sdc21": true, "Scd21": true}, "generate_tdr": true, "tdr_sweep": {"enabled": true, "sweep_name": "TDRSweep", "start_frequency_ghz": 0.05, "stop_frequency_ghz": 32.0, "step_frequency_ghz": 0.05, "max_points": 4096}},
   "sweep_execution": {"strategy": "hybrid", "variation_mode": "full_factorial", "max_cases": 200, "parallel_jobs": 1, "optimetrics_setup_name": "ParametricSetup1", "custom_variations": [], "resume": true, "retry_failed": true},
   "sweeps": {
     "trace.trace_width": {"enabled": false, "start": 0.08, "stop": 0.12, "step": 0.02},
@@ -96,6 +99,8 @@
     "capacitor.pad_rotation": {"enabled": false, "start": -10.0, "stop": 10.0, "step": 5.0},
     "antipad.global_expansion": {"enabled": false, "start": 0.0127, "stop": 0.0762, "step": 0.0127},
     "antipad.first_reference_expansion": {"enabled": false, "start": 0.0127, "stop": 0.0762, "step": 0.0127},
+    "via_transition.entry_trace.gap": {"enabled": false, "start": 0.5, "stop": 0.9, "step": 0.1},
+    "via_transition.exit_trace.gap": {"enabled": false, "start": 0.5, "stop": 0.9, "step": 0.1},
     "via_transition.padstack.antipad.diameter": {"enabled": false, "start": 0.5, "stop": 0.9, "step": 0.1},
     "via_transition.padstack.antipad.end_clearance": {"enabled": false, "start": 0.08, "stop": 0.18, "step": 0.02},
     "via_transition.padstack.antipad.side_clearance": {"enabled": false, "start": 0.08, "stop": 0.18, "step": 0.02},
