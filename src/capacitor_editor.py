@@ -278,18 +278,40 @@ class ScrollableFrame(ttk.Frame):
             natural_height = max(1, self.content.winfo_reqheight())
         except tk.TclError:
             return
-        window_height = max(viewport_height, natural_height) if self.fill_viewport else natural_height
-        window_size = (viewport_width, window_height)
-        if window_size != self._last_window_size:
-            self.canvas.itemconfigure(
-                self._window,
-                width=viewport_width,
-                height=window_height,
+        if self.fill_viewport:
+            window_height = max(viewport_height, natural_height)
+            window_size = (viewport_width, window_height)
+            if window_size != self._last_window_size:
+                self.canvas.itemconfigure(
+                    self._window,
+                    width=viewport_width,
+                    height=window_height,
+                )
+                self._last_window_size = window_size
+            self.canvas.configure(
+                scrollregion=(0, 0, viewport_width, window_height),
             )
+            return
+        # Do not force the embedded window to reqheight.  ttk.LabelFrame chrome
+        # is routinely under-counted, which clipped the last packed group
+        # (电容页「HFSS 本体创建选项」) even with the scrollbar at the bottom.
+        window_size = (viewport_width, natural_height)
+        if window_size != self._last_window_size:
+            self.canvas.itemconfigure(self._window, width=viewport_width)
             self._last_window_size = window_size
-        self.canvas.configure(
-            scrollregion=(0, 0, viewport_width, window_height),
-        )
+        try:
+            self.update_idletasks()
+        except tk.TclError:
+            return
+        try:
+            actual_height = max(1, int(self.content.winfo_height()))
+        except tk.TclError:
+            actual_height = natural_height
+        bbox = self.canvas.bbox(self._window) or self.canvas.bbox("all")
+        bottom = max(natural_height, actual_height)
+        if bbox is not None:
+            bottom = max(bottom, int(bbox[3]))
+        self.canvas.configure(scrollregion=(0, 0, viewport_width, bottom))
 
     def refresh_layout(self) -> None:
         """Request a layout pass after font or child-request changes."""

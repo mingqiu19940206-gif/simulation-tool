@@ -542,7 +542,7 @@ class SurfaceCapAntipadApp(tk.Tk):
 
     def _cap_section(self, parent: ttk.Frame, title: str) -> ttk.LabelFrame:
         frame = ttk.LabelFrame(parent, text=title, padding=(8, 6))
-        frame.pack(fill="x", expand=True, padx=3, pady=4)
+        frame.pack(fill="x", expand=False, padx=3, pady=4)
         frame.columnconfigure(1, weight=1)
         return frame
 
@@ -669,6 +669,8 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._add(bridge, 3, "桥接材料", "capacitor.bridge_material")
 
         hfss = self._cap_section(parameter_root, "HFSS 本体创建选项")
+        self.cap_hfss_box = hfss
+        hfss.pack_configure(pady=(4, 10))
         self._add(hfss, 0, "在 HFSS 中创建电容本体", "capacitor.create_body_in_hfss", boolean=True)
         self._add(hfss, 1, "预览中显示本体轮廓", "capacitor.show_body_outline_in_preview", boolean=True)
 

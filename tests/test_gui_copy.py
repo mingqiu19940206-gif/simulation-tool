@@ -216,6 +216,46 @@ class MainWindowCopyTests(unittest.TestCase):
             "在 HFSS 中创建电容本体",
         )
 
+    @staticmethod
+    def _ancestors(widget: tk.Misc) -> list[tk.Misc]:
+        chain: list[tk.Misc] = []
+        owner: tk.Misc | None = widget
+        while owner is not None:
+            chain.append(owner)
+            owner = getattr(owner, "master", None)
+        return chain
+
+    def test_create_body_checkbox_is_inside_inner_scroller(self) -> None:
+        self._map_720_window("电容与模型")
+        scroller = self.app.cap_parameter_scroller
+        checkbox = self.app.widgets["capacitor.create_body_in_hfss"]
+        label = self.app.field_labels["capacitor.create_body_in_hfss"]
+        hfss_box = getattr(self.app, "cap_hfss_box", None)
+        ancestors = self._ancestors(checkbox)
+        self.assertIn(scroller.content, ancestors)
+        self.assertIn(scroller, ancestors)
+        self.assertNotIn(checkbox, self.app.cap_parameter_column.pack_slaves())
+        if hfss_box is not None:
+            self.assertIn(hfss_box, ancestors)
+            self.assertIn(hfss_box, scroller.content.pack_slaves())
+        scroller.refresh_layout()
+        self.app.update()
+        self.app.update_idletasks()
+        scroller.canvas.yview_moveto(1.0)
+        self.app.update_idletasks()
+        content_top = scroller.content.winfo_rooty()
+        bottom = max(
+            label.winfo_rooty() + label.winfo_height() - content_top,
+            checkbox.winfo_rooty() + checkbox.winfo_height() - content_top,
+        )
+        if hfss_box is not None:
+            bottom = max(bottom, hfss_box.winfo_rooty() + hfss_box.winfo_height() - content_top)
+        region = [float(value) for value in str(scroller.canvas.cget("scrollregion")).split()]
+        self.assertEqual(len(region), 4)
+        self.assertGreaterEqual(region[3], bottom - 1)
+        view_bottom = scroller.canvas.canvasy(scroller.canvas.winfo_height())
+        self.assertLessEqual(bottom, view_bottom + 2)
+
     def _map_720_window(self, tab: str) -> None:
         self.app.geometry("1280x720+0+0")
         self.app.deiconify()
