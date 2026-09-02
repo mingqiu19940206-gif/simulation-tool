@@ -12,7 +12,10 @@ sys.path.insert(0, str(ROOT))
 
 from config_manager import ConfigManager, validate_config
 from geometry_calculator import GeometryCalculator
-from scenario_semantics import ScenarioNotImplementedError
+from scenario_semantics import (
+    ScenarioNotImplementedError,
+    require_sweep_supported_scenario,
+)
 
 
 class ScenarioDispatchTests(unittest.TestCase):
@@ -56,6 +59,26 @@ class ScenarioDispatchTests(unittest.TestCase):
         with self.assertRaises(ScenarioNotImplementedError) as ctx:
             generate_sweep_cases(cfg, ROOT / ".tmp" / "via_sweep")
         self.assertIn("via_transition.pair_pitch", str(ctx.exception))
+
+    def test_04b_unbound_stub_and_return_via_axes_fail_closed(self) -> None:
+        # pair_pitch is already covered above; residual_stub and Return VIA
+        # coordinates are the other unbound safe axes that must not emit a
+        # native Optimetrics setup whose HFSS geometry would stay frozen.
+        for path in (
+            "via_transition.backdrill.residual_stub",
+            "via_transition.return_vias.offset_x",
+            "via_transition.return_vias.offset_y",
+            "via_transition.return_vias.pitch_x",
+            "via_transition.return_vias.pitch_y",
+        ):
+            with self.subTest(path=path):
+                cfg = self._via_cfg()
+                cfg["sweeps"][path] = {
+                    "enabled": True, "start": 0.2, "stop": 0.4, "step": 0.2,
+                }
+                with self.assertRaises(ScenarioNotImplementedError) as ctx:
+                    require_sweep_supported_scenario(cfg)
+                self.assertIn(path, str(ctx.exception))
 
     def test_05_surface_capacitor_still_generates_hfss_script(self) -> None:
         from hfss_script_generator import HfssScriptGenerator

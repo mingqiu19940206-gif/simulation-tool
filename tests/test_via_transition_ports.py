@@ -61,6 +61,25 @@ class ViaTransitionPortsTests(unittest.TestCase):
             end_z = float(port.integration_line_end[2])
             self.assertNotEqual(start_z, end_z, port.name)
 
+    def test_05_in_and_out_use_local_nearest_reference_not_global_field(self) -> None:
+        """Each VIA end has its own nearest plane; capacitor's single layer must not win.
+
+        L1 entry → L2, L14 exit → L13.  A leftover ``port_reference_layer=L4``
+        is the surface-capacitor identity and must not be copied onto both ends.
+        """
+        self.cfg["simulation"]["port_reference_mode"] = "manual"
+        self.cfg["simulation"]["port_reference_layer"] = "L4"
+        geometry = GeometryCalculator(self.cfg).calculate()
+        by_name = {port.name: port for port in geometry.ports}
+        for name in ("PORT_IN_P", "PORT_IN_N"):
+            self.assertEqual(by_name[name].signal_layer, "L1", name)
+            self.assertEqual(by_name[name].reference_layer, "L2", name)
+            self.assertEqual(by_name[name].reference_conductor, "PLANE_L2", name)
+        for name in ("PORT_OUT_P", "PORT_OUT_N"):
+            self.assertEqual(by_name[name].signal_layer, "L14", name)
+            self.assertEqual(by_name[name].reference_layer, "L13", name)
+            self.assertEqual(by_name[name].reference_conductor, "PLANE_L13", name)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
