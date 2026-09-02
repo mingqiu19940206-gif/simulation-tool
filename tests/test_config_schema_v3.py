@@ -15,6 +15,8 @@ sys.path.insert(0, str(ROOT))
 from config_manager import (
     MM_PER_MIL,
     ConfigManager,
+    _LENGTH_SWEEPS,
+    _SECTION_LENGTH_FIELDS,
     normalize_config,
     to_external_config,
     validate_config,
@@ -217,6 +219,65 @@ class ConfigSchemaV3Tests(unittest.TestCase):
         self.assertTrue(math.isclose(drill_sweep["start"], 7.0 * MM_PER_MIL, abs_tol=1e-12))
         self.assertTrue(math.isclose(drill_sweep["stop"], 9.0 * MM_PER_MIL, abs_tol=1e-12))
         self.assertTrue(math.isclose(drill_sweep["step"], 1.0 * MM_PER_MIL, abs_tol=1e-12))
+
+    def test_11_via_trace_gap_sweeps_follow_file_units(self) -> None:
+        """entry/exit GAP sweeps use the same length-unit lists as other VIA lengths."""
+        self.assertIn("entry_trace.gap", _SECTION_LENGTH_FIELDS["via_transition"])
+        self.assertIn("exit_trace.gap", _SECTION_LENGTH_FIELDS["via_transition"])
+        self.assertIn("via_transition.entry_trace.gap", _LENGTH_SWEEPS)
+        self.assertIn("via_transition.exit_trace.gap", _LENGTH_SWEEPS)
+
+        cfg = copy.deepcopy(self.default)
+        sweeps = {
+            "via_transition.entry_trace.gap": (0.5, 0.9, 0.1),
+            "via_transition.exit_trace.gap": (0.4, 0.8, 0.2),
+        }
+        for path, (start, stop, step) in sweeps.items():
+            cfg["sweeps"][path] = {
+                "enabled": True, "start": start, "stop": stop, "step": step,
+            }
+        normalized, _ = normalize_config(cfg)
+        mil = to_external_config(normalized, "mil")
+        to_mil = 1.0 / MM_PER_MIL
+        for path, (start, stop, step) in sweeps.items():
+            sweep = mil["sweeps"][path]
+            self.assertTrue(
+                math.isclose(sweep["start"], start * to_mil, rel_tol=0, abs_tol=1e-9),
+                (path, sweep["start"], start * to_mil),
+            )
+            self.assertTrue(
+                math.isclose(sweep["stop"], stop * to_mil, rel_tol=0, abs_tol=1e-9),
+                (path, sweep["stop"], stop * to_mil),
+            )
+            self.assertTrue(
+                math.isclose(sweep["step"], step * to_mil, rel_tol=0, abs_tol=1e-9),
+                (path, sweep["step"], step * to_mil),
+            )
+        internal, _ = normalize_config(mil)
+        for path, (start, stop, step) in sweeps.items():
+            sweep = internal["sweeps"][path]
+            self.assertTrue(math.isclose(sweep["start"], start, abs_tol=1e-9), path)
+            self.assertTrue(math.isclose(sweep["stop"], stop, abs_tol=1e-9), path)
+            self.assertTrue(math.isclose(sweep["step"], step, abs_tol=1e-9), path)
+
+        # Hand-authored mil `start: 7` on a GAP axis is 7 mil, not 7 mm.
+        authored = to_external_config(copy.deepcopy(self.default), "mil")
+        for path in ("via_transition.entry_trace.gap", "via_transition.exit_trace.gap"):
+            authored["sweeps"][path] = {
+                "enabled": True,
+                "start": 7.0,
+                "stop": 9.0,
+                "step": 1.0,
+            }
+        loaded, _ = normalize_config(authored)
+        for path in ("via_transition.entry_trace.gap", "via_transition.exit_trace.gap"):
+            sweep = loaded["sweeps"][path]
+            self.assertTrue(
+                math.isclose(sweep["start"], 7.0 * MM_PER_MIL, abs_tol=1e-12), path)
+            self.assertTrue(
+                math.isclose(sweep["stop"], 9.0 * MM_PER_MIL, abs_tol=1e-12), path)
+            self.assertTrue(
+                math.isclose(sweep["step"], 1.0 * MM_PER_MIL, abs_tol=1e-12), path)
 
 
 if __name__ == "__main__":

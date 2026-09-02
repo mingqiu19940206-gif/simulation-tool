@@ -18,7 +18,7 @@ from config_manager import (
     MM_PER_MIL, PACKAGE_PRESETS,
     SUPPORTED_AEDT_VERSIONS, apply_package_preset,
     convert_length, derive_capacitor_values, format_length, format_number,
-    format_validation_report,
+    format_validation_report, via_trace_center_pitch,
 )
 from build_info import about_message
 from capacitor_editor import (
@@ -42,7 +42,8 @@ APP_TITLE = f"PCIe AC耦合电容区域无源优化工具 V{APP_VERSION}"
 # VIA 换层页：几何尺寸参数 → 编号（方案 B 编号表，见示意图编号联动提示词 §四）。
 # 编号只用于 label 文本与图上标注，不改变 path / variables / widgets 映射。
 VIA_PARAM_NUMBERS: Dict[str, str] = {
-    "via_transition.pair_pitch": "①",
+    "via_transition.entry_trace.center_to_center": "①",
+    "via_transition.exit_trace.center_to_center": "①",
     "via_transition.signal_via_pitch": "㉑",
     "via_transition.fanout.style": "㉒",
     "via_transition.fanout.direction": "㉓",
@@ -54,8 +55,10 @@ VIA_PARAM_NUMBERS: Dict[str, str] = {
     "via_transition.drill_end_layer": "⑥",
     "via_transition.entry_trace.length": "⑦",
     "via_transition.entry_trace.width": "⑧",
+    "via_transition.entry_trace.gap": "输入GAP",
     "via_transition.exit_trace.length": "⑨",
     "via_transition.exit_trace.width": "⑩",
+    "via_transition.exit_trace.gap": "输出GAP",
     "via_transition.padstack.drill_diameter": "⑪",
     "via_transition.padstack.finished_hole_diameter": "⑫",
     "via_transition.padstack.plating_thickness": "⑬",
@@ -147,6 +150,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         self.formula_labels: Dict[str, ttk.Label] = {}
         self.field_labels: Dict[str, ttk.Label] = {}
         self.length_paths: set[str] = set()
+        self._derived_display_paths: set[str] = set()
         self._length_mm_cache: Dict[str, float] = {}
         self._length_display_snapshot: Dict[str, str] = {}
         self.numeric_paths: set[str] = set()
@@ -172,6 +176,11 @@ class SurfaceCapAntipadApp(tk.Tk):
     def _configure_editor_styles(self) -> None:
         style = ttk.Style(self)
         style.configure("Derived.TEntry", fieldbackground="#eef2f7", foreground="#334155")
+        style.map(
+            "Derived.TEntry",
+            fieldbackground=[("readonly", "#eef2f7"), ("disabled", "#e2e8f0")],
+            foreground=[("readonly", "#334155"), ("disabled", "#64748b")],
+        )
         style.configure("Invalid.TEntry", fieldbackground="#fff0f0", foreground="#991b1b")
         style.configure("Warning.TEntry", fieldbackground="#fff7e6", foreground="#9a3412")
         style.configure("StatusGood.TLabel", foreground="#166534", font=("TkDefaultFont", 10, "bold"))
@@ -226,6 +235,8 @@ class SurfaceCapAntipadApp(tk.Tk):
     def _apply_main_toolbar_layout(self) -> None:
         compact = self.winfo_width() < 1320
         for button, full_text, compact_text in self.main_toolbar_buttons:
+            if full_text == "生成并运行" and getattr(self, "_via_run_button_offline", False):
+                continue
             button.configure(text=compact_text if compact else full_text)
         self.unit_caption.configure(text="单位：" if compact else "显示/保存单位：")
         self.unit_combo.configure(width=5 if compact else 7)
@@ -303,7 +314,8 @@ class SurfaceCapAntipadApp(tk.Tk):
     def _add(self, parent: ttk.Frame, row: int, label: str, path: str, *, length: bool = False,
              numeric: bool = False, integer: bool = False, boolean: bool = False,
              values: Optional[Sequence[str]] = None, unit: str = "",
-             display_values: Optional[Mapping[str, str]] = None, formula: str = "") -> tk.Widget:
+             display_values: Optional[Mapping[str, str]] = None, formula: str = "",
+             derived: bool = False) -> tk.Widget:
         label_widget = ttk.Label(parent, text=label, justify="left", wraplength=168)
         label_widget.grid(row=row, column=0, sticky="nw", padx=4, pady=3)
         self.field_labels[path] = label_widget
@@ -324,6 +336,17 @@ class SurfaceCapAntipadApp(tk.Tk):
             widget.grid(row=row, column=1, sticky="ew", padx=4)
             if path == "capacitor.package":
                 widget.bind("<<ComboboxSelected>>", self._package_changed)
+        elif derived:
+            # Classic Entry so readonlybackground is honored on Windows native
+            # ttk themes, which ignore Derived.TEntry fieldbackground.
+            widget = tk.Entry(
+                parent, textvariable=var, relief="sunken",
+                readonlybackground="#eef2f7", disabledbackground="#e2e8f0",
+                foreground="#334155", insertwidth=0, takefocus=0,
+            )
+            widget.configure(state="readonly")
+            widget.bind("<Key>", lambda event: "break")
+            widget.grid(row=row, column=1, sticky="ew", padx=4)
         else:
             widget = ttk.Entry(parent, textvariable=var)
             widget.grid(row=row, column=1, sticky="ew", padx=4)
@@ -432,6 +455,16 @@ class SurfaceCapAntipadApp(tk.Tk):
         for path, widget in self.widgets.items():
             if not path.startswith(prefixes):
                 continue
+            if path in getattr(self, "_derived_display_paths", ()):
+                formula = ""
+                label = self.formula_labels.get(path)
+                if label is not None:
+                    formula = str(label.cget("text") or "")
+                if enabled:
+                    self._set_derived_state(path, True, formula or "= 宽度 + GAP")
+                else:
+                    self._configure_widget_state(widget, False)
+                continue
             self._configure_widget_state(widget, enabled)
 
     @staticmethod
@@ -439,7 +472,11 @@ class SurfaceCapAntipadApp(tk.Tk):
         try:
             if isinstance(widget, ttk.Combobox):
                 widget.configure(state="readonly" if enabled else "disabled")
-            elif isinstance(widget, (ttk.Entry, ttk.Checkbutton, ttk.Radiobutton)):
+            elif isinstance(widget, ttk.Entry):
+                widget.configure(state="normal" if enabled else "disabled")
+            elif isinstance(widget, tk.Entry):
+                widget.configure(state="readonly" if enabled else "disabled")
+            elif isinstance(widget, (ttk.Checkbutton, ttk.Radiobutton)):
                 widget.configure(state="normal" if enabled else "disabled")
         except tk.TclError:
             pass
@@ -874,17 +911,19 @@ class SurfaceCapAntipadApp(tk.Tk):
                               "差分对（当前仅支持）")
         self._add(f, 1, "② 走线方向", "via_transition.route_axis", values=("x", "y"),
                   display_values={"x": "X 方向", "y": "Y 方向"})
-        self._add(f, 2, "① 差分对中心距（走线）", "via_transition.pair_pitch", length=True)
-        self._add(f, 3, "㉑ 信号孔中心距（孔间距）", "via_transition.signal_via_pitch", length=True)
-        self._add(f, 4, "中心 X", "via_transition.center_x", length=True)
-        self._add(f, 5, "中心 Y", "via_transition.center_y", length=True)
-        self._add(f, 6, "③ 输入层", "via_transition.entry_layer", values=signal_layers)
-        self._add(f, 7, "④ 输出层", "via_transition.exit_layer", values=signal_layers)
-        self._add(f, 8, "⑤ 机械钻孔起始层", "via_transition.drill_start_layer", values=conductive_layers)
-        self._add(f, 9, "⑥ 机械钻孔终止层", "via_transition.drill_end_layer", values=conductive_layers)
+        self._register_hidden_variable("via_transition.pair_pitch")
+        self.length_paths.add("via_transition.pair_pitch")
+        self.numeric_paths.add("via_transition.pair_pitch")
+        self._add(f, 2, "㉑ 信号孔中心距（孔间距）", "via_transition.signal_via_pitch", length=True)
+        self._add(f, 3, "中心 X", "via_transition.center_x", length=True)
+        self._add(f, 4, "中心 Y", "via_transition.center_y", length=True)
+        self._add(f, 5, "③ 输入层", "via_transition.entry_layer", values=signal_layers)
+        self._add(f, 6, "④ 输出层", "via_transition.exit_layer", values=signal_layers)
+        self._add(f, 7, "⑤ 机械钻孔起始层", "via_transition.drill_start_layer", values=conductive_layers)
+        self._add(f, 8, "⑥ 机械钻孔终止层", "via_transition.drill_end_layer", values=conductive_layers)
         ttk.Label(f, text="层名来自“反焊盘与叠层”。输入/输出层须为信号层，机械钻孔须为导体层。",
                   foreground="#64748b", wraplength=430, justify="left").grid(
-                      row=10, column=0, columnspan=3, sticky="ew", pady=(2, 0))
+                      row=9, column=0, columnspan=3, sticky="ew", pady=(2, 0))
 
         f = group("走线扇出")
         self._add(f, 0, "㉒ 扇出方式", "via_transition.fanout.style",
@@ -893,15 +932,23 @@ class SurfaceCapAntipadApp(tk.Tk):
                   values=("auto", "expand", "contract"),
                   display_values={"auto": "自动", "expand": "向外", "contract": "向内"})
         self._add(f, 2, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
-        ttk.Label(f, text="孔间距等于差分对中心距时，扇出三项自动停用。",
+        ttk.Label(f, text="两侧走线中心距均等于孔间距时，扇出三项自动停用。",
                   foreground="#64748b", wraplength=430, justify="left").grid(
                       row=3, column=0, columnspan=3, sticky="ew", pady=(2, 0))
 
         f = group("输入/输出走线")
         self._add(f, 0, "⑦ 输入走线长度", "via_transition.entry_trace.length", length=True)
         self._add(f, 1, "⑧ 输入走线宽度", "via_transition.entry_trace.width", length=True)
-        self._add(f, 2, "⑨ 输出走线长度", "via_transition.exit_trace.length", length=True)
-        self._add(f, 3, "⑩ 输出走线宽度", "via_transition.exit_trace.width", length=True)
+        self._add(f, 2, "输入 GAP", "via_transition.entry_trace.gap", length=True)
+        self._add(f, 3, "输入中心距", "via_transition.entry_trace.center_to_center",
+                  length=True, formula="= 宽度 + GAP")
+        self._derived_display_paths.add("via_transition.entry_trace.center_to_center")
+        self._add(f, 4, "⑨ 输出走线长度", "via_transition.exit_trace.length", length=True)
+        self._add(f, 5, "⑩ 输出走线宽度", "via_transition.exit_trace.width", length=True)
+        self._add(f, 6, "输出 GAP", "via_transition.exit_trace.gap", length=True)
+        self._add(f, 7, "输出中心距", "via_transition.exit_trace.center_to_center",
+                  length=True, formula="= 宽度 + GAP")
+        self._derived_display_paths.add("via_transition.exit_trace.center_to_center")
 
         f = group("Signal VIA Padstack")
         self._add(f, 0, "⑪ 钻孔直径", "via_transition.padstack.drill_diameter", length=True)
@@ -1120,6 +1167,8 @@ class SurfaceCapAntipadApp(tk.Tk):
         self.unit_var.set(self.display_unit)
         self._ui_sync = True
         for path, var in self.variables.items():
+            if path in self._derived_display_paths:
+                continue
             value = _get(self.config, path)
             if path in self.enum_labels:
                 value = self.enum_labels[path].get(str(value), str(value))
@@ -1150,6 +1199,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._refresh_stackup()
         self._update_unit_labels()
         self._apply_scenario_linkage()
+        self._sync_via_derived_centers()
         self._schedule_refresh()
 
     def _collect(self) -> Dict[str, Any]:
@@ -1157,6 +1207,8 @@ class SurfaceCapAntipadApp(tk.Tk):
         data["units"] = self.display_unit
         data["_internal_units"] = "mm"
         for path, var in self.variables.items():
+            if path in self._derived_display_paths:
+                continue
             raw = var.get()
             if path == "gnd_vias.connect_layers":
                 value: Any = [item.strip() for item in str(raw).split(",") if item.strip()]
@@ -1309,6 +1361,13 @@ class SurfaceCapAntipadApp(tk.Tk):
         if isinstance(widget, ttk.Entry):
             widget.configure(state="readonly" if derived else "normal",
                              style="Derived.TEntry" if derived else "TEntry")
+        elif isinstance(widget, tk.Entry):
+            widget.configure(
+                state="readonly" if derived else "disabled",
+                readonlybackground="#eef2f7",
+                disabledbackground="#e2e8f0",
+                foreground="#334155",
+            )
         label = self.formula_labels.get(path)
         if label:
             label.configure(text=formula)
@@ -1370,6 +1429,45 @@ class SurfaceCapAntipadApp(tk.Tk):
         transition_widget = self.widgets.get("trace.transition_length")
         if transition_widget is not None:
             transition_widget.configure(state="normal" if escape_mode == "smooth_s_bend" else "disabled")
+
+    def _length_var_mm(self, path: str) -> float:
+        shown = str(self.variables[path].get()).strip()
+        if (shown == self._length_display_snapshot.get(path)
+                and path in self._length_mm_cache):
+            return self._length_mm_cache[path]
+        value = convert_length(float(shown), self.display_unit, "mm")
+        self._length_mm_cache[path] = value
+        self._length_display_snapshot[path] = shown
+        return value
+
+    def _via_side_center_mm(self, side: str) -> float:
+        width = self._length_var_mm(f"via_transition.{side}.width")
+        gap_path = f"via_transition.{side}.gap"
+        if gap_path in self.variables:
+            return width + self._length_var_mm(gap_path)
+        return self._length_var_mm("via_transition.pair_pitch")
+
+    def _sync_via_derived_centers(self) -> None:
+        for side, path in (
+            ("entry_trace", "via_transition.entry_trace.center_to_center"),
+            ("exit_trace", "via_transition.exit_trace.center_to_center"),
+        ):
+            if path not in self.variables:
+                continue
+            self._set_derived_state(path, True, "= 宽度 + GAP")
+            try:
+                center_mm = self._via_side_center_mm(side)
+            except (TypeError, ValueError, tk.TclError, KeyError):
+                continue
+            display = format_length(center_mm, self.display_unit)
+            previous = self._ui_sync
+            self._ui_sync = True
+            try:
+                self._length_mm_cache[path] = center_mm
+                self._length_display_snapshot[path] = display
+                self.variables[path].set(display)
+            finally:
+                self._ui_sync = previous
 
     def _sync_via_fields(self) -> None:
         """集中处理 VIA 换层页的字段联动与派生值（改动 1–4）。
@@ -1468,15 +1566,15 @@ class SurfaceCapAntipadApp(tk.Tk):
                 finally:
                     self._ui_sync = False
 
-        # 扇出字段联动：孔间距 == 走线中心距时无需扇出，禁用扇出相关控件。
+        # 扇出字段联动：任一端走线中心距 ≠ 孔间距时启用扇出；两端都相等则停用。
         try:
-            svp = convert_length(
-                float(self.variables["via_transition.signal_via_pitch"].get()),
-                self.display_unit, "mm")
-            pp = convert_length(
-                float(self.variables["via_transition.pair_pitch"].get()),
-                self.display_unit, "mm")
-            fanout_active = not math.isclose(svp, pp, abs_tol=1e-12)
+            svp = self._length_var_mm("via_transition.signal_via_pitch")
+            entry_c = self._via_side_center_mm("entry_trace")
+            exit_c = self._via_side_center_mm("exit_trace")
+            fanout_active = (
+                not math.isclose(svp, entry_c, abs_tol=1e-12)
+                or not math.isclose(svp, exit_c, abs_tol=1e-12)
+            )
         except (TypeError, ValueError, tk.TclError, KeyError):
             fanout_active = True
         for path in ("via_transition.fanout.style", "via_transition.fanout.direction",
@@ -1491,6 +1589,7 @@ class SurfaceCapAntipadApp(tk.Tk):
                 widget.configure(state=state)
             except tk.TclError:
                 pass
+        self._sync_via_derived_centers()
 
         # 改动 4：成品孔直径只读派生（= 钻孔 − 2×镀铜）。
         self._set_derived_state(
@@ -1668,26 +1767,38 @@ class SurfaceCapAntipadApp(tk.Tk):
         drill = float(padstack.get("drill_diameter", 0.0) or 0.0)
         plating = float(padstack.get("plating_thickness", 0.0) or 0.0)
         finished = drill - 2.0 * plating
-        lines = [f"成品孔径 = 钻孔 − 2×镀铜 = {format_length(finished, self.display_unit)} {self.display_unit}"]
+        errors = [(rule_id, str(text).strip()) for rule_id, text in errors if str(text).strip()]
+        warnings = [(rule_id, str(text).strip()) for rule_id, text in warnings if str(text).strip()]
+        issue_lines: List[str] = []
+        if errors:
+            for rule_id, text in errors:
+                issue_lines.append(f"错误 [{rule_id}] {text}")
+        elif warnings:
+            for rule_id, text in warnings[:8]:
+                issue_lines.append(f"警告 [{rule_id}] {text}")
+        else:
+            issue_lines.append("✓ VIA 配置有效")
+        derived = [f"成品孔径 = 钻孔 − 2×镀铜 = {format_length(finished, self.display_unit)} {self.display_unit}"]
         for via in getattr(geometry, "signal_vias", []):
             backdrill = "有" if getattr(via, "backdrilled", False) else "无"
-            lines.append(f"{via.name}（{via.signal}）：输入={via.entry_layer} 输出={via.exit_layer}；"
-                         f"背钻={backdrill}；残桩={format_length(getattr(via, 'actual_residual_stub', 0.0), self.display_unit)} {self.display_unit}")
+            derived.append(
+                f"{via.name}（{via.signal}）：输入={via.entry_layer} 输出={via.exit_layer}；"
+                f"背钻={backdrill}；残桩={format_length(getattr(via, 'actual_residual_stub', 0.0), self.display_unit)} {self.display_unit}"
+            )
         if getattr(geometry, "return_vias", []):
-            lines.append(f"回流地孔（Return VIA）数量：{len(geometry.return_vias)}")
+            derived.append(f"回流地孔（Return VIA）数量：{len(geometry.return_vias)}")
         if getattr(geometry, "ports", []):
-            lines.append(f"端口：{len(geometry.ports)} 个；差分对：{len(getattr(geometry, 'differential_pairs', []))} 个")
-        if errors:
-            lines.append(f"错误 {len(errors)}：")
-            for rule_id, text in errors[:6]:
-                lines.append(f"  [{rule_id}] {text}")
-        elif warnings:
-            lines.append(f"警告 {len(warnings)}：")
-            for rule_id, text in warnings[:4]:
-                lines.append(f"  [{rule_id}] {text}")
-        else:
-            lines.append("✓ VIA 配置有效")
+            derived.append(
+                f"端口：{len(geometry.ports)} 个；差分对：{len(getattr(geometry, 'differential_pairs', []))} 个"
+            )
+        lines = issue_lines + derived
         self.via_feedback_var.set("\n".join(lines))
+        feedback_text = getattr(self, "via_feedback_text", None)
+        if feedback_text is not None:
+            try:
+                feedback_text.configure(height=max(5, min(14, len(lines) + 1)))
+            except tk.TclError:
+                pass
         self._via_last_render = (config, geometry)
         self._draw_via_top_view(config, geometry)
         self._draw_via_cross_section(config, geometry)
@@ -1801,16 +1912,21 @@ class SurfaceCapAntipadApp(tk.Tk):
         center_y = float(vt.get("center_y", 0.0))
         pair_pitch = float(vt.get("pair_pitch", 0.0))
         signal_via_pitch = float(vt.get("signal_via_pitch", pair_pitch))
-        entry_w = float(vt.get("entry_trace", {}).get("width", 0.0))
-        entry_len = float(vt.get("entry_trace", {}).get("length", 0.0))
-        exit_w = float(vt.get("exit_trace", {}).get("width", 0.0))
-        exit_len = float(vt.get("exit_trace", {}).get("length", 0.0))
+        entry = vt.get("entry_trace", {}) if isinstance(vt.get("entry_trace"), Mapping) else {}
+        exit_tr = vt.get("exit_trace", {}) if isinstance(vt.get("exit_trace"), Mapping) else {}
+        entry_w = float(entry.get("width", 0.0))
+        entry_len = float(entry.get("length", 0.0))
+        entry_pitch = via_trace_center_pitch(entry, pair_pitch)
+        entry_gap = entry_pitch - entry_w
+        exit_w = float(exit_tr.get("width", 0.0))
+        exit_len = float(exit_tr.get("length", 0.0))
+        exit_pitch = via_trace_center_pitch(exit_tr, pair_pitch)
+        exit_gap = exit_pitch - exit_w
         fanout_cfg = vt.get("fanout") if isinstance(vt.get("fanout"), Mapping) else {}
         fanout_style = str(fanout_cfg.get("style", "deg45"))
         fanout_direction = str(fanout_cfg.get("direction", "auto"))
-        fanout_delta = (signal_via_pitch - pair_pitch) / 2.0
-        # 耦合直线段位于 y = pair_pitch/2（走线中心距），尺寸标注沿该段放置。
-        trace_y = pair_pitch / 2.0
+        entry_trace_y = entry_pitch / 2.0
+        exit_trace_y = exit_pitch / 2.0
 
         placer = CanvasLabelPlacer(canvas, width, height, safe=10)
         # 先把已绘制的走线/信号孔/回流孔包围盒标记为占位，使标签自动避让图形。
@@ -1824,60 +1940,75 @@ class SurfaceCapAntipadApp(tk.Tk):
 
         # (path, label, p1, p2, dashed, lane)
         dims: List[Tuple[str, str, Tuple[float, float], Tuple[float, float], bool, int]] = []
-        # ① 差分对中心距：标注在端口端（走线端），走线按 pair_pitch 布线。
-        dims.append(("via_transition.pair_pitch",
-                     f"① 差分对中心距（走线） {fmt(pair_pitch)} {unit}",
-                     (center_x - entry_len, center_y - pair_pitch / 2.0),
-                     (center_x - entry_len, center_y + pair_pitch / 2.0), False, 0))
+        dims.append(("via_transition.entry_trace.center_to_center",
+                     f"输入中心距 {fmt(entry_pitch)} {unit}",
+                     (center_x - entry_len, center_y - entry_pitch / 2.0),
+                     (center_x - entry_len, center_y + entry_pitch / 2.0), False, 0))
+        dims.append(("via_transition.exit_trace.center_to_center",
+                     f"输出中心距 {fmt(exit_pitch)} {unit}",
+                     (center_x + exit_len, center_y - exit_pitch / 2.0),
+                     (center_x + exit_len, center_y + exit_pitch / 2.0), False, 0))
         # ㉑ 信号孔中心距：标注在孔端，与走线中心距相互独立。
         dims.append(("via_transition.signal_via_pitch",
                      f"㉑ 信号孔间距 {fmt(signal_via_pitch)} {unit}",
                      (center_x, center_y - signal_via_pitch / 2.0),
                      (center_x, center_y + signal_via_pitch / 2.0), False, 0))
-        gap = pair_pitch - entry_w
-        if gap > 0.0:
-            dims.append(("via_transition.entry_trace.width",
-                         f"① 线距 gap {fmt(gap)} {unit}",
-                         (center_x - entry_len, center_y + pair_pitch / 2.0 - entry_w / 2.0),
-                         (center_x - entry_len, center_y - pair_pitch / 2.0 + entry_w / 2.0),
+        if entry_gap > 0.0:
+            dims.append(("via_transition.entry_trace.gap",
+                         f"输入 GAP {fmt(entry_gap)} {unit}",
+                         (center_x - entry_len, center_y + entry_pitch / 2.0 - entry_w / 2.0),
+                         (center_x - entry_len, center_y - entry_pitch / 2.0 + entry_w / 2.0),
+                         True, 0))
+        if exit_gap > 0.0:
+            dims.append(("via_transition.exit_trace.gap",
+                         f"输出 GAP {fmt(exit_gap)} {unit}",
+                         (center_x + exit_len, center_y + exit_pitch / 2.0 - exit_w / 2.0),
+                         (center_x + exit_len, center_y - exit_pitch / 2.0 + exit_w / 2.0),
                          True, 0))
         dims.append(("via_transition.entry_trace.width",
                      f"⑧ 输入宽 {fmt(entry_w)} {unit}",
-                     (center_x - entry_len / 2.0, center_y + trace_y - entry_w / 2.0),
-                     (center_x - entry_len / 2.0, center_y + trace_y + entry_w / 2.0),
+                     (center_x - entry_len / 2.0, center_y + entry_trace_y - entry_w / 2.0),
+                     (center_x - entry_len / 2.0, center_y + entry_trace_y + entry_w / 2.0),
                      False, 0))
         dims.append(("via_transition.entry_trace.length",
                      f"⑦ 输入长 {fmt(entry_len)} {unit}",
-                     (center_x - entry_len, center_y + trace_y + entry_w / 2.0),
-                     (center_x, center_y + trace_y + entry_w / 2.0),
+                     (center_x - entry_len, center_y + entry_trace_y + entry_w / 2.0),
+                     (center_x, center_y + entry_trace_y + entry_w / 2.0),
                      False, 1))
         dims.append(("via_transition.exit_trace.width",
                      f"⑩ 输出宽 {fmt(exit_w)} {unit}",
-                     (center_x + exit_len / 2.0, center_y + trace_y - exit_w / 2.0),
-                     (center_x + exit_len / 2.0, center_y + trace_y + exit_w / 2.0),
+                     (center_x + exit_len / 2.0, center_y + exit_trace_y - exit_w / 2.0),
+                     (center_x + exit_len / 2.0, center_y + exit_trace_y + exit_w / 2.0),
                      False, 0))
         dims.append(("via_transition.exit_trace.length",
                      f"⑨ 输出长 {fmt(exit_len)} {unit}",
-                     (center_x, center_y + trace_y + exit_w / 2.0),
-                     (center_x + exit_len, center_y + trace_y + exit_w / 2.0),
+                     (center_x, center_y + exit_trace_y + exit_w / 2.0),
+                     (center_x + exit_len, center_y + exit_trace_y + exit_w / 2.0),
                      False, 1))
-        # 扇出标注：孔间距 ≠ 走线中心距时，标注 45°/弧扇出段与耦合直线段。
-        if not math.isclose(signal_via_pitch, pair_pitch, abs_tol=1e-9):
+        # 扇出标注：任一端孔间距 ≠ 走线中心距时，在该端标注 45°/弧扇出段与耦合直线段。
+        style_label = "弧" if fanout_style == "arc" else "45°"
+        for _side, length, pitch, x_sign in (
+            ("entry", entry_len, entry_pitch, -1.0),
+            ("exit", exit_len, exit_pitch, 1.0),
+        ):
+            if math.isclose(signal_via_pitch, pitch, abs_tol=1e-9):
+                continue
+            fanout_delta = (signal_via_pitch - pitch) / 2.0
             fanout_x = abs(fanout_delta)
-            style_label = "弧" if fanout_style == "arc" else "45°"
             direction_label = "向外" if fanout_delta > 0 else "向内"
             if fanout_direction != "auto":
                 direction_label = "向外" if fanout_direction == "expand" else "向内"
-            fold_x = center_x - fanout_x
+            fold_x = center_x + x_sign * fanout_x
+            port_x = center_x + x_sign * length
             dims.append(("via_transition.fanout.style",
                          f"㉒ {style_label}扇出·{direction_label}",
                          (center_x, center_y + signal_via_pitch / 2.0),
-                         (fold_x, center_y + pair_pitch / 2.0), True, 1))
-            straight_len = max(0.0, entry_len - fanout_x)
+                         (fold_x, center_y + pitch / 2.0), True, 1))
+            straight_len = max(0.0, length - fanout_x)
             dims.append(("via_transition.fanout.straight_length",
                          f"㉔ 耦合直线 {fmt(straight_len)} {unit}",
-                         (fold_x, center_y + pair_pitch / 2.0),
-                         (center_x - entry_len, center_y + pair_pitch / 2.0), False, 2))
+                         (fold_x, center_y + pitch / 2.0),
+                         (port_x, center_y + pitch / 2.0), False, 2))
 
         signal_vias = list(getattr(geometry, "signal_vias", []))
         if signal_vias:
@@ -1995,10 +2126,28 @@ class SurfaceCapAntipadApp(tk.Tk):
 
     def _dimension_path_from_event(self, event: tk.Event) -> Optional[str]:
         canvas = event.widget
-        for tag in canvas.gettags("current"):
-            tag = str(tag)
-            if tag.startswith("dimension:"):
-                return tag[len("dimension:"):]
+
+        def path_from_tags(tags: Sequence[str]) -> Optional[str]:
+            for tag in tags:
+                text = str(tag)
+                if text.startswith("dimension:"):
+                    return text[len("dimension:"):]
+            return None
+
+        current = canvas.find_withtag("current")
+        if current:
+            path = path_from_tags(canvas.gettags(current[0]))
+            if path:
+                return path
+        try:
+            x = float(getattr(event, "x", 0))
+            y = float(getattr(event, "y", 0))
+        except (TypeError, ValueError):
+            return None
+        for item in reversed(canvas.find_overlapping(x, y, x, y)):
+            path = path_from_tags(canvas.gettags(item))
+            if path:
+                return path
         return None
 
     def _navigate_via_parameter(self, path: str) -> None:
@@ -2075,9 +2224,11 @@ class SurfaceCapAntipadApp(tk.Tk):
         name_cap = max(60, int((width - pad * 2 - marker_gutter) * 0.42))
         layer_name_gutter = max(60, int(min(max_name_width + 8, name_cap)))
         x1 = pad + marker_gutter + layer_name_gutter
-        band_available = max(80, width - x1 - pad)
+        right_pad = pad
+        band_available = max(80, width - x1 - right_pad)
         geometry_width = min(320, band_available)
-        x2 = x1 + geometry_width
+        x2 = min(x1 + geometry_width, width - right_pad)
+        geometry_width = max(40.0, x2 - x1)
         title_y = pad
         note_y = title_y + title_line + 3
         y = note_y + label_line + 9
@@ -2127,7 +2278,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         has_return = bool(return_vias) and return_diam > 0.0
         gap_mm = 0.12 if has_return else 0.0
         total_span_mm = signal_diam + gap_mm + return_diam if has_return else signal_diam
-        px_per_mm = max(20.0, (geometry_width - 8) / total_span_mm)
+        px_per_mm = max(1.0, (geometry_width - 8) / max(total_span_mm, 1e-9))
         center_px = x1 + 4 + signal_diam / 2.0 * px_per_mm
         return_px = center_px + (signal_diam / 2.0 + gap_mm + return_diam / 2.0) * px_per_mm
 
@@ -2339,8 +2490,7 @@ class SurfaceCapAntipadApp(tk.Tk):
                            text=note_text,
                            fill="#9a3412", font=small_font, tags=("hud-label", "scale-note"))
         content_bottom = legend_y + pad
-        content_width = max(width, int(x2) + pad)
-        canvas.configure(scrollregion=(0, 0, content_width, content_bottom))
+        canvas.configure(scrollregion=(0, 0, width, content_bottom))
 
     # ---- 双向联动（参数 → 图高亮） ----
 

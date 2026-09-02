@@ -128,6 +128,10 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         super()._unit_changed(_event)
         if self.unit_var.get() == self.display_unit:
             self._set_ready_status()
+        if self._scenario_is_via():
+            self._sync_via_fields()
+            self._redraw_via_diagrams()
+            self.refresh_visuals()
 
     def _install_combobox_wheel_guard(self) -> None:
         """Keep a closed combobox from consuming the page-scroll wheel event."""
@@ -426,44 +430,65 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
               "差分对（当前仅支持）")
         add("route", frame, 1, "② 换层方向", "via_transition.route_axis",
             values=("x", "y"), display_values={"x": "X 方向", "y": "Y 方向"})
-        add("route", frame, 2, "① 差分对中心距（走线）", "via_transition.pair_pitch", length=True)
-        add("route", frame, 3, "㉑ 信号孔中心距（孔间距）", "via_transition.signal_via_pitch", length=True)
-        add("route", frame, 4, "中心 X", "via_transition.center_x", length=True)
-        add("route", frame, 5, "中心 Y", "via_transition.center_y", length=True)
-        add("route", frame, 6, "③ 输入层", "via_transition.entry_layer", values=signal_layers)
-        add("route", frame, 7, "④ 输出层", "via_transition.exit_layer", values=signal_layers)
-        add("route", frame, 8, "⑤ 机械钻孔起始层", "via_transition.drill_start_layer",
+        # pair_pitch remains a JSON/sweep compatibility field, not a second
+        # editable source of truth.  Center-to-center is width+GAP per end.
+        self._register_hidden_variable("via_transition.pair_pitch")
+        self.length_paths.add("via_transition.pair_pitch")
+        self.numeric_paths.add("via_transition.pair_pitch")
+        add("route", frame, 2, "㉑ 信号孔中心距（孔间距）", "via_transition.signal_via_pitch", length=True)
+        add("route", frame, 3, "中心 X", "via_transition.center_x", length=True)
+        add("route", frame, 4, "中心 Y", "via_transition.center_y", length=True)
+        add("route", frame, 5, "③ 输入层", "via_transition.entry_layer", values=signal_layers)
+        add("route", frame, 6, "④ 输出层", "via_transition.exit_layer", values=signal_layers)
+        add("route", frame, 7, "⑤ 机械钻孔起始层", "via_transition.drill_start_layer",
             values=conductive_layers)
-        add("route", frame, 9, "⑥ 机械钻孔终止层", "via_transition.drill_end_layer",
+        add("route", frame, 8, "⑥ 机械钻孔终止层", "via_transition.drill_end_layer",
             values=conductive_layers)
         self.via_layer_hint = _legacy.ttk.Label(
             frame,
             text="层名来自“反焊盘与叠层”。输入/输出层须为信号层，机械钻孔须为导体层。",
             foreground="#64748b", wraplength=430, justify="left",
         )
-        self.via_layer_hint.grid(row=10, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 0))
+        self.via_layer_hint.grid(row=9, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 0))
         bind_wraplength(self.via_layer_hint, source=frame)
 
+        frame = group("route", "输入/输出传输线")
+        self.via_trace_group = frame
+        add("route", frame, 0, "⑦ 输入传输线长度", "via_transition.entry_trace.length", length=True)
+        add("route", frame, 1, "⑧ 输入传输线宽度", "via_transition.entry_trace.width", length=True)
+        add("route", frame, 2, "输入 GAP", "via_transition.entry_trace.gap", length=True)
+        add("route", frame, 3, "输入中心距", "via_transition.entry_trace.center_to_center",
+            length=True, formula="= 宽度 + GAP", derived=True)
+        self._derived_display_paths.add("via_transition.entry_trace.center_to_center")
+        self._set_derived_state(
+            "via_transition.entry_trace.center_to_center", True, "= 宽度 + GAP")
+        add("route", frame, 4, "⑨ 输出传输线长度", "via_transition.exit_trace.length", length=True)
+        add("route", frame, 5, "⑩ 输出传输线宽度", "via_transition.exit_trace.width", length=True)
+        add("route", frame, 6, "输出 GAP", "via_transition.exit_trace.gap", length=True)
+        add("route", frame, 7, "输出中心距", "via_transition.exit_trace.center_to_center",
+            length=True, formula="= 宽度 + GAP", derived=True)
+        self._derived_display_paths.add("via_transition.exit_trace.center_to_center")
+        self._set_derived_state(
+            "via_transition.exit_trace.center_to_center", True, "= 宽度 + GAP")
+
+        fanout_parent = sections["route"][1]
         frame = group("route", "走线扇出")
+        self.via_fanout_group = frame
         add("route", frame, 0, "㉒ 扇出方式", "via_transition.fanout.style",
             values=("deg45", "arc"), display_values={"deg45": "45° 折线", "arc": "圆弧"},
-            formula="孔间距等于差分对中心距时，扇出三项自动停用。")
+            formula="两侧走线中心距均等于孔间距时，扇出三项自动停用。")
         add("route", frame, 1, "㉓ 扇出方向", "via_transition.fanout.direction",
             values=("auto", "expand", "contract"),
             display_values={"auto": "自动", "expand": "向外", "contract": "向内"})
         add("route", frame, 2, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
-        self.via_fanout_hint = _legacy.ttk.Label(
-            frame, text="孔间距等于差分对中心距时，扇出三项自动停用。",
+        self.via_fanout_collapsed_hint = _legacy.ttk.Label(
+            fanout_parent,
+            text="两侧走线中心距均等于孔间距时，扇出三项自动停用。",
             foreground="#64748b", wraplength=430, justify="left",
         )
-        self.via_fanout_hint.grid(row=3, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 0))
-        bind_wraplength(self.via_fanout_hint, source=frame)
-
-        frame = group("route", "输入/输出传输线")
-        add("route", frame, 0, "⑦ 输入传输线长度", "via_transition.entry_trace.length", length=True)
-        add("route", frame, 1, "⑧ 输入传输线宽度", "via_transition.entry_trace.width", length=True)
-        add("route", frame, 2, "⑨ 输出传输线长度", "via_transition.exit_trace.length", length=True)
-        add("route", frame, 3, "⑩ 输出传输线宽度", "via_transition.exit_trace.width", length=True)
+        self.via_fanout_hint = self.via_fanout_collapsed_hint
+        bind_wraplength(self.via_fanout_collapsed_hint, source=fanout_parent)
+        self._set_via_fanout_group_visible(False)
 
         frame = group("signal", "信号孔（Signal VIA）")
         add("signal", frame, 0, "⑪ 钻孔直径", "via_transition.padstack.drill_diameter", length=True)
@@ -785,6 +810,36 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         for widget in parent.grid_slaves(row=row):
             (widget.grid if visible else widget.grid_remove)()
 
+    def _set_via_fanout_group_visible(self, visible: bool) -> None:
+        """Show the shared fanout editors, or one explanation line when unused."""
+        group = getattr(self, "via_fanout_group", None)
+        hint = getattr(self, "via_fanout_collapsed_hint", None)
+        traces = getattr(self, "via_trace_group", None)
+        if group is None:
+            return
+        pack_kwargs = {"fill": "x", "padx": 3, "pady": 4}
+        if visible:
+            if hint is not None:
+                hint.pack_forget()
+            if traces is not None and str(traces.winfo_manager()):
+                group.pack(after=traces, **pack_kwargs)
+            else:
+                group.pack(**pack_kwargs)
+        else:
+            group.pack_forget()
+            if hint is not None:
+                hint_kwargs = {"fill": "x", "padx": 8, "pady": (2, 6)}
+                if traces is not None and str(traces.winfo_manager()):
+                    hint.pack(after=traces, **hint_kwargs)
+                else:
+                    hint.pack(**hint_kwargs)
+        for path in (
+            "via_transition.fanout.style",
+            "via_transition.fanout.direction",
+            "via_transition.fanout.straight_length",
+        ):
+            self._set_via_parameter_row_visible(path, visible)
+
     def _reveal_via_parameter(self, path: str, widget: tk.Widget) -> None:
         page = self._via_parameter_tab_by_path.get(path, self.via_parameter_tabs["route"])
         self.via_parameter_notebook.select(page)
@@ -794,7 +849,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         scroller.scroll_to_widget(widget)
         try:
             widget.focus_set()
-            if isinstance(widget, _legacy.ttk.Entry):
+            if isinstance(widget, (_legacy.ttk.Entry, tk.Entry)):
                 widget.selection_range(0, "end")
                 widget.icursor("end")
         except tk.TclError:
@@ -856,6 +911,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             background="#f7f8fa", foreground="#334155", relief="flat",
             borderwidth=0, highlightthickness=0, padx=2, pady=2,
         )
+        self.via_feedback_text = feedback_text
         feedback_scroll = _legacy.ttk.Scrollbar(
             feedback, orient="vertical", command=feedback_text.yview)
         feedback_text.configure(yscrollcommand=feedback_scroll.set)
@@ -943,6 +999,44 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                 pass
         # Plane/model-boundary margins are consumed by both geometry engines.
         self._set_group_state(("plane.",), enabled=True)
+        self._update_generate_and_run_button()
+
+    def _apply_main_toolbar_layout(self) -> None:
+        if getattr(self, "_toolbar_layout_guard", False):
+            return
+        self._toolbar_layout_guard = True
+        try:
+            super()._apply_main_toolbar_layout()
+            self._update_generate_and_run_button()
+        finally:
+            self._toolbar_layout_guard = False
+
+    def _update_generate_and_run_button(self) -> None:
+        """On VIA, the run button must not look like an HFSS solve action."""
+        buttons = getattr(self, "main_toolbar_buttons", ())
+        try:
+            is_via = self._scenario_is_via()
+        except (KeyError, tk.TclError, AttributeError):
+            return
+        self._via_run_button_offline = is_via
+        compact = False
+        try:
+            compact = int(self.winfo_width() or 0) < 1320
+        except tk.TclError:
+            compact = False
+        for button, full_text, compact_text in buttons:
+            if full_text != "生成并运行":
+                continue
+            if is_via:
+                new_text = "离线脚本" if compact else "导出离线脚本"
+                new_state = "disabled"
+            else:
+                new_text = compact_text if compact else full_text
+                new_state = "normal"
+            if (str(button.cget("text")) == new_text
+                    and str(button.cget("state")) == new_state):
+                continue
+            button.configure(text=new_text, state=new_state)
 
     def _refresh_via_layer_selectors(self, config: Mapping[str, Any]) -> None:
         super()._refresh_via_layer_selectors(config)
@@ -1028,21 +1122,16 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self._set_via_parameter_row_visible(
             "via_transition.padstack.nonfunctional_pad_diameter", nfp_keep)
         try:
-            signal_pitch = convert_length(
-                float(self.variables["via_transition.signal_via_pitch"].get()),
-                self.display_unit, "mm")
-            pair_pitch = convert_length(
-                float(self.variables["via_transition.pair_pitch"].get()),
-                self.display_unit, "mm")
-            fanout_active = not math.isclose(signal_pitch, pair_pitch, abs_tol=1e-12)
+            signal_pitch = self._length_var_mm("via_transition.signal_via_pitch")
+            entry_c = self._via_side_center_mm("entry_trace")
+            exit_c = self._via_side_center_mm("exit_trace")
+            fanout_active = (
+                not math.isclose(signal_pitch, entry_c, abs_tol=1e-9)
+                or not math.isclose(signal_pitch, exit_c, abs_tol=1e-9)
+            )
         except (KeyError, TypeError, ValueError, tk.TclError):
             fanout_active = True
-        for path in (
-            "via_transition.fanout.style",
-            "via_transition.fanout.direction",
-            "via_transition.fanout.straight_length",
-        ):
-            self._set_via_parameter_row_visible(path, fanout_active)
+        self._set_via_fanout_group_visible(fanout_active)
 
     def _build_simulation_sweeps(self) -> None:
         self.simulation_sweep_workbench = SimulationSweepWorkbench(
@@ -1103,7 +1192,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                         scroller.canvas.yview_moveto(max(0.0, min(1.0, (y - 20) / movable)))
                         break
             widget.focus_set()
-            if isinstance(widget, _legacy.ttk.Entry):
+            if isinstance(widget, (_legacy.ttk.Entry, tk.Entry)):
                 try:
                     widget.selection_range(0, "end")
                 except tk.TclError:
@@ -1265,6 +1354,15 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
 
     def generate_and_run(self) -> None:
         """Build the project in a separate process and import its HFSS Validate report."""
+        if self._scenario_is_via():
+            messagebox.showinfo(
+                "生成并运行",
+                "差分 VIA 换层当前仅支持离线生成 HFSS 脚本，不能在此启动求解。"
+                "请使用「生成脚本」。",
+                parent=self,
+            )
+            self.status.set("VIA 换层：已降级为离线脚本生成，未启动 HFSS")
+            return
         try:
             generated = self._generate()
             command = ([sys.executable, "--run-generated-script", str(generated.script_path)]

@@ -4,15 +4,18 @@
 """
 from __future__ import annotations
 
+import re
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 try:
     import tkinter  # noqa: F401
+    from tkinter import ttk
     HAS_TK = True
 except ImportError:
     HAS_TK = False
@@ -39,6 +42,54 @@ class ViaTransitionGuiTests(unittest.TestCase):
     def _realize_desktop_layout(self) -> None:
         self.app.geometry("1600x1000+0+0")
         self.app.deiconify()
+        self.app.update()
+        self.app.update_idletasks()
+
+    def _enter_via_scenario(self) -> None:
+        self.app.variables["scenario.type"].set("via_transition")
+        self.app.update_idletasks()
+
+    def _restore_default_via_gaps(self) -> None:
+        for path, mm_value in (
+            ("via_transition.entry_trace.gap", 0.7),
+            ("via_transition.exit_trace.gap", 0.7),
+            ("via_transition.entry_trace.width", 0.1),
+            ("via_transition.exit_trace.width", 0.1),
+        ):
+            display = format_length(mm_value, self.app.display_unit)
+            self.app._length_mm_cache[path] = mm_value
+            self.app._length_display_snapshot[path] = display
+            self.app.variables[path].set(display)
+        self.app._sync_via_fields()
+        self.app.update_idletasks()
+
+    @staticmethod
+    def _fraction_digits(text: str) -> int:
+        token = str(text).strip().split()[0]
+        if "." not in token:
+            return 0
+        fraction = "".join(ch for ch in token.split(".", 1)[1] if ch.isdigit())
+        return len(fraction)
+
+    def _canvas_texts(self, canvas) -> list[str]:
+        return [
+            str(canvas.itemcget(item, "text"))
+            for item in canvas.find_all()
+            if canvas.type(item) == "text"
+        ]
+
+    def _click_dimension_label(self, canvas, path: str, prefix: str) -> None:
+        items = [
+            item for item in canvas.find_withtag(f"dimension:{path}")
+            if canvas.type(item) == "text"
+            and str(canvas.itemcget(item, "text")).startswith(prefix)
+        ]
+        self.assertTrue(items, (path, self._canvas_texts(canvas)))
+        bbox = canvas.bbox(items[0])
+        self.assertIsNotNone(bbox)
+        x = int((bbox[0] + bbox[2]) / 2)
+        y = int((bbox[1] + bbox[3]) / 2)
+        canvas.event_generate("<Button-1>", x=x, y=y)
         self.app.update()
         self.app.update_idletasks()
 
@@ -78,6 +129,23 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.assertEqual(vt["fanout"]["style"], "deg45")
         self.assertEqual(vt["fanout"]["direction"], "auto")
         self.assertGreaterEqual(vt["fanout"]["straight_length"], 0.0)
+        self.assertAlmostEqual(vt["entry_trace"]["gap"], 0.7)
+        self.assertAlmostEqual(vt["exit_trace"]["gap"], 0.7)
+        self.assertAlmostEqual(
+            vt["entry_trace"]["width"] + vt["entry_trace"]["gap"], vt["pair_pitch"])
+        self.assertIn("via_transition.entry_trace.gap", self.app.widgets)
+        self.assertIn("via_transition.exit_trace.gap", self.app.widgets)
+        self.assertNotIn("via_transition.pair_pitch", self.app.widgets)
+        for path in (
+            "via_transition.entry_trace.center_to_center",
+            "via_transition.exit_trace.center_to_center",
+        ):
+            widget = self.app.widgets[path]
+            self.assertEqual(str(widget.cget("state")), "readonly")
+            self.assertIsInstance(widget, tkinter.Entry)
+            self.assertNotIsInstance(widget, ttk.Entry)
+            self.assertEqual(str(widget.cget("readonlybackground")).lower(), "#eef2f7")
+            self.assertIn("宽度 + GAP", str(self.app.formula_labels[path].cget("text")))
         self.assertIn("残桩从背钻侧最近功能连接层起算",
                       self.app.backdrill_hint_label.cget("text"))
         self.assertIn("与输入/输出层无关",
@@ -358,7 +426,10 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.app.refresh_visuals()
         contour = next(item for item in workbench.geometry.antipad_contours if item.layer == "L2")
         self.assertAlmostEqual(contour.length, 2.0)
-        self.assertIn("2", workbench.layer_effective_var.get())
+        self.assertIn(
+            format_length(2.0, self.app.display_unit),
+            workbench.layer_effective_var.get(),
+        )
         self.assertIn("采用手工尺寸/角度", workbench.layer_effective_var.get())
 
     def test_14_current_layer_clearance_edit_resizes_reference_envelope(self) -> None:
@@ -453,6 +524,8 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.app.variables["scenario.type"].set("via_transition")
         cases = {
             "via_transition.entry_trace.width": ("VIA 换层", "换层与传输线"),
+            "via_transition.entry_trace.gap": ("VIA 换层", "换层与传输线"),
+            "via_transition.exit_trace.center_to_center": ("VIA 换层", "换层与传输线"),
             "via_transition.backdrill.residual_stub": ("VIA 换层", "信号孔与背钻"),
             "via_transition.return_vias.pad_diameter": ("VIA 换层", "回流地孔"),
             "via_transition.padstack.antipad.diameter": ("反焊盘与叠层", None),
@@ -568,6 +641,26 @@ class ViaTransitionGuiTests(unittest.TestCase):
         finally:
             self.app._load_to_widgets(original)
 
+    def test_26_independent_entry_gap_does_not_change_exit_center_widget(self) -> None:
+        self.app.variables["scenario.type"].set("via_transition")
+        self.app.update_idletasks()
+        exit_before = str(self.app.variables["via_transition.exit_trace.center_to_center"].get())
+        path = "via_transition.entry_trace.gap"
+        display = format_length(0.5, self.app.display_unit)
+        self.app._length_mm_cache[path] = 0.5
+        self.app._length_display_snapshot[path] = display
+        self.app.variables[path].set(display)
+        self.app._sync_via_fields()
+        self.app.update_idletasks()
+        self.assertEqual(
+            str(self.app.variables["via_transition.exit_trace.center_to_center"].get()),
+            exit_before)
+        collected = self.app._collect()
+        self.assertAlmostEqual(collected["via_transition"]["entry_trace"]["gap"], 0.5)
+        self.assertAlmostEqual(collected["via_transition"]["exit_trace"]["gap"], 0.7)
+        self.assertNotIn("center_to_center", collected["via_transition"]["entry_trace"])
+        self.assertNotIn("center_to_center", collected["via_transition"]["exit_trace"])
+
     def test_25_every_default_via_leaf_has_one_gui_binding(self) -> None:
         def leaves(node, prefix="via_transition"):
             result = []
@@ -582,8 +675,236 @@ class ViaTransitionGuiTests(unittest.TestCase):
 
         default_via = self.app.manager.default()["via_transition"]
         paths = leaves(default_via)
-        self.assertEqual(len(paths), 63)
+        self.assertEqual(len(paths), 65)
         self.assertEqual([path for path in paths if path not in self.app.variables], [])
+
+    def test_27_transmission_line_group_packs_above_fanout(self) -> None:
+        self._enter_via_scenario()
+        self._restore_default_via_gaps()
+        self._realize_desktop_layout()
+        self.app.notebook.select(self.app.tabs["VIA 换层"])
+        self.app.via_parameter_notebook.select(self.app.via_parameter_tabs["route"])
+        self.app.update()
+        content = self.app.via_parameter_scrollers["route"].content
+        slaves = list(content.pack_slaves())
+        trace_group = self.app.via_trace_group
+        self.assertIn(trace_group, slaves)
+        self.assertLess(slaves.index(trace_group), slaves.index(self.app.via_fanout_collapsed_hint))
+        self.assertFalse(bool(self.app.via_fanout_group.winfo_manager()))
+        self.assertTrue(bool(self.app.via_fanout_collapsed_hint.winfo_manager()))
+        self.assertLess(trace_group.winfo_y(), self.app.via_fanout_collapsed_hint.winfo_y())
+        gap_widget = self.app.widgets["via_transition.entry_trace.gap"]
+        self.assertLess(gap_widget.winfo_rooty(), self.app.via_fanout_collapsed_hint.winfo_rooty())
+
+        path = "via_transition.entry_trace.gap"
+        display = format_length(0.5, self.app.display_unit)
+        self.app._length_mm_cache[path] = 0.5
+        self.app._length_display_snapshot[path] = display
+        self.app.variables[path].set(display)
+        self.app._sync_via_fields()
+        self.app.update()
+        slaves = list(content.pack_slaves())
+        self.assertTrue(bool(self.app.via_fanout_group.winfo_manager()))
+        self.assertFalse(bool(self.app.via_fanout_collapsed_hint.winfo_manager()))
+        self.assertLess(slaves.index(trace_group), slaves.index(self.app.via_fanout_group))
+        self._restore_default_via_gaps()
+
+    def test_28_center_widgets_are_readonly_gray_with_width_plus_gap_copy(self) -> None:
+        self._enter_via_scenario()
+        self.app.update_idletasks()
+        for path in (
+            "via_transition.entry_trace.center_to_center",
+            "via_transition.exit_trace.center_to_center",
+        ):
+            widget = self.app.widgets[path]
+            before = str(self.app.variables[path].get())
+            self.assertEqual(str(widget.cget("state")), "readonly")
+            self.assertIsInstance(widget, tkinter.Entry)
+            self.assertNotIsInstance(widget, ttk.Entry)
+            self.assertEqual(str(widget.cget("readonlybackground")).lower(), "#eef2f7")
+            self.assertIn("宽度 + GAP", str(self.app.formula_labels[path].cget("text")))
+            widget.focus_set()
+            widget.event_generate("<KeyPress>", keysym="9", keycode=57)
+            try:
+                widget.insert("end", "9")
+            except tkinter.TclError:
+                pass
+            self.app.update_idletasks()
+            self.assertEqual(str(self.app.variables[path].get()), before)
+
+    def test_29_unit_toggle_mm_refreshes_gap_center_and_preview_labels(self) -> None:
+        self._enter_via_scenario()
+        self._restore_default_via_gaps()
+        self._realize_desktop_layout()
+        self.app.notebook.select(self.app.tabs["VIA 换层"])
+        original = self.app.display_unit
+        try:
+            self.app.unit_var.set("mm")
+            self.app._unit_changed()
+            self.app.update()
+            self.app.refresh_visuals()
+            self.app.update()
+            gap = str(self.app.variables["via_transition.entry_trace.gap"].get())
+            center = str(self.app.variables["via_transition.entry_trace.center_to_center"].get())
+            pitch = str(self.app.variables["via_transition.signal_via_pitch"].get())
+            width = str(self.app.variables["via_transition.entry_trace.width"].get())
+            self.assertAlmostEqual(float(gap), 0.7, places=2)
+            self.assertAlmostEqual(float(center), 0.8, places=2)
+            self.assertAlmostEqual(float(pitch), 0.8, places=2)
+            self.assertAlmostEqual(float(width), 0.1, places=2)
+            self.assertNotIn("31.4961", gap + center + pitch)
+            self.assertNotIn("27.5591", gap + center)
+            labels = self._canvas_texts(self.app.via_top_canvas)
+            joined = "\n".join(labels)
+            self.assertTrue(any("输入 GAP" in text and "mm" in text for text in labels), labels)
+            self.assertTrue(any("输出 GAP" in text and "mm" in text for text in labels), labels)
+            self.assertTrue(any("输入中心距" in text and "mm" in text for text in labels), labels)
+            self.assertNotIn("31.4961", joined)
+            self.assertNotIn("27.5591", joined)
+            self.assertFalse(any(re.search(r"\bmil\b", text) for text in labels), labels)
+            self.assertTrue(any(re.search(r"\bmm\b", text) for text in labels), labels)
+        finally:
+            self.app.unit_var.set(original)
+            self.app._unit_changed()
+            self.app.update()
+            self._restore_default_via_gaps()
+
+    def test_30_mil_length_widgets_and_labels_use_at_most_two_decimals(self) -> None:
+        self._enter_via_scenario()
+        self._restore_default_via_gaps()
+        if self.app.display_unit != "mil":
+            self.app.unit_var.set("mil")
+            self.app._unit_changed()
+            self.app.update()
+        self.app.refresh_visuals()
+        self.app.update()
+        length_paths = (
+            "via_transition.entry_trace.length",
+            "via_transition.entry_trace.width",
+            "via_transition.entry_trace.gap",
+            "via_transition.entry_trace.center_to_center",
+            "via_transition.exit_trace.length",
+            "via_transition.exit_trace.width",
+            "via_transition.exit_trace.gap",
+            "via_transition.exit_trace.center_to_center",
+            "via_transition.signal_via_pitch",
+        )
+        for path in length_paths:
+            shown = str(self.app.variables[path].get())
+            self.assertLessEqual(self._fraction_digits(shown), 2, path)
+            self.assertNotRegex(shown, r"\d+\.\d{3,}")
+            self.assertNotIn("31.4961", shown)
+            self.assertNotIn("27.5591", shown)
+            self.assertNotIn("118.1102", shown)
+        labels = self._canvas_texts(self.app.via_top_canvas)
+        joined = "\n".join(labels)
+        self.assertNotIn("31.4961", joined)
+        self.assertNotIn("27.5591", joined)
+        self.assertNotIn("118.1102", joined)
+        length_tokens = ("GAP", "中心距", "输入宽", "输出宽", "输入长", "输出长", "信号孔")
+        for text in labels:
+            if any(token in text for token in length_tokens):
+                for match in re.findall(r"\d+\.\d+", text):
+                    self.assertLessEqual(self._fraction_digits(match), 2, text)
+        feedback = self.app.via_feedback_var.get()
+        self.assertNotIn("31.4961", feedback)
+        self.assertNotIn("118.1102", feedback)
+        for match in re.findall(r"\d+\.\d+", feedback):
+            self.assertLessEqual(self._fraction_digits(match), 2, match)
+
+    def test_31_empty_error_rows_are_omitted_and_real_errors_lead(self) -> None:
+        from config_manager import ConfigManager
+        from geometry_calculator import GeometryCalculator
+
+        self._enter_via_scenario()
+        config, validation = ConfigManager(ROOT).validate(
+            self.app._collect(), check_output_directory=False)
+        geometry = GeometryCalculator(config).calculate()
+        self.app._update_via_editor(config, geometry, validation)
+        feedback = self.app.via_feedback_var.get()
+        self.assertIsNone(re.search(r"错误\s*\d+\s*[：:]\s*$", feedback, re.M))
+        for line in feedback.splitlines():
+            self.assertFalse(re.fullmatch(r"错误\s*\d+\s*[：:]\s*", line))
+
+        with patch("via_transition_semantics.validate_via_transition", return_value=[
+            ("VIA-EMPTY", "error", ""),
+            ("VIA-EMPTY2", "error", "   "),
+            ("VIA-REAL", "error", "真实错误必须完整可见"),
+        ]):
+            self.app._update_via_editor(config, geometry, validation)
+        feedback = self.app.via_feedback_var.get()
+        self.assertIn("真实错误必须完整可见", feedback)
+        self.assertTrue(feedback.splitlines()[0].startswith("错误"))
+        self.assertIn("VIA-REAL", feedback.splitlines()[0])
+        self.assertNotIn("错误 3:", feedback)
+        self.assertIsNone(re.search(r"错误\s*\d+\s*[：:]\s*$", feedback, re.M))
+        self.assertGreaterEqual(int(self.app.via_feedback_text.cget("height")), 5)
+
+    def test_32_preview_gap_label_click_focuses_matching_entry(self) -> None:
+        self._enter_via_scenario()
+        self._restore_default_via_gaps()
+        self._realize_desktop_layout()
+        self.app.notebook.select(self.app.tabs["VIA 换层"])
+        self.app.refresh_visuals()
+        self.app.update()
+        canvas = self.app.via_top_canvas
+        cases = (
+            ("via_transition.entry_trace.gap", "输入 GAP"),
+            ("via_transition.exit_trace.gap", "输出 GAP"),
+        )
+        for path, prefix in cases:
+            self._click_dimension_label(canvas, path, prefix)
+            widget = self.app.widgets[path]
+            self.assertIs(self.app.focus_get(), widget, path)
+            selected = self.app.via_parameter_notebook.select()
+            self.assertEqual(
+                str(self.app.via_parameter_notebook.tab(selected, "text")),
+                "换层与传输线",
+                path,
+            )
+            self.assertIn(path, self.app.status.get())
+
+    def test_33_via_generate_and_run_is_offline_only(self) -> None:
+        self._enter_via_scenario()
+        self.app.update_idletasks()
+        run_button = next(
+            button for button, full, _compact in self.app.main_toolbar_buttons
+            if full == "生成并运行"
+        )
+        self.assertEqual(str(run_button.cget("state")), "disabled")
+        self.assertIn("离线脚本", str(run_button.cget("text")))
+        with patch("main_gui.messagebox.showinfo") as info, patch.object(
+            self.app, "_generate"
+        ) as generate:
+            self.app.generate_and_run()
+        info.assert_called_once()
+        generate.assert_not_called()
+        self.assertIn("离线", self.app.status.get())
+        self.assertIn("未启动 HFSS", self.app.status.get())
+        self.app.variables["scenario.type"].set("surface_capacitor")
+        self.app.update_idletasks()
+        self.assertEqual(str(run_button.cget("state")), "normal")
+        self.assertEqual(str(run_button.cget("text")), "生成并运行")
+        self._enter_via_scenario()
+
+    def test_34_cross_section_right_edge_is_not_clipped(self) -> None:
+        self._enter_via_scenario()
+        self._realize_desktop_layout()
+        self.app.notebook.select(self.app.tabs["VIA 换层"])
+        self.app.refresh_visuals()
+        self.app.update()
+        canvas = self.app.via_cross_canvas
+        width = canvas.winfo_width()
+        self.assertGreater(width, 50)
+        overflow = []
+        for item in canvas.find_all():
+            bbox = canvas.bbox(item)
+            if bbox is None:
+                continue
+            if bbox[2] > width + 1:
+                label = canvas.itemcget(item, "text") if canvas.type(item) == "text" else canvas.type(item)
+                overflow.append((label, bbox, width))
+        self.assertEqual(overflow, [])
 
 
 if __name__ == "__main__":

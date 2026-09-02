@@ -11,7 +11,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from config_manager import find_nearest_reference_plane
+from config_manager import apply_pair_pitch_to_trace_gaps, find_nearest_reference_plane
 
 
 @dataclass(frozen=True)
@@ -292,6 +292,11 @@ def _apply_via_antipad_diameter(config: Dict[str, Any], value: Any) -> None:
     padstack["antipad_diameter"] = float(value)  # one-way compatibility alias
 
 
+def _apply_via_pair_pitch(config: Dict[str, Any], value: Any) -> None:
+    """Legacy pair_pitch axis still moves both end pitches (width + GAP)."""
+    apply_pair_pitch_to_trace_gaps(config.setdefault("via_transition", {}), float(value))
+
+
 @dataclass(frozen=True)
 class SweepParameterSpec:
     path: str
@@ -569,6 +574,13 @@ SWEEP_PARAMETER_REGISTRY: Dict[str, SweepParameterSpec] = {
               minimum=0.05, maximum=1.0, deps=(_need_via_transition,), apply=_apply_via_signal_drill),
         _spec("via_transition.padstack.connected_pad_diameter", "信号孔功能焊盘直径", "VIA 换层",
               minimum=0.1, maximum=2.0, deps=(_need_via_transition,)),
+        _spec("via_transition.pair_pitch", "差分对中心距（两端同时）", "VIA 换层",
+              minimum=0.2, maximum=2.0, deps=(_need_via_transition,),
+              apply=_apply_via_pair_pitch),
+        _spec("via_transition.entry_trace.gap", "输入传输线 GAP", "VIA 换层",
+              minimum=0.0, maximum=2.0, deps=(_need_via_transition,)),
+        _spec("via_transition.exit_trace.gap", "输出传输线 GAP", "VIA 换层",
+              minimum=0.0, maximum=2.0, deps=(_need_via_transition,)),
         _spec("via_transition.padstack.antipad.diameter", "信号孔圆形反焊盘直径", "反焊盘与叠层",
               minimum=0.2, maximum=3.0, deps=(_need_via_circle_antipad, _need_manual_antipad_size),
               apply=_apply_via_antipad_diameter),

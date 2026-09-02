@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from typing import Any, List, Mapping, Optional, Tuple
 
-from config_manager import format_length
+from config_manager import format_length, via_trace_center_pitch
 from via_transition_geometry import (ViaTransitionGeometryResult,
                                      derive_functional_barrel_span)
 from via_antipad import (DIRECTION_MODES, SHAPES, SIZE_MODES, TOPOLOGIES,
@@ -250,9 +250,13 @@ def validate_via_transition(
                                    f"逐层反焊盘 {layer_name!r} 的 clearance 必须为有限非负数。",
                                    prefix + ".clearance", "输入明确的最小铜边净距。"))
 
-    # 信号孔中心距（孔间距）独立于走线中心距；扇出（45°/弧）可行性校验。
+    # 信号孔中心距（孔间距）独立于两端走线中心距；扇出（45°/弧）按端分别校验。
     pair_pitch = float(vt.get("pair_pitch", 0.0))
     signal_via_pitch = float(vt.get("signal_via_pitch", pair_pitch))
+    entry_trace = vt.get("entry_trace", {}) if isinstance(vt.get("entry_trace"), Mapping) else {}
+    exit_trace = vt.get("exit_trace", {}) if isinstance(vt.get("exit_trace"), Mapping) else {}
+    entry_pitch = via_trace_center_pitch(entry_trace, pair_pitch)
+    exit_pitch = via_trace_center_pitch(exit_trace, pair_pitch)
     if signal_via_pitch <= 0:
         issues.append(("VIA-TRN-070", "error",
                        "signal_via_pitch 必须大于 0。",
@@ -277,26 +281,31 @@ def validate_via_transition(
         issues.append(("VIA-TRN-071", "error",
                        "fanout.straight_length 必须 >= 0。",
                        "via_transition.fanout.straight_length", "耦合直线段长不能为负。"))
-    delta = (signal_via_pitch - pair_pitch) / 2.0
-    if abs(delta) > 1e-12 and straight_length >= 0:
+    entry_len = float(entry_trace.get("length", 0.0))
+    exit_len = float(exit_trace.get("length", 0.0))
+    derived_dirs: List[str] = []
+    for side, length, pitch in (("entry", entry_len, entry_pitch), ("exit", exit_len, exit_pitch)):
+        delta = (signal_via_pitch - pitch) / 2.0
+        if abs(delta) <= 1e-12 or straight_length < 0:
+            continue
+        derived_dirs.append("expand" if delta > 0 else "contract")
         fanout_x = abs(delta)
-        entry_len = float(vt.get("entry_trace", {}).get("length", 0.0))
-        exit_len = float(vt.get("exit_trace", {}).get("length", 0.0))
-        for side, length in (("entry", entry_len), ("exit", exit_len)):
-            if length + 1e-9 < fanout_x + straight_length:
-                issues.append(("VIA-TRN-071", "error",
-                               f"{side} 走线长度 {shown_length(length)} 不足以容纳扇出"
-                               f"（X 投影 {shown_length(fanout_x)}）与耦合直线段"
-                               f"（{shown_length(straight_length)}）。",
-                               "via_transition.fanout.straight_length",
-                               "增大走线长度、减小孔间距与走线中心距之差，或减小耦合直线段长。"))
-        derived = "expand" if delta > 0 else "contract"
-        if fanout_direction != "auto" and fanout_direction != derived:
-            issues.append(("VIA-TRN-072", "warning",
-                           f"扇出方向被强制为 {fanout_direction!r}，但按孔间距差推导应为 {derived!r}；"
-                           "几何仍按实际间距差生成。",
-                           "via_transition.fanout.direction",
-                           "选择 auto 或与间距差一致的方向。"))
+        if length + 1e-9 < fanout_x + straight_length:
+            issues.append(("VIA-TRN-071", "error",
+                           f"{side} 走线长度 {shown_length(length)} 不足以容纳扇出"
+                           f"（X 投影 {shown_length(fanout_x)}）与耦合直线段"
+                           f"（{shown_length(straight_length)}）。",
+                           "via_transition.fanout.straight_length",
+                           "增大走线长度、减小孔间距与走线中心距之差，或减小耦合直线段长。"))
+    unique_dirs = set(derived_dirs)
+    if (fanout_direction != "auto" and len(unique_dirs) == 1
+            and fanout_direction != next(iter(unique_dirs))):
+        derived = next(iter(unique_dirs))
+        issues.append(("VIA-TRN-072", "warning",
+                       f"扇出方向被强制为 {fanout_direction!r}，但按孔间距差推导应为 {derived!r}；"
+                       "几何仍按实际间距差生成。",
+                       "via_transition.fanout.direction",
+                       "选择 auto 或与间距差一致的方向。"))
 
     rv = vt.get("return_vias", {})
     if rv.get("enabled"):

@@ -18,7 +18,7 @@ import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from config_manager import normalize_config
+from config_manager import normalize_config, via_trace_center_pitch
 from geometry_v1 import (
     EPSILON,
     Bounds2D,
@@ -693,7 +693,7 @@ class ViaTransitionGeometryCalculator:
                 antipad_per_layer[layer.name] = float(effective["diameter"])
         barrel_model = str(padstack.get("barrel_model", "hollow"))
         material = str(padstack.get("material", "copper"))
-        pair_pitch = float(vt["pair_pitch"])
+        pair_pitch = float(vt.get("pair_pitch", 0.0))
         # 信号孔中心距独立于走线中心距；旧配置经 normalize 回填为 pair_pitch。
         signal_via_pitch = float(vt.get("signal_via_pitch", pair_pitch))
         center_x = float(vt["center_x"])
@@ -869,6 +869,8 @@ class ViaTransitionGeometryCalculator:
         entry_len = float(entry_trace["length"])
         exit_w = float(exit_trace["width"])
         exit_len = float(exit_trace["length"])
+        entry_pitch = via_trace_center_pitch(entry_trace, pair_pitch)
+        exit_pitch = via_trace_center_pitch(exit_trace, pair_pitch)
         entry_layer_obj = by_name[entry_layer]
         exit_layer_obj = by_name[exit_layer]
         entry_traces: List[Dict[str, Any]] = []
@@ -877,10 +879,11 @@ class ViaTransitionGeometryCalculator:
         fanout_cfg = vt.get("fanout") if isinstance(vt.get("fanout"), Mapping) else {}
         fanout_style = str(fanout_cfg.get("style", "deg45"))
         for signal, sign in (("P", 1.0), ("N", -1.0)):
-            y_port = center_y + sign * pair_pitch / 2.0          # 端口端中心（走线中心距）
+            y_entry_port = center_y + sign * entry_pitch / 2.0
+            y_exit_port = center_y + sign * exit_pitch / 2.0
             y_via = center_y + sign * signal_via_pitch / 2.0     # 孔端中心（信号孔中心距）
             entry_points = _fanout_trace_points(
-                center_x, y_via, center_x - entry_len, y_port, entry_w, fanout_style,
+                center_x, y_via, center_x - entry_len, y_entry_port, entry_w, fanout_style,
             )
             entry_name = f"ENTRY_TRACE_{signal}"
             entry_traces.append(_trace_dict(
@@ -888,7 +891,7 @@ class ViaTransitionGeometryCalculator:
                 entry_layer_obj.z_bottom, entry_layer_obj.z_top, entry_w, entry_len,
             ))
             exit_points = _fanout_trace_points(
-                center_x, y_via, center_x + exit_len, y_port, exit_w, fanout_style,
+                center_x, y_via, center_x + exit_len, y_exit_port, exit_w, fanout_style,
             )
             exit_name = f"EXIT_TRACE_{signal}"
             exit_traces.append(_trace_dict(
@@ -904,19 +907,16 @@ class ViaTransitionGeometryCalculator:
         ports: List[ViaTransitionPort] = []
         ref_in = _nearest_reference(stackup, entry_layer, exit_layer)
         ref_out = _nearest_reference(stackup, exit_layer, entry_layer)
-        trace_pitch_ref = pair_pitch
         port_margin = float(cfg["simulation"].get("port_lateral_margin", 0.25))
         for signal, sign in (("P", 1.0), ("N", -1.0)):
-            y_center = center_y + sign * pair_pitch / 2.0
-            ref = ref_in
-            ref_cond = f"PLANE_{ref.name}" if ref else ""
-            for side, x_edge, prop in (("IN", center_x - entry_len, "+X"),
-                                       ("OUT", center_x + exit_len, "-X")):
-                if side == "OUT":
-                    ref = ref_out
-                    ref_cond = f"PLANE_{ref.name}" if ref else ""
-                layer_obj = by_name[entry_layer] if side == "IN" else by_name[exit_layer]
-                half_y = max(trace_pitch_ref, entry_w) / 2.0 + port_margin
+            for side, x_edge, prop, pitch, width, layer_name, ref in (
+                ("IN", center_x - entry_len, "+X", entry_pitch, entry_w, entry_layer, ref_in),
+                ("OUT", center_x + exit_len, "-X", exit_pitch, exit_w, exit_layer, ref_out),
+            ):
+                y_center = center_y + sign * pitch / 2.0
+                ref_cond = f"PLANE_{ref.name}" if ref else ""
+                layer_obj = by_name[layer_name]
+                half_y = max(pitch, width) / 2.0 + port_margin
                 # A terminal sheet belongs to one member of the differential
                 # pair.  Keeping each sheet on its own side of the pair
                 # centreline prevents the P/N sheets at the same X location
@@ -966,7 +966,7 @@ class ViaTransitionGeometryCalculator:
             plane_margin_out = float(cfg["plane"].get("margin_output", 2.0))
             plane_margin_y = float(cfg["plane"].get("margin_y", 2.0))
             model_half_y = (
-                max(pair_pitch, signal_via_pitch) / 2.0
+                max(entry_pitch, exit_pitch, signal_via_pitch) / 2.0
                 + max(entry_w, exit_w) / 2.0
             )
             x_min = center_x - entry_len - plane_margin_x - margin
@@ -988,8 +988,9 @@ class ViaTransitionGeometryCalculator:
         # ---- 边界 ----
         model_x_min = center_x - entry_len
         model_x_max = center_x + exit_len
-        # 信号孔可能比走线中心距更靠外，边界取两者较大值，避免扇出越出边界。
-        half_y = max(pair_pitch, signal_via_pitch) / 2.0 + max(entry_w, exit_w) / 2.0
+        # 信号孔可能比走线中心距更靠外，边界取三者较大值，避免扇出越出边界。
+        half_y = (max(entry_pitch, exit_pitch, signal_via_pitch) / 2.0
+                  + max(entry_w, exit_w) / 2.0)
         model_bounds = Bounds2D(model_x_min, model_x_max, center_y - half_y, center_y + half_y)
         plane_margin_x = float(cfg["plane"].get("margin_input", 2.0))
         plane_margin_out = float(cfg["plane"].get("margin_output", 2.0))
