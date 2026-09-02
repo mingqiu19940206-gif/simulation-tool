@@ -132,6 +132,23 @@ class ViaNativeOptimetricsTests(unittest.TestCase):
                 generate_sweep_cases(cfg, Path(directory))
         self.assertIn("via_transition.pair_pitch", str(ctx.exception))
 
+    def test_unbound_residual_stub_and_return_via_axes_remain_fail_closed(self) -> None:
+        for path, sweep in (
+            ("via_transition.backdrill.residual_stub",
+             {"enabled": True, "start": 0.10, "stop": 0.15, "step": 0.05}),
+            ("via_transition.return_vias.offset_x",
+             {"enabled": True, "start": -0.2, "stop": 0.2, "step": 0.2}),
+            ("via_transition.return_vias.pitch_y",
+             {"enabled": True, "start": 0.5, "stop": 0.7, "step": 0.1}),
+        ):
+            with self.subTest(path=path):
+                cfg = _via_config()
+                cfg["sweeps"][path] = sweep
+                with tempfile.TemporaryDirectory() as directory:
+                    with self.assertRaises(ScenarioNotImplementedError) as ctx:
+                        generate_sweep_cases(cfg, Path(directory))
+                self.assertIn(path, str(ctx.exception))
+
     def test_clearance_uses_recalculated_discrete_design_cases(self) -> None:
         cfg = _via_config()
         path = "via_transition.padstack.antipad.clearance"

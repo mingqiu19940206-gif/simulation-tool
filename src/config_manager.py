@@ -236,6 +236,14 @@ _LENGTH_SWEEPS = {
     "via_transition.padstack.antipad.width_increment",
     "via_transition.padstack.antipad_diameter",
 }
+# VIA padstack drill/pad, pair pitch, residual stub and Return VIA coordinates
+# are length fields.  They must follow the file ``units`` on save/load the
+# same way capacitor/GND and antipad diameter sweeps already do.  Nested
+# via_transition length keys live in ``_SECTION_LENGTH_FIELDS``.
+_LENGTH_SWEEPS.update(
+    "via_transition." + field
+    for field in _SECTION_LENGTH_FIELDS["via_transition"]
+)
 
 
 class ConfigError(ValueError):
@@ -590,7 +598,10 @@ def _scale_explicit_lengths(data: Mapping[str, Any], factor: float) -> Dict[str,
                                  "end_clearance", "side_clearance", "length_increment",
                                  "width_increment"}
             )
-            if name not in _LENGTH_SWEEPS and not per_layer_length:
+            stackup_thickness = (
+                len(parts) == 3 and parts[0] == "stackup" and parts[2] == "thickness"
+            )
+            if name not in _LENGTH_SWEEPS and not per_layer_length and not stackup_thickness:
                 continue
             if isinstance(sweep, dict):
                 for key in ("start", "stop", "step"):

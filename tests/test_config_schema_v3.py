@@ -12,7 +12,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from config_manager import ConfigManager, normalize_config, validate_config
+from config_manager import (
+    MM_PER_MIL,
+    ConfigManager,
+    normalize_config,
+    to_external_config,
+    validate_config,
+)
 from geometry_calculator import GeometryCalculator
 
 
@@ -150,6 +156,67 @@ class ConfigSchemaV3Tests(unittest.TestCase):
         )
         self.assertEqual(normalized["via_transition"]["return_vias"]["count"], 2)
         self.assertTrue(any("坐标字符串" in item for item in corrections))
+
+    def test_10_native_via_and_stackup_length_sweeps_follow_file_units(self) -> None:
+        """Saved mil JSON must not leave VIA drill/pad or stackup thickness sweeps in mm.
+
+        ``via_transition.padstack.antipad.diameter`` was already converted; the
+        first-batch native Optimetrics axes (drill / connected pad) and dynamic
+        ``stackup.<layer>.thickness`` paths were omitted from ``_LENGTH_SWEEPS``,
+        so a mil file mixed units and a hand-edited mil sweep was loaded as mm.
+        """
+        cfg = copy.deepcopy(self.default)
+        sweeps = {
+            "via_transition.padstack.drill_diameter": (0.18, 0.22, 0.02),
+            "via_transition.padstack.connected_pad_diameter": (0.36, 0.44, 0.04),
+            "via_transition.pair_pitch": (0.7, 0.9, 0.1),
+            "via_transition.backdrill.residual_stub": (0.10, 0.15, 0.05),
+            "via_transition.return_vias.offset_x": (-0.2, 0.2, 0.2),
+            "via_transition.return_vias.pitch_y": (0.5, 0.7, 0.1),
+            "stackup.DIEL_L1_L2.thickness": (0.05, 0.07, 0.01),
+            "via_transition.padstack.antipad.diameter": (0.56, 0.64, 0.04),
+        }
+        for path, (start, stop, step) in sweeps.items():
+            cfg["sweeps"][path] = {
+                "enabled": True, "start": start, "stop": stop, "step": step,
+            }
+        normalized, _ = normalize_config(cfg)
+        mil = to_external_config(normalized, "mil")
+        to_mil = 1.0 / MM_PER_MIL
+        for path, (start, stop, step) in sweeps.items():
+            sweep = mil["sweeps"][path]
+            self.assertTrue(
+                math.isclose(sweep["start"], start * to_mil, rel_tol=0, abs_tol=1e-9),
+                (path, sweep["start"], start * to_mil),
+            )
+            self.assertTrue(
+                math.isclose(sweep["stop"], stop * to_mil, rel_tol=0, abs_tol=1e-9),
+                (path, sweep["stop"], stop * to_mil),
+            )
+            self.assertTrue(
+                math.isclose(sweep["step"], step * to_mil, rel_tol=0, abs_tol=1e-9),
+                (path, sweep["step"], step * to_mil),
+            )
+        internal, _ = normalize_config(mil)
+        for path, (start, stop, step) in sweeps.items():
+            sweep = internal["sweeps"][path]
+            self.assertTrue(math.isclose(sweep["start"], start, abs_tol=1e-9), path)
+            self.assertTrue(math.isclose(sweep["stop"], stop, abs_tol=1e-9), path)
+            self.assertTrue(math.isclose(sweep["step"], step, abs_tol=1e-9), path)
+
+        # A user-authored mil file uses the same unit for the field and the sweep.
+        authored = to_external_config(copy.deepcopy(self.default), "mil")
+        authored["sweeps"]["via_transition.padstack.drill_diameter"] = {
+            "enabled": True,
+            "start": 7.0,
+            "stop": 9.0,
+            "step": 1.0,
+        }
+        loaded, _ = normalize_config(authored)
+        drill_sweep = loaded["sweeps"]["via_transition.padstack.drill_diameter"]
+        self.assertTrue(math.isclose(drill_sweep["start"], 7.0 * MM_PER_MIL, abs_tol=1e-12))
+        self.assertTrue(math.isclose(drill_sweep["stop"], 9.0 * MM_PER_MIL, abs_tol=1e-12))
+        self.assertTrue(math.isclose(drill_sweep["step"], 1.0 * MM_PER_MIL, abs_tol=1e-12))
 
 
 if __name__ == "__main__":
