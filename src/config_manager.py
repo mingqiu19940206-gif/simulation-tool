@@ -420,7 +420,9 @@ def format_length(mm_value: float, unit: str, significant: Optional[int] = None)
     value = convert_length(mm_value, "mm", unit)
     if significant is not None:
         return f"{value:.{significant}g}"
-    return format_number(value, 6 if unit == "mm" else 4)
+    # Sidebar, preview labels and derived length copy use 1–2 decimals so
+    # mil conversions do not show artifacts like 31.4961 / 27.5591.
+    return format_number(value, 2)
 
 
 def normalize_aedt_version(value: Any) -> str:

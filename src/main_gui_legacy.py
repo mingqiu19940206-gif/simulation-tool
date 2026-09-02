@@ -176,6 +176,11 @@ class SurfaceCapAntipadApp(tk.Tk):
     def _configure_editor_styles(self) -> None:
         style = ttk.Style(self)
         style.configure("Derived.TEntry", fieldbackground="#eef2f7", foreground="#334155")
+        style.map(
+            "Derived.TEntry",
+            fieldbackground=[("readonly", "#eef2f7"), ("disabled", "#e2e8f0")],
+            foreground=[("readonly", "#334155"), ("disabled", "#64748b")],
+        )
         style.configure("Invalid.TEntry", fieldbackground="#fff0f0", foreground="#991b1b")
         style.configure("Warning.TEntry", fieldbackground="#fff7e6", foreground="#9a3412")
         style.configure("StatusGood.TLabel", foreground="#166534", font=("TkDefaultFont", 10, "bold"))
@@ -435,6 +440,16 @@ class SurfaceCapAntipadApp(tk.Tk):
     def _set_group_state(self, prefixes: Sequence[str], enabled: bool) -> None:
         for path, widget in self.widgets.items():
             if not path.startswith(prefixes):
+                continue
+            if path in getattr(self, "_derived_display_paths", ()):
+                formula = ""
+                label = self.formula_labels.get(path)
+                if label is not None:
+                    formula = str(label.cget("text") or "")
+                if enabled:
+                    self._set_derived_state(path, True, formula or "= 宽度 + GAP")
+                else:
+                    self._configure_widget_state(widget, False)
                 continue
             self._configure_widget_state(widget, enabled)
 
@@ -1727,26 +1742,38 @@ class SurfaceCapAntipadApp(tk.Tk):
         drill = float(padstack.get("drill_diameter", 0.0) or 0.0)
         plating = float(padstack.get("plating_thickness", 0.0) or 0.0)
         finished = drill - 2.0 * plating
-        lines = [f"成品孔径 = 钻孔 − 2×镀铜 = {format_length(finished, self.display_unit)} {self.display_unit}"]
+        errors = [(rule_id, str(text).strip()) for rule_id, text in errors if str(text).strip()]
+        warnings = [(rule_id, str(text).strip()) for rule_id, text in warnings if str(text).strip()]
+        issue_lines: List[str] = []
+        if errors:
+            for rule_id, text in errors:
+                issue_lines.append(f"错误 [{rule_id}] {text}")
+        elif warnings:
+            for rule_id, text in warnings[:8]:
+                issue_lines.append(f"警告 [{rule_id}] {text}")
+        else:
+            issue_lines.append("✓ VIA 配置有效")
+        derived = [f"成品孔径 = 钻孔 − 2×镀铜 = {format_length(finished, self.display_unit)} {self.display_unit}"]
         for via in getattr(geometry, "signal_vias", []):
             backdrill = "有" if getattr(via, "backdrilled", False) else "无"
-            lines.append(f"{via.name}（{via.signal}）：输入={via.entry_layer} 输出={via.exit_layer}；"
-                         f"背钻={backdrill}；残桩={format_length(getattr(via, 'actual_residual_stub', 0.0), self.display_unit)} {self.display_unit}")
+            derived.append(
+                f"{via.name}（{via.signal}）：输入={via.entry_layer} 输出={via.exit_layer}；"
+                f"背钻={backdrill}；残桩={format_length(getattr(via, 'actual_residual_stub', 0.0), self.display_unit)} {self.display_unit}"
+            )
         if getattr(geometry, "return_vias", []):
-            lines.append(f"回流地孔（Return VIA）数量：{len(geometry.return_vias)}")
+            derived.append(f"回流地孔（Return VIA）数量：{len(geometry.return_vias)}")
         if getattr(geometry, "ports", []):
-            lines.append(f"端口：{len(geometry.ports)} 个；差分对：{len(getattr(geometry, 'differential_pairs', []))} 个")
-        if errors:
-            lines.append(f"错误 {len(errors)}：")
-            for rule_id, text in errors[:6]:
-                lines.append(f"  [{rule_id}] {text}")
-        elif warnings:
-            lines.append(f"警告 {len(warnings)}：")
-            for rule_id, text in warnings[:4]:
-                lines.append(f"  [{rule_id}] {text}")
-        else:
-            lines.append("✓ VIA 配置有效")
+            derived.append(
+                f"端口：{len(geometry.ports)} 个；差分对：{len(getattr(geometry, 'differential_pairs', []))} 个"
+            )
+        lines = issue_lines + derived
         self.via_feedback_var.set("\n".join(lines))
+        feedback_text = getattr(self, "via_feedback_text", None)
+        if feedback_text is not None:
+            try:
+                feedback_text.configure(height=max(5, min(14, len(lines) + 1)))
+            except tk.TclError:
+                pass
         self._via_last_render = (config, geometry)
         self._draw_via_top_view(config, geometry)
         self._draw_via_cross_section(config, geometry)
@@ -2074,10 +2101,28 @@ class SurfaceCapAntipadApp(tk.Tk):
 
     def _dimension_path_from_event(self, event: tk.Event) -> Optional[str]:
         canvas = event.widget
-        for tag in canvas.gettags("current"):
-            tag = str(tag)
-            if tag.startswith("dimension:"):
-                return tag[len("dimension:"):]
+
+        def path_from_tags(tags: Sequence[str]) -> Optional[str]:
+            for tag in tags:
+                text = str(tag)
+                if text.startswith("dimension:"):
+                    return text[len("dimension:"):]
+            return None
+
+        current = canvas.find_withtag("current")
+        if current:
+            path = path_from_tags(canvas.gettags(current[0]))
+            if path:
+                return path
+        try:
+            x = float(getattr(event, "x", 0))
+            y = float(getattr(event, "y", 0))
+        except (TypeError, ValueError):
+            return None
+        for item in reversed(canvas.find_overlapping(x, y, x, y)):
+            path = path_from_tags(canvas.gettags(item))
+            if path:
+                return path
         return None
 
     def _navigate_via_parameter(self, path: str) -> None:
@@ -2154,9 +2199,11 @@ class SurfaceCapAntipadApp(tk.Tk):
         name_cap = max(60, int((width - pad * 2 - marker_gutter) * 0.42))
         layer_name_gutter = max(60, int(min(max_name_width + 8, name_cap)))
         x1 = pad + marker_gutter + layer_name_gutter
-        band_available = max(80, width - x1 - pad)
+        right_pad = pad
+        band_available = max(80, width - x1 - right_pad)
         geometry_width = min(320, band_available)
-        x2 = x1 + geometry_width
+        x2 = min(x1 + geometry_width, width - right_pad)
+        geometry_width = max(40.0, x2 - x1)
         title_y = pad
         note_y = title_y + title_line + 3
         y = note_y + label_line + 9
@@ -2206,7 +2253,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         has_return = bool(return_vias) and return_diam > 0.0
         gap_mm = 0.12 if has_return else 0.0
         total_span_mm = signal_diam + gap_mm + return_diam if has_return else signal_diam
-        px_per_mm = max(20.0, (geometry_width - 8) / total_span_mm)
+        px_per_mm = max(1.0, (geometry_width - 8) / max(total_span_mm, 1e-9))
         center_px = x1 + 4 + signal_diam / 2.0 * px_per_mm
         return_px = center_px + (signal_diam / 2.0 + gap_mm + return_diam / 2.0) * px_per_mm
 
@@ -2418,8 +2465,7 @@ class SurfaceCapAntipadApp(tk.Tk):
                            text=note_text,
                            fill="#9a3412", font=small_font, tags=("hud-label", "scale-note"))
         content_bottom = legend_y + pad
-        content_width = max(width, int(x2) + pad)
-        canvas.configure(scrollregion=(0, 0, content_width, content_bottom))
+        canvas.configure(scrollregion=(0, 0, width, content_bottom))
 
     # ---- 双向联动（参数 → 图高亮） ----
 

@@ -128,6 +128,10 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         super()._unit_changed(_event)
         if self.unit_var.get() == self.display_unit:
             self._set_ready_status()
+        if self._scenario_is_via():
+            self._sync_via_fields()
+            self._redraw_via_diagrams()
+            self.refresh_visuals()
 
     def _install_combobox_wheel_guard(self) -> None:
         """Keep a closed combobox from consuming the page-scroll wheel event."""
@@ -448,22 +452,8 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self.via_layer_hint.grid(row=9, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 0))
         bind_wraplength(self.via_layer_hint, source=frame)
 
-        frame = group("route", "走线扇出")
-        add("route", frame, 0, "㉒ 扇出方式", "via_transition.fanout.style",
-            values=("deg45", "arc"), display_values={"deg45": "45° 折线", "arc": "圆弧"},
-            formula="两侧走线中心距均等于孔间距时，扇出三项自动停用。")
-        add("route", frame, 1, "㉓ 扇出方向", "via_transition.fanout.direction",
-            values=("auto", "expand", "contract"),
-            display_values={"auto": "自动", "expand": "向外", "contract": "向内"})
-        add("route", frame, 2, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
-        self.via_fanout_hint = _legacy.ttk.Label(
-            frame, text="两侧走线中心距均等于孔间距时，扇出三项自动停用。",
-            foreground="#64748b", wraplength=430, justify="left",
-        )
-        self.via_fanout_hint.grid(row=3, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 0))
-        bind_wraplength(self.via_fanout_hint, source=frame)
-
         frame = group("route", "输入/输出传输线")
+        self.via_trace_group = frame
         add("route", frame, 0, "⑦ 输入传输线长度", "via_transition.entry_trace.length", length=True)
         add("route", frame, 1, "⑧ 输入传输线宽度", "via_transition.entry_trace.width", length=True)
         add("route", frame, 2, "输入 GAP", "via_transition.entry_trace.gap", length=True)
@@ -480,6 +470,25 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self._derived_display_paths.add("via_transition.exit_trace.center_to_center")
         self._set_derived_state(
             "via_transition.exit_trace.center_to_center", True, "= 宽度 + GAP")
+
+        fanout_parent = sections["route"][1]
+        frame = group("route", "走线扇出")
+        self.via_fanout_group = frame
+        add("route", frame, 0, "㉒ 扇出方式", "via_transition.fanout.style",
+            values=("deg45", "arc"), display_values={"deg45": "45° 折线", "arc": "圆弧"},
+            formula="两侧走线中心距均等于孔间距时，扇出三项自动停用。")
+        add("route", frame, 1, "㉓ 扇出方向", "via_transition.fanout.direction",
+            values=("auto", "expand", "contract"),
+            display_values={"auto": "自动", "expand": "向外", "contract": "向内"})
+        add("route", frame, 2, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
+        self.via_fanout_collapsed_hint = _legacy.ttk.Label(
+            fanout_parent,
+            text="两侧走线中心距均等于孔间距时，扇出三项自动停用。",
+            foreground="#64748b", wraplength=430, justify="left",
+        )
+        self.via_fanout_hint = self.via_fanout_collapsed_hint
+        bind_wraplength(self.via_fanout_collapsed_hint, source=fanout_parent)
+        self._set_via_fanout_group_visible(False)
 
         frame = group("signal", "信号孔（Signal VIA）")
         add("signal", frame, 0, "⑪ 钻孔直径", "via_transition.padstack.drill_diameter", length=True)
@@ -801,6 +810,36 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         for widget in parent.grid_slaves(row=row):
             (widget.grid if visible else widget.grid_remove)()
 
+    def _set_via_fanout_group_visible(self, visible: bool) -> None:
+        """Show the shared fanout editors, or one explanation line when unused."""
+        group = getattr(self, "via_fanout_group", None)
+        hint = getattr(self, "via_fanout_collapsed_hint", None)
+        traces = getattr(self, "via_trace_group", None)
+        if group is None:
+            return
+        pack_kwargs = {"fill": "x", "padx": 3, "pady": 4}
+        if visible:
+            if hint is not None:
+                hint.pack_forget()
+            if traces is not None and str(traces.winfo_manager()):
+                group.pack(after=traces, **pack_kwargs)
+            else:
+                group.pack(**pack_kwargs)
+        else:
+            group.pack_forget()
+            if hint is not None:
+                hint_kwargs = {"fill": "x", "padx": 8, "pady": (2, 6)}
+                if traces is not None and str(traces.winfo_manager()):
+                    hint.pack(after=traces, **hint_kwargs)
+                else:
+                    hint.pack(**hint_kwargs)
+        for path in (
+            "via_transition.fanout.style",
+            "via_transition.fanout.direction",
+            "via_transition.fanout.straight_length",
+        ):
+            self._set_via_parameter_row_visible(path, visible)
+
     def _reveal_via_parameter(self, path: str, widget: tk.Widget) -> None:
         page = self._via_parameter_tab_by_path.get(path, self.via_parameter_tabs["route"])
         self.via_parameter_notebook.select(page)
@@ -872,6 +911,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             background="#f7f8fa", foreground="#334155", relief="flat",
             borderwidth=0, highlightthickness=0, padx=2, pady=2,
         )
+        self.via_feedback_text = feedback_text
         feedback_scroll = _legacy.ttk.Scrollbar(
             feedback, orient="vertical", command=feedback_text.yview)
         feedback_text.configure(yscrollcommand=feedback_scroll.set)
@@ -1055,12 +1095,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             )
         except (KeyError, TypeError, ValueError, tk.TclError):
             fanout_active = True
-        for path in (
-            "via_transition.fanout.style",
-            "via_transition.fanout.direction",
-            "via_transition.fanout.straight_length",
-        ):
-            self._set_via_parameter_row_visible(path, fanout_active)
+        self._set_via_fanout_group_visible(fanout_active)
 
     def _build_simulation_sweeps(self) -> None:
         self.simulation_sweep_workbench = SimulationSweepWorkbench(
@@ -1283,6 +1318,15 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
 
     def generate_and_run(self) -> None:
         """Build the project in a separate process and import its HFSS Validate report."""
+        if self._scenario_is_via():
+            messagebox.showinfo(
+                "生成并运行",
+                "差分 VIA 换层当前仅支持离线生成 HFSS 脚本，不能在此启动求解。"
+                "请使用「生成脚本」。",
+                parent=self,
+            )
+            self.status.set("VIA 换层：已降级为离线脚本生成，未启动 HFSS")
+            return
         try:
             generated = self._generate()
             command = ([sys.executable, "--run-generated-script", str(generated.script_path)]

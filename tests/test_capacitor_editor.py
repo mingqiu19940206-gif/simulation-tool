@@ -80,8 +80,8 @@ class CapacitorEditorLogicTests(unittest.TestCase):
         self.assertAlmostEqual(loaded["capacitor_model"]["capacitance_pf"], 47.5)
     def test_editor_precision_is_compact(self) -> None:
         self.assertEqual(format_length(1.0, "mm"), "1")
-        self.assertEqual(format_length(1.0, "mil"), "39.3701")
-        self.assertLessEqual(len(format_length(0.123456789, "mm").split(".")[-1]), 6)
+        self.assertEqual(format_length(1.0, "mil"), "39.37")
+        self.assertLessEqual(len(format_length(0.123456789, "mm").split(".")[-1]), 2)
 
     def test_dimension_specs_are_derived_from_rotated_geometry(self) -> None:
         cfg = copy.deepcopy(self.default)
