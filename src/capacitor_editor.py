@@ -267,7 +267,7 @@ class ScrollableFrame(ttk.Frame):
         attach_mousewheel(self, self.canvas, self.content)
 
     STAGING_HEIGHT = 4096
-    SCROLL_EXTRA = 48
+    SCROLL_EXTRA = 120
 
     def _schedule_layout(self, _event: Optional[tk.Event] = None) -> None:
         """Coalesce content/viewport changes into one stable geometry update."""
@@ -309,7 +309,8 @@ class ScrollableFrame(ttk.Frame):
         """Bottom of packed content after a full-height staging pass.
 
         Uses the last packed child's ``winfo_y() + winfo_height()`` plus content
-        padding and a fixed extra.  ``winfo_reqheight()`` is not used as a cap.
+        padding and a fixed extra.  When the capacitor HFSS group is a sibling,
+        its reqheight and the create-body checkbox also floor the bottom.
         """
 
         try:
@@ -334,6 +335,29 @@ class ScrollableFrame(ttk.Frame):
         last = (mapped or packed)[-1] if (mapped or packed) else None
         if last is not None:
             last_bottom = int(last.winfo_y()) + int(last.winfo_height())
+        try:
+            app = self.winfo_toplevel()
+        except tk.TclError:
+            app = None
+        hfss = getattr(app, "cap_hfss_box", None) if app is not None else None
+        if hfss is not None and getattr(hfss, "master", None) is self.content:
+            last_bottom = max(
+                last_bottom,
+                int(hfss.winfo_y()) + int(hfss.winfo_reqheight()) + 80,
+            )
+            widgets = getattr(app, "widgets", None) or {}
+            checkbox = widgets.get("capacitor.create_body_in_hfss")
+            if checkbox is not None:
+                rel_y = 0
+                owner: Optional[tk.Misc] = checkbox
+                while owner is not None and owner is not self.content:
+                    rel_y += int(owner.winfo_y())
+                    owner = getattr(owner, "master", None)
+                if owner is self.content:
+                    last_bottom = max(
+                        last_bottom,
+                        rel_y + int(checkbox.winfo_height()) + 48,
+                    )
         return max(1, last_bottom + pad_bottom + self.SCROLL_EXTRA)
 
     def _sync_layout(self) -> None:

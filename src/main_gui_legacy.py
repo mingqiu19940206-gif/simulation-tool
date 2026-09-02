@@ -670,13 +670,19 @@ class SurfaceCapAntipadApp(tk.Tk):
 
         hfss = self._cap_section(parameter_root, "HFSS 本体创建选项")
         self.cap_hfss_box = hfss
-        hfss.pack_configure(pady=(4, 10))
+        hfss.pack_configure(pady=(4, 24))
         self._add(hfss, 0, "在 HFSS 中创建电容本体", "capacitor.create_body_in_hfss", boolean=True)
         self._add(hfss, 1, "预览中显示本体轮廓", "capacitor.show_body_outline_in_preview", boolean=True)
-        spacer = tk.Frame(parameter_root, height=72, background="#f7f8fa")
+        spacer = tk.Frame(parameter_root, height=120, background="#f7f8fa")
         spacer.pack_propagate(False)
         spacer.pack(fill="x")
+        # A newline label is a guaranteed-tall last child if the Frame still
+        # reports height 1 after pack_propagate(False). Keep it short enough
+        # that yview(1.0) still shows the create-body checkbox.
+        tail = ttk.Label(parameter_root, text="\n", background="#f7f8fa")
+        tail.pack(fill="x")
         self.cap_parameter_spacer = spacer
+        self.cap_parameter_tail = tail
 
         mode_box = ttk.LabelFrame(right, text="电气模型模式", padding=8)
         mode_box.pack(fill="x", pady=(2, 5))

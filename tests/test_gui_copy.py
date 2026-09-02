@@ -285,15 +285,21 @@ class MainWindowCopyTests(unittest.TestCase):
         self.assertIn(hfss_box, content.winfo_children())
         self.assertIn(hfss_box, content.pack_slaves())
         spacer = getattr(self.app, "cap_parameter_spacer", None)
+        tail = getattr(self.app, "cap_parameter_tail", None)
         self.assertIsNotNone(spacer)
+        self.assertIsNotNone(tail)
         assert spacer is not None
-        self.assertEqual(content.pack_slaves()[-1], spacer)
+        slaves = content.pack_slaves()
+        self.assertIn(spacer, slaves)
+        self.assertEqual(slaves[-1], tail)
         self.app.update_idletasks()
         scroller._sync_layout()
         self.app.update_idletasks()
         occupied = scroller.occupied_content_bottom()
         hfss_bottom = int(hfss_box.winfo_y()) + int(hfss_box.winfo_height())
         self.assertGreaterEqual(occupied, hfss_bottom + 24)
+        checkbox_bottom = self._y_in(checkbox, content) + int(checkbox.winfo_height())
+        self.assertGreaterEqual(occupied, checkbox_bottom + 48)
         region = [float(value) for value in str(scroller.canvas.cget("scrollregion")).split()]
         self.assertEqual(len(region), 4)
         self.assertGreaterEqual(region[3], occupied)
@@ -307,8 +313,13 @@ class MainWindowCopyTests(unittest.TestCase):
         box_bottom = box_top + checkbox.winfo_height()
         view_top = canvas.winfo_rooty()
         view_bottom = view_top + canvas.winfo_height()
-        overlap = min(box_bottom, view_bottom) - max(box_top, view_top)
-        self.assertGreater(overlap, 0, (box_top, box_bottom, view_top, view_bottom, occupied))
+        # Fully inside the inner canvas, not merely overlapping. A half-cut
+        # checkbox (top in view, bottom clipped) must fail.
+        self.assertGreaterEqual(box_top, view_top, (box_top, box_bottom, view_top, view_bottom, occupied))
+        self.assertLessEqual(
+            box_bottom, view_bottom,
+            (box_top, box_bottom, view_top, view_bottom, occupied),
+        )
 
     def _map_720_window(self, tab: str) -> None:
         self.app.geometry("1280x720+0+0")
