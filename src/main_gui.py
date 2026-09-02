@@ -1002,8 +1002,14 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self._update_generate_and_run_button()
 
     def _apply_main_toolbar_layout(self) -> None:
-        super()._apply_main_toolbar_layout()
-        self._update_generate_and_run_button()
+        if getattr(self, "_toolbar_layout_guard", False):
+            return
+        self._toolbar_layout_guard = True
+        try:
+            super()._apply_main_toolbar_layout()
+            self._update_generate_and_run_button()
+        finally:
+            self._toolbar_layout_guard = False
 
     def _update_generate_and_run_button(self) -> None:
         """On VIA, the run button must not look like an HFSS solve action."""
@@ -1018,15 +1024,15 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             if full_text != "生成并运行":
                 continue
             if is_via:
-                button.configure(
-                    text="离线脚本" if compact else "导出离线脚本",
-                    state="disabled",
-                )
+                new_text = "离线脚本" if compact else "导出离线脚本"
+                new_state = "disabled"
             else:
-                button.configure(
-                    text=compact_text if compact else full_text,
-                    state="normal",
-                )
+                new_text = compact_text if compact else full_text
+                new_state = "normal"
+            if (str(button.cget("text")) == new_text
+                    and str(button.cget("state")) == new_state):
+                continue
+            button.configure(text=new_text, state=new_state)
 
     def _refresh_via_layer_selectors(self, config: Mapping[str, Any]) -> None:
         super()._refresh_via_layer_selectors(config)
