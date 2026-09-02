@@ -673,6 +673,10 @@ class SurfaceCapAntipadApp(tk.Tk):
         hfss.pack_configure(pady=(4, 10))
         self._add(hfss, 0, "在 HFSS 中创建电容本体", "capacitor.create_body_in_hfss", boolean=True)
         self._add(hfss, 1, "预览中显示本体轮廓", "capacitor.show_body_outline_in_preview", boolean=True)
+        spacer = tk.Frame(parameter_root, height=72, background="#f7f8fa")
+        spacer.pack_propagate(False)
+        spacer.pack(fill="x")
+        self.cap_parameter_spacer = spacer
 
         mode_box = ttk.LabelFrame(right, text="电气模型模式", padding=8)
         mode_box.pack(fill="x", pady=(2, 5))

@@ -280,30 +280,25 @@ class MainWindowCopyTests(unittest.TestCase):
         scroller = self.app.cap_parameter_scroller
         self.assertFalse(bool(getattr(scroller, "fill_viewport", False)))
         checkbox = self.app.widgets["capacitor.create_body_in_hfss"]
-        hfss_box = getattr(self.app, "cap_hfss_box", None)
-        ancestors = self._ancestors(checkbox)
-        self.assertIn(scroller.content, ancestors)
-        self.assertIn(scroller, ancestors)
-        if hfss_box is not None:
-            self.assertIn(hfss_box, ancestors)
-            self.assertIn(hfss_box, scroller.content.pack_slaves())
+        hfss_box = self.app.cap_hfss_box
+        content = scroller.content
+        self.assertIn(hfss_box, content.winfo_children())
+        self.assertIn(hfss_box, content.pack_slaves())
+        spacer = getattr(self.app, "cap_parameter_spacer", None)
+        self.assertIsNotNone(spacer)
+        assert spacer is not None
+        self.assertEqual(content.pack_slaves()[-1], spacer)
         self.app.update_idletasks()
         scroller._sync_layout()
         self.app.update_idletasks()
-        content = scroller.content
-        checkbox_bottom = self._y_in(checkbox, content) + int(checkbox.winfo_height())
+        occupied = scroller.occupied_content_bottom()
+        hfss_bottom = int(hfss_box.winfo_y()) + int(hfss_box.winfo_height())
+        self.assertGreaterEqual(occupied, hfss_bottom + 24)
         region = [float(value) for value in str(scroller.canvas.cget("scrollregion")).split()]
         self.assertEqual(len(region), 4)
-        self.assertGreaterEqual(region[3], checkbox_bottom)
-        occupied = scroller.occupied_content_bottom()
-        reqheight = int(content.winfo_reqheight())
-        last_inside = hfss_box is not None and (
-            self._y_in(hfss_box, content) + int(hfss_box.winfo_height()) <= region[3] + 1
-        )
-        self.assertTrue(
-            occupied > reqheight or last_inside,
-            (occupied, reqheight, region[3], last_inside),
-        )
+        self.assertGreaterEqual(region[3], occupied)
+        window_height = int(float(scroller.canvas.itemcget(scroller._window, "height") or 0))
+        self.assertGreaterEqual(window_height, hfss_bottom + 24)
         scroller.canvas.yview_moveto(1.0)
         self.app.update()
         self.app.update_idletasks()
@@ -313,7 +308,7 @@ class MainWindowCopyTests(unittest.TestCase):
         view_top = canvas.winfo_rooty()
         view_bottom = view_top + canvas.winfo_height()
         overlap = min(box_bottom, view_bottom) - max(box_top, view_top)
-        self.assertGreater(overlap, 0, (box_top, box_bottom, view_top, view_bottom, region))
+        self.assertGreater(overlap, 0, (box_top, box_bottom, view_top, view_bottom, occupied))
 
     def _map_720_window(self, tab: str) -> None:
         self.app.geometry("1280x720+0+0")

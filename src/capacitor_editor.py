@@ -251,6 +251,7 @@ class ScrollableFrame(ttk.Frame):
         self.fill_viewport = bool(fill_viewport)
         self._layout_job: Optional[str] = None
         self._last_window_size = (0, 0)
+        self._syncing = False
         self.canvas = tk.Canvas(self, highlightthickness=0, background="#f7f8fa")
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.content = ttk.Frame(self.canvas, padding=(2, 2))
@@ -265,8 +266,21 @@ class ScrollableFrame(ttk.Frame):
             self.content.bind(sequence, self._wheel)
         attach_mousewheel(self, self.canvas, self.content)
 
+    STAGING_HEIGHT = 4096
+    SCROLL_EXTRA = 48
+
     def _schedule_layout(self, _event: Optional[tk.Event] = None) -> None:
         """Coalesce content/viewport changes into one stable geometry update."""
+        if getattr(self, "_syncing", False):
+            return
+        # Staging/final height writes fire <Configure> on the embedded frame.
+        # Ignore those or non-fill layout restages forever.
+        if (
+            not self.fill_viewport
+            and _event is not None
+            and getattr(_event, "widget", None) is self.content
+        ):
+            return
         if self._layout_job is None:
             self._layout_job = self.after_idle(self._sync_layout)
 
@@ -291,86 +305,36 @@ class ScrollableFrame(ttk.Frame):
             return (values[0], values[1], values[2], values[1])
         return (values[0], values[1], values[2], values[3])
 
-    @staticmethod
-    def _pack_pady(widget: tk.Misc) -> Tuple[int, int]:
-        try:
-            if widget.winfo_manager() != "pack":
-                return (0, 0)
-            pady = widget.pack_info().get("pady", 0)
-        except tk.TclError:
-            return (0, 0)
-        if isinstance(pady, (list, tuple)):
-            values = [int(float(value)) for value in pady]
-        else:
-            parts = str(pady).replace(",", " ").split()
-            values = [int(float(part)) for part in parts] if parts else [0]
-        if not values:
-            return (0, 0)
-        if len(values) == 1:
-            return (values[0], values[0])
-        return (values[0], values[-1])
-
-    def _labelframe_chrome_slack(self, frame: tk.Misc) -> int:
-        try:
-            text = str(frame.cget("text") or "")
-        except tk.TclError:
-            text = ""
-        if not text:
-            return 6
-        return max(10, font_linespace(frame, "TkDefaultFont") + 8)
-
-    def _child_occupied_height(self, child: tk.Misc) -> int:
-        try:
-            span = max(int(child.winfo_reqheight()), int(child.winfo_height()))
-        except tk.TclError:
-            span = 1
-        try:
-            class_name = str(child.winfo_class())
-        except tk.TclError:
-            class_name = ""
-        if class_name not in {"TLabelframe", "Labelframe"}:
-            return max(1, span)
-        interior = 0
-        try:
-            for grandchild in child.winfo_children():
-                try:
-                    interior = max(
-                        interior,
-                        int(grandchild.winfo_y()) + max(
-                            int(grandchild.winfo_reqheight()),
-                            int(grandchild.winfo_height()),
-                        ),
-                    )
-                except tk.TclError:
-                    continue
-        except tk.TclError:
-            pass
-        return max(1, span, interior + self._labelframe_chrome_slack(child))
-
     def occupied_content_bottom(self) -> int:
-        """Bottom of packed content, including LabelFrame chrome reqheight misses."""
+        """Bottom of packed content after a full-height staging pass.
+
+        Uses the last packed child's ``winfo_y() + winfo_height()`` plus content
+        padding and a fixed extra.  ``winfo_reqheight()`` is not used as a cap.
+        """
 
         try:
             self.update_idletasks()
         except tk.TclError:
-            return 1
-        _pad_left, pad_top, _pad_right, pad_bottom = self._padding_box(self.content)
-        from_geometry = pad_top
-        stacked = pad_top
+            return 1 + self.SCROLL_EXTRA
+        _pad_left, _pad_top, _pad_right, pad_bottom = self._padding_box(self.content)
+        last_bottom = 0
         try:
             children = self.content.winfo_children()
         except tk.TclError:
-            return max(1, int(self.content.winfo_reqheight()) + pad_bottom)
+            children = ()
+        packed = []
         for child in children:
             try:
-                height = self._child_occupied_height(child)
-                pady_top, pady_bottom = self._pack_pady(child)
-                y = int(child.winfo_y())
-                from_geometry = max(from_geometry, y + height + pady_bottom)
-                stacked += pady_top + height + pady_bottom
+                if child.winfo_manager() != "pack":
+                    continue
+                packed.append(child)
             except tk.TclError:
                 continue
-        return max(1, from_geometry, stacked, pad_top) + pad_bottom
+        mapped = [child for child in packed if child.winfo_ismapped()]
+        last = (mapped or packed)[-1] if (mapped or packed) else None
+        if last is not None:
+            last_bottom = int(last.winfo_y()) + int(last.winfo_height())
+        return max(1, last_bottom + pad_bottom + self.SCROLL_EXTRA)
 
     def _sync_layout(self) -> None:
         self._layout_job = None
@@ -394,34 +358,28 @@ class ScrollableFrame(ttk.Frame):
                 scrollregion=(0, 0, viewport_width, window_height),
             )
             return
+        self._syncing = True
         try:
             self.update_idletasks()
-        except tk.TclError:
-            return
-        try:
-            configured = self.canvas.itemcget(self._window, "height")
-            configured_height = int(float(configured)) if str(configured).strip() else 0
-        except (tk.TclError, TypeError, ValueError):
-            configured_height = 0
-        if configured_height < 2:
-            # Map packed children at a full height so y/reqheight are real,
-            # then shrink to the occupied bottom.  Using reqheight here would
-            # clip the last ttk.LabelFrame inside the canvas window.
-            self.canvas.itemconfigure(self._window, width=viewport_width, height=4096)
-            try:
-                self.update_idletasks()
-            except tk.TclError:
-                return
-        occupied_bottom = self.occupied_content_bottom()
-        window_size = (viewport_width, occupied_bottom)
-        if window_size != self._last_window_size:
+            # Always remount packed children at a tall staging height first.
+            # A short previous occupied_bottom would otherwise keep the last
+            # LabelFrame clipped, so later measures stay undercounted.
+            self.canvas.itemconfigure(
+                self._window, width=viewport_width, height=self.STAGING_HEIGHT,
+            )
+            self.update_idletasks()
+            occupied_bottom = self.occupied_content_bottom()
             self.canvas.itemconfigure(
                 self._window,
                 width=viewport_width,
                 height=occupied_bottom,
             )
-            self._last_window_size = window_size
-        self.canvas.configure(scrollregion=(0, 0, viewport_width, occupied_bottom))
+            self._last_window_size = (viewport_width, occupied_bottom)
+            self.canvas.configure(scrollregion=(0, 0, viewport_width, occupied_bottom))
+        except tk.TclError:
+            return
+        finally:
+            self._syncing = False
 
     def refresh_layout(self) -> None:
         """Request a layout pass after font or child-request changes."""
