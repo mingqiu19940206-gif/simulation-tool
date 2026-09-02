@@ -270,6 +270,108 @@ class ScrollableFrame(ttk.Frame):
         if self._layout_job is None:
             self._layout_job = self.after_idle(self._sync_layout)
 
+    @staticmethod
+    def _padding_box(widget: tk.Misc) -> Tuple[int, int, int, int]:
+        try:
+            raw = widget.cget("padding")
+        except tk.TclError:
+            return (0, 0, 0, 0)
+        if isinstance(raw, (list, tuple)):
+            values = [int(float(value)) for value in raw]
+        else:
+            parts = str(raw).replace(",", " ").split()
+            values = [int(float(part)) for part in parts] if parts else [0]
+        if not values:
+            return (0, 0, 0, 0)
+        if len(values) == 1:
+            return (values[0], values[0], values[0], values[0])
+        if len(values) == 2:
+            return (values[0], values[1], values[0], values[1])
+        if len(values) == 3:
+            return (values[0], values[1], values[2], values[1])
+        return (values[0], values[1], values[2], values[3])
+
+    @staticmethod
+    def _pack_pady(widget: tk.Misc) -> Tuple[int, int]:
+        try:
+            if widget.winfo_manager() != "pack":
+                return (0, 0)
+            pady = widget.pack_info().get("pady", 0)
+        except tk.TclError:
+            return (0, 0)
+        if isinstance(pady, (list, tuple)):
+            values = [int(float(value)) for value in pady]
+        else:
+            parts = str(pady).replace(",", " ").split()
+            values = [int(float(part)) for part in parts] if parts else [0]
+        if not values:
+            return (0, 0)
+        if len(values) == 1:
+            return (values[0], values[0])
+        return (values[0], values[-1])
+
+    def _labelframe_chrome_slack(self, frame: tk.Misc) -> int:
+        try:
+            text = str(frame.cget("text") or "")
+        except tk.TclError:
+            text = ""
+        if not text:
+            return 6
+        return max(10, font_linespace(frame, "TkDefaultFont") + 8)
+
+    def _child_occupied_height(self, child: tk.Misc) -> int:
+        try:
+            span = max(int(child.winfo_reqheight()), int(child.winfo_height()))
+        except tk.TclError:
+            span = 1
+        try:
+            class_name = str(child.winfo_class())
+        except tk.TclError:
+            class_name = ""
+        if class_name not in {"TLabelframe", "Labelframe"}:
+            return max(1, span)
+        interior = 0
+        try:
+            for grandchild in child.winfo_children():
+                try:
+                    interior = max(
+                        interior,
+                        int(grandchild.winfo_y()) + max(
+                            int(grandchild.winfo_reqheight()),
+                            int(grandchild.winfo_height()),
+                        ),
+                    )
+                except tk.TclError:
+                    continue
+        except tk.TclError:
+            pass
+        return max(1, span, interior + self._labelframe_chrome_slack(child))
+
+    def occupied_content_bottom(self) -> int:
+        """Bottom of packed content, including LabelFrame chrome reqheight misses."""
+
+        try:
+            self.update_idletasks()
+        except tk.TclError:
+            return 1
+        _pad_left, pad_top, _pad_right, pad_bottom = self._padding_box(self.content)
+        from_geometry = pad_top
+        stacked = pad_top
+        try:
+            children = self.content.winfo_children()
+        except tk.TclError:
+            return max(1, int(self.content.winfo_reqheight()) + pad_bottom)
+        for child in children:
+            try:
+                height = self._child_occupied_height(child)
+                pady_top, pady_bottom = self._pack_pady(child)
+                y = int(child.winfo_y())
+                from_geometry = max(from_geometry, y + height + pady_bottom)
+                stacked += pady_top + height + pady_bottom
+            except tk.TclError:
+                continue
+        return max(1, from_geometry, stacked, pad_top) + pad_bottom
+
     def _sync_layout(self) -> None:
         self._layout_job = None
         try:
@@ -292,26 +394,34 @@ class ScrollableFrame(ttk.Frame):
                 scrollregion=(0, 0, viewport_width, window_height),
             )
             return
-        # Do not force the embedded window to reqheight.  ttk.LabelFrame chrome
-        # is routinely under-counted, which clipped the last packed group
-        # (电容页「HFSS 本体创建选项」) even with the scrollbar at the bottom.
-        window_size = (viewport_width, natural_height)
-        if window_size != self._last_window_size:
-            self.canvas.itemconfigure(self._window, width=viewport_width)
-            self._last_window_size = window_size
         try:
             self.update_idletasks()
         except tk.TclError:
             return
         try:
-            actual_height = max(1, int(self.content.winfo_height()))
-        except tk.TclError:
-            actual_height = natural_height
-        bbox = self.canvas.bbox(self._window) or self.canvas.bbox("all")
-        bottom = max(natural_height, actual_height)
-        if bbox is not None:
-            bottom = max(bottom, int(bbox[3]))
-        self.canvas.configure(scrollregion=(0, 0, viewport_width, bottom))
+            configured = self.canvas.itemcget(self._window, "height")
+            configured_height = int(float(configured)) if str(configured).strip() else 0
+        except (tk.TclError, TypeError, ValueError):
+            configured_height = 0
+        if configured_height < 2:
+            # Map packed children at a full height so y/reqheight are real,
+            # then shrink to the occupied bottom.  Using reqheight here would
+            # clip the last ttk.LabelFrame inside the canvas window.
+            self.canvas.itemconfigure(self._window, width=viewport_width, height=4096)
+            try:
+                self.update_idletasks()
+            except tk.TclError:
+                return
+        occupied_bottom = self.occupied_content_bottom()
+        window_size = (viewport_width, occupied_bottom)
+        if window_size != self._last_window_size:
+            self.canvas.itemconfigure(
+                self._window,
+                width=viewport_width,
+                height=occupied_bottom,
+            )
+            self._last_window_size = window_size
+        self.canvas.configure(scrollregion=(0, 0, viewport_width, occupied_bottom))
 
     def refresh_layout(self) -> None:
         """Request a layout pass after font or child-request changes."""
@@ -326,7 +436,7 @@ class ScrollableFrame(ttk.Frame):
     def scroll_to_widget(self, widget: tk.Widget) -> None:
         """Reveal a descendant parameter widget without assuming fixed row sizes."""
         self.update_idletasks()
-        content_height = max(1, self.content.winfo_reqheight())
+        content_height = max(1, self.occupied_content_bottom())
         viewport_height = max(1, self.canvas.winfo_height())
         movable = max(1, content_height - viewport_height)
         target_y = widget.winfo_rooty() - self.content.winfo_rooty()

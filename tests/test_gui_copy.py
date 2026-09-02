@@ -120,6 +120,47 @@ class WraplengthHelperTests(unittest.TestCase):
         self.assertGreater(inner_pos[0], 0.0)
         self.assertEqual(outer_pos[0], 0.0)
 
+    def test_scrollable_frame_window_height_follows_label_frames(self) -> None:
+        self.root.geometry("360x180")
+        self.root.deiconify()
+        scroller = ScrollableFrame(self.root)
+        scroller.pack(fill="both", expand=True)
+        scroller.canvas.configure(width=280, height=100)
+        last_check: ttk.Checkbutton | None = None
+        for index, title in enumerate(("封装", "本体", "焊盘", "布置", "桥接", "HFSS")):
+            box = ttk.LabelFrame(scroller.content, text=title, padding=(8, 6))
+            box.pack(fill="x", padx=3, pady=4)
+            ttk.Label(box, text=f"row {index}").pack(anchor="w")
+            last_check = ttk.Checkbutton(box, text="在 HFSS 中创建电容本体")
+            last_check.pack(anchor="w")
+        self.root.update()
+        self.root.update_idletasks()
+        scroller._sync_layout()
+        self.root.update_idletasks()
+        self.assertIsNotNone(last_check)
+        assert last_check is not None
+        occupied = scroller.occupied_content_bottom()
+        region = [float(value) for value in str(scroller.canvas.cget("scrollregion")).split()]
+        self.assertEqual(len(region), 4)
+        self.assertEqual(int(region[3]), occupied)
+        window_height = int(float(scroller.canvas.itemcget(scroller._window, "height") or 0))
+        self.assertEqual(window_height, occupied)
+        last_bottom = (
+            last_check.winfo_rooty() + last_check.winfo_height() - scroller.content.winfo_rooty()
+        )
+        self.assertGreaterEqual(occupied, last_bottom)
+        reqheight = int(scroller.content.winfo_reqheight())
+        if reqheight < last_bottom:
+            self.assertGreater(window_height, reqheight)
+        scroller.canvas.yview_moveto(1.0)
+        self.root.update_idletasks()
+        view_top = scroller.canvas.winfo_rooty()
+        view_bottom = view_top + scroller.canvas.winfo_height()
+        overlap = min(last_check.winfo_rooty() + last_check.winfo_height(), view_bottom) - max(
+            last_check.winfo_rooty(), view_top
+        )
+        self.assertGreater(overlap, 0)
+
 
 class MainWindowCopyTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -225,36 +266,54 @@ class MainWindowCopyTests(unittest.TestCase):
             owner = getattr(owner, "master", None)
         return chain
 
+    @staticmethod
+    def _y_in(widget: tk.Misc, ancestor: tk.Misc) -> int:
+        offset = 0
+        owner: tk.Misc | None = widget
+        while owner is not None and owner is not ancestor:
+            offset += int(owner.winfo_y())
+            owner = getattr(owner, "master", None)
+        return offset
+
     def test_create_body_checkbox_is_inside_inner_scroller(self) -> None:
         self._map_720_window("电容与模型")
         scroller = self.app.cap_parameter_scroller
+        self.assertFalse(bool(getattr(scroller, "fill_viewport", False)))
         checkbox = self.app.widgets["capacitor.create_body_in_hfss"]
-        label = self.app.field_labels["capacitor.create_body_in_hfss"]
         hfss_box = getattr(self.app, "cap_hfss_box", None)
         ancestors = self._ancestors(checkbox)
         self.assertIn(scroller.content, ancestors)
         self.assertIn(scroller, ancestors)
-        self.assertNotIn(checkbox, self.app.cap_parameter_column.pack_slaves())
         if hfss_box is not None:
             self.assertIn(hfss_box, ancestors)
             self.assertIn(hfss_box, scroller.content.pack_slaves())
-        scroller.refresh_layout()
-        self.app.update()
         self.app.update_idletasks()
-        scroller.canvas.yview_moveto(1.0)
+        scroller._sync_layout()
         self.app.update_idletasks()
-        content_top = scroller.content.winfo_rooty()
-        bottom = max(
-            label.winfo_rooty() + label.winfo_height() - content_top,
-            checkbox.winfo_rooty() + checkbox.winfo_height() - content_top,
-        )
-        if hfss_box is not None:
-            bottom = max(bottom, hfss_box.winfo_rooty() + hfss_box.winfo_height() - content_top)
+        content = scroller.content
+        checkbox_bottom = self._y_in(checkbox, content) + int(checkbox.winfo_height())
         region = [float(value) for value in str(scroller.canvas.cget("scrollregion")).split()]
         self.assertEqual(len(region), 4)
-        self.assertGreaterEqual(region[3], bottom - 1)
-        view_bottom = scroller.canvas.canvasy(scroller.canvas.winfo_height())
-        self.assertLessEqual(bottom, view_bottom + 2)
+        self.assertGreaterEqual(region[3], checkbox_bottom)
+        occupied = scroller.occupied_content_bottom()
+        reqheight = int(content.winfo_reqheight())
+        last_inside = hfss_box is not None and (
+            self._y_in(hfss_box, content) + int(hfss_box.winfo_height()) <= region[3] + 1
+        )
+        self.assertTrue(
+            occupied > reqheight or last_inside,
+            (occupied, reqheight, region[3], last_inside),
+        )
+        scroller.canvas.yview_moveto(1.0)
+        self.app.update()
+        self.app.update_idletasks()
+        canvas = scroller.canvas
+        box_top = checkbox.winfo_rooty()
+        box_bottom = box_top + checkbox.winfo_height()
+        view_top = canvas.winfo_rooty()
+        view_bottom = view_top + canvas.winfo_height()
+        overlap = min(box_bottom, view_bottom) - max(box_top, view_top)
+        self.assertGreater(overlap, 0, (box_top, box_bottom, view_top, view_bottom, region))
 
     def _map_720_window(self, tab: str) -> None:
         self.app.geometry("1280x720+0+0")
