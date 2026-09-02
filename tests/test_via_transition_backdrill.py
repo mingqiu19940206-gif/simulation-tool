@@ -16,6 +16,7 @@ from config_manager import (ConfigManager, make_generation_snapshot,
 from geometry_calculator import GeometryCalculator
 from hfss_script_generator import HfssScriptGenerator
 from model_preview import build_via_transition_scene
+from via_transition_geometry import derive_functional_barrel_span
 from via_transition_semantics import validate_via_transition
 
 
@@ -49,6 +50,28 @@ def _reversed_cfg():
     })
     # 端口位于 L12/L14，物理内侧最近参考平面均为 L13。
     vt["return_vias"]["connect_layers"] = ["L13"]
+    return cfg
+
+
+def _bottom_reversed_cfg():
+    """对称场景：L10 输入、L1 输出，机械钻孔 L1–L14，只有物理底部残桩。"""
+    cfg = _phase3_cfg()
+    vt = cfg["via_transition"]
+    vt.update({"entry_layer": "L10", "exit_layer": "L1",
+               "drill_start_layer": "L1", "drill_end_layer": "L14"})
+    vt["backdrill"]["from_side"] = "auto"
+    return cfg
+
+
+def _l14_to_l3_cfg():
+    """L14→L3：层名排序与叠层 Z/index 不一致的顶部残桩案例。"""
+    cfg = _reversed_cfg()
+    vt = cfg["via_transition"]
+    vt.update({"entry_layer": "L14", "exit_layer": "L3"})
+    # L3 距板顶不足 0.25 mm，必须使用更短残桩才能合法背钻。
+    vt["backdrill"]["residual_stub"] = 0.05
+    # 端口位于 L3/L14，朝功能跨度内侧的最近参考平面为 L4 与 L13。
+    vt["return_vias"]["connect_layers"] = ["L4", "L13"]
     return cfg
 
 
@@ -277,6 +300,89 @@ class ViaTransitionBackdrillTests(unittest.TestCase):
             )
         self.assertEqual(completed.returncode, 0,
                          completed.stdout + completed.stderr)
+
+    def test_18_bottom_stub_reversed_auto_derives_bottom(self) -> None:
+        # 对称于 L14→L12 推导 top：entry 在内层、exit 在板顶时 auto 必须推导 bottom。
+        cfg = _bottom_reversed_cfg()
+        geometry = GeometryCalculator(cfg).calculate()
+        self.assertFalse(geometry.errors, geometry.errors)
+        issues = validate_via_transition(cfg, geometry)
+        self.assertFalse(any(item[0] == "VIA-TRN-046" for item in issues), issues)
+        self.assertFalse([item for item in issues if item[1] == "error"], issues)
+        for via in geometry.signal_vias:
+            self.assertTrue(via.backdrilled)
+            self.assertEqual(via.backdrill_from_side, "bottom")
+            self.assertEqual(via.upper_functional_layer, "L1")
+            self.assertEqual(via.lower_functional_layer, "L10")
+            self.assertFalse(via.top_stub_present)
+            self.assertTrue(via.bottom_stub_present)
+            self.assertEqual(via.per_layer_states["L1"], "exit_connected")
+            self.assertEqual(via.per_layer_states["L10"], "entry_connected")
+
+    def test_19_l14_to_l3_uses_stackup_index_not_layer_name_order(self) -> None:
+        # 层名排序会把 L14 放在 L3 之前（"L14" < "L3"），但叠层 Z/index 中 L3 在上、L14 在下。
+        self.assertLess("L14", "L3")
+        cfg = _l14_to_l3_cfg()
+        geometry = GeometryCalculator(cfg).calculate()
+        self.assertFalse(geometry.errors, geometry.errors)
+        issues = validate_via_transition(cfg, geometry)
+        self.assertFalse(any(item[0] == "VIA-TRN-046" for item in issues), issues)
+        self.assertFalse([item for item in issues if item[1] == "error"], issues)
+        names = [layer.name for layer in geometry.stackup]
+        self.assertLess(names.index("L3"), names.index("L14"))
+        for via in geometry.signal_vias:
+            self.assertTrue(via.backdrilled)
+            self.assertEqual(via.backdrill_from_side, "top")
+            self.assertEqual(via.upper_functional_layer, "L3")
+            self.assertEqual(via.lower_functional_layer, "L14")
+            self.assertTrue(via.top_stub_present)
+            self.assertFalse(via.bottom_stub_present)
+            self.assertNotEqual(via.upper_functional_layer, min("L14", "L3"))
+            self.assertEqual(via.per_layer_states["L3"], "exit_connected")
+            self.assertEqual(via.per_layer_states["L14"], "entry_connected")
+
+        # 数字层名与 Z 相反：L14 在板顶、L3 在其下。按 int(name[1:]) 会误把 L3 当 upper。
+        inverted_names = ["L14", "DIEL", "L3", "DIEL2", "AAA"]
+        span = derive_functional_barrel_span(
+            inverted_names, "L14", "L3", "L14", "AAA")
+        self.assertIsNotNone(span)
+        self.assertEqual(span.upper_functional_layer, "L14")
+        self.assertEqual(span.lower_functional_layer, "L3")
+        self.assertFalse(span.top_stub)
+        self.assertTrue(span.bottom_stub)
+        numeric_upper = min(("L14", "L3"), key=lambda name: int(name[1:]))
+        self.assertNotEqual(span.upper_functional_layer, numeric_upper)
+
+    def test_20_explicit_bottom_on_reversed_top_stub_fails_closed(self) -> None:
+        # L14→L12 物理上只有顶部残桩：auto 与显式 top 合法，显式 bottom 必须 VIA-TRN-048。
+        auto_cfg = _reversed_cfg()
+        auto_geometry = GeometryCalculator(auto_cfg).calculate()
+        self.assertFalse(auto_geometry.errors, auto_geometry.errors)
+        auto_issues = validate_via_transition(auto_cfg, auto_geometry)
+        self.assertFalse([item for item in auto_issues if item[1] == "error"], auto_issues)
+        for via in auto_geometry.signal_vias:
+            self.assertEqual(via.backdrill_from_side, "top")
+            self.assertTrue(via.top_stub_present)
+            self.assertFalse(via.bottom_stub_present)
+
+        top_cfg = copy.deepcopy(auto_cfg)
+        top_cfg["via_transition"]["backdrill"]["from_side"] = "top"
+        top_geometry = GeometryCalculator(top_cfg).calculate()
+        self.assertFalse(top_geometry.errors, top_geometry.errors)
+        top_issues = validate_via_transition(top_cfg, top_geometry)
+        self.assertFalse([item for item in top_issues if item[1] == "error"], top_issues)
+        self.assertFalse(any(item[0] == "VIA-TRN-048" for item in top_issues), top_issues)
+
+        bottom_cfg = copy.deepcopy(auto_cfg)
+        bottom_cfg["via_transition"]["backdrill"]["from_side"] = "bottom"
+        bottom_geometry = GeometryCalculator(bottom_cfg).calculate()
+        self.assertTrue(
+            any("不存在底部残桩" in error for error in bottom_geometry.errors),
+            bottom_geometry.errors)
+        self.assertTrue(all(not via.backdrilled for via in bottom_geometry.signal_vias))
+        bottom_issues = validate_via_transition(bottom_cfg, bottom_geometry)
+        self.assertTrue(any(item[0] == "VIA-TRN-048" for item in bottom_issues), bottom_issues)
+        self.assertFalse(any(item[0] == "VIA-TRN-046" for item in bottom_issues), bottom_issues)
 
 
 if __name__ == "__main__":

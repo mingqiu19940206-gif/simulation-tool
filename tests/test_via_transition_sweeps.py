@@ -13,6 +13,7 @@ from config_manager import ConfigManager
 from via_transition_sweeps import (
     VIA_SAFE_SWEEP_PATHS,
     VIA_TOPOLOGY_SWEEP_PATHS,
+    _residual_stub_crossings,
     inspect_via_sweep_plan,
     iter_via_variations,
     via_scan_values,
@@ -93,12 +94,39 @@ class ViaTransitionSweepsTests(unittest.TestCase):
              "drill_start_layer": "L1", "drill_end_layer": "L14"})
         self.config["via_transition"]["backdrill"].update(
             {"enabled": True, "from_side": "auto"})
+        crossings = {
+            layer: residual
+            for residual, layer in _residual_stub_crossings(self.config)
+        }
+        # L11/L12 界面残桩必须钉在 DIEL_L11_L12 厚度 0.107442 mm，不能只比较两组配置。
+        self.assertIn("L11", crossings)
+        self.assertAlmostEqual(crossings["L11"], 0.107442, places=9)
+        self.assertNotIn("L12", crossings)
+
         self.config["sweeps"]["via_transition.backdrill.residual_stub"] = {
             "enabled": True, "start": 0.1, "stop": 1.4, "step": 1.3,
         }
         plan = inspect_via_sweep_plan(self.config)
         self.assertTrue(any(level == "error" and "铜层" in message
                             for level, message in plan.issues), plan.issues)
+        self.assertTrue(any(level == "error" and "L11" in message
+                            for level, message in plan.issues), plan.issues)
+
+        below = copy.deepcopy(self.config)
+        below["sweeps"]["via_transition.backdrill.residual_stub"] = {
+            "enabled": True, "start": 0.1, "stop": 0.107, "step": 0.007,
+        }
+        below_plan = inspect_via_sweep_plan(below)
+        self.assertFalse(any(level == "error" and "铜层" in message
+                             for level, message in below_plan.issues), below_plan.issues)
+
+        straddle = copy.deepcopy(self.config)
+        straddle["sweeps"]["via_transition.backdrill.residual_stub"] = {
+            "enabled": True, "start": 0.1, "stop": 0.108, "step": 0.008,
+        }
+        straddle_plan = inspect_via_sweep_plan(straddle)
+        self.assertTrue(any(level == "error" and "L11" in message
+                            for level, message in straddle_plan.issues), straddle_plan.issues)
 
 
 if __name__ == "__main__":
