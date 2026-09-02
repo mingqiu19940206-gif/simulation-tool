@@ -11,8 +11,8 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from config_manager import format_length, format_number
 from gui_layout import (
-    CanvasLabelPlacer, canvas_viewport, debounce_after, ellipsize,
-    font_linespace, resolve_font,
+    CanvasLabelPlacer, attach_mousewheel, canvas_viewport, debounce_after, ellipsize,
+    font_linespace, mousewheel_steps, resolve_font,
 )
 
 ENUM_LABELS: Dict[str, Dict[str, str]] = {
@@ -114,32 +114,32 @@ def build_dimension_specs(geometry: Any) -> List[DimensionSpec]:
         pad_out_center.x - pad_in_center.x,
     ))
     result = [
-        DimensionSpec("capacitor.body_length", "body_length", "body", _distance(*body_length),
+        DimensionSpec("capacitor.body_length", "本体长度", "body", _distance(*body_length),
                       *body_length, -14, ("body",)),
-        DimensionSpec("capacitor.body_width", "body_width", "body", _distance(*body_width),
+        DimensionSpec("capacitor.body_width", "本体宽度", "body", _distance(*body_width),
                       *body_width, -14, ("body",)),
-        DimensionSpec("capacitor.pad_length", "pad_length", "pad", _distance(*pad_length),
+        DimensionSpec("capacitor.pad_length", "焊盘长度", "pad", _distance(*pad_length),
                       *pad_length, 13, ("pad",)),
-        DimensionSpec("capacitor.pad_width", "pad_width", "pad", _distance(*pad_width),
+        DimensionSpec("capacitor.pad_width", "焊盘宽度", "pad", _distance(*pad_width),
                       *pad_width, 13, ("pad",)),
-        DimensionSpec("capacitor.pad_gap", "pad_gap", "pad", _distance(*gap),
+        DimensionSpec("capacitor.pad_gap", "焊盘间隙", "pad", _distance(*gap),
                       *gap, -20, ("pad", "bridge")),
-        DimensionSpec("capacitor.pad_pitch", "pad_pitch", "pad", _distance(*pitch),
+        DimensionSpec("capacitor.pad_pitch", "焊盘中心距", "pad", _distance(*pitch),
                       *pitch, 28, ("pad",)),
-        DimensionSpec("capacitor.cap_pitch", "cap_pitch", "layout", _distance(*caps),
+        DimensionSpec("capacitor.cap_pitch", "P/N 中心距", "layout", _distance(*caps),
                       *caps, -38, ("pad", "body", "bridge")),
-        DimensionSpec("capacitor.cap_center_x", "cap_center_x（有效）", "layout", center_x[1][0],
+        DimensionSpec("capacitor.cap_center_x", "电容中心 X（有效）", "layout", center_x[1][0],
                       *center_x, 34, ("pad", "body", "bridge")),
-        DimensionSpec("capacitor.pad_rotation", "pad_rotation", "pad", rotation,
+        DimensionSpec("capacitor.pad_rotation", "焊盘旋转", "pad", rotation,
                       _point_tuple(cap_p), _point_tuple(pad_out_center), -26, ("pad", "body", "bridge"), True),
     ]
     if bridge is not None:
         bridge_length = (_point_tuple(bridge.points[0]), _point_tuple(bridge.points[1]))
         bridge_width = (_point_tuple(bridge.points[1]), _point_tuple(bridge.points[2]))
         result[-1:-1] = [
-            DimensionSpec("capacitor.bridge_width", "bridge_width", "bridge", _distance(*bridge_width),
+            DimensionSpec("capacitor.bridge_width", "桥接宽度", "bridge", _distance(*bridge_width),
                           *bridge_width, -12, ("bridge",)),
-            DimensionSpec("capacitor.bridge_length", "bridge_length", "bridge", _distance(*bridge_length),
+            DimensionSpec("capacitor.bridge_length", "桥接长度", "bridge", _distance(*bridge_length),
                           *bridge_length, 12, ("bridge",)),
         ]
     return result
@@ -251,6 +251,7 @@ class ScrollableFrame(ttk.Frame):
         self.fill_viewport = bool(fill_viewport)
         self._layout_job: Optional[str] = None
         self._last_window_size = (0, 0)
+        self._syncing = False
         self.canvas = tk.Canvas(self, highlightthickness=0, background="#f7f8fa")
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.content = ttk.Frame(self.canvas, padding=(2, 2))
@@ -260,13 +261,104 @@ class ScrollableFrame(ttk.Frame):
         scrollbar.pack(side="right", fill="y")
         self.content.bind("<Configure>", self._schedule_layout)
         self.canvas.bind("<Configure>", self._schedule_layout)
-        self.canvas.bind("<MouseWheel>", self._wheel)
-        self.content.bind("<MouseWheel>", self._wheel)
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.canvas.bind(sequence, self._wheel)
+            self.content.bind(sequence, self._wheel)
+        attach_mousewheel(self, self.canvas, self.content)
+
+    STAGING_HEIGHT = 4096
+    SCROLL_EXTRA = 120
 
     def _schedule_layout(self, _event: Optional[tk.Event] = None) -> None:
         """Coalesce content/viewport changes into one stable geometry update."""
+        if getattr(self, "_syncing", False):
+            return
+        # Staging/final height writes fire <Configure> on the embedded frame.
+        # Ignore those or non-fill layout restages forever.
+        if (
+            not self.fill_viewport
+            and _event is not None
+            and getattr(_event, "widget", None) is self.content
+        ):
+            return
         if self._layout_job is None:
             self._layout_job = self.after_idle(self._sync_layout)
+
+    @staticmethod
+    def _padding_box(widget: tk.Misc) -> Tuple[int, int, int, int]:
+        try:
+            raw = widget.cget("padding")
+        except tk.TclError:
+            return (0, 0, 0, 0)
+        if isinstance(raw, (list, tuple)):
+            values = [int(float(value)) for value in raw]
+        else:
+            parts = str(raw).replace(",", " ").split()
+            values = [int(float(part)) for part in parts] if parts else [0]
+        if not values:
+            return (0, 0, 0, 0)
+        if len(values) == 1:
+            return (values[0], values[0], values[0], values[0])
+        if len(values) == 2:
+            return (values[0], values[1], values[0], values[1])
+        if len(values) == 3:
+            return (values[0], values[1], values[2], values[1])
+        return (values[0], values[1], values[2], values[3])
+
+    def occupied_content_bottom(self) -> int:
+        """Bottom of packed content after a full-height staging pass.
+
+        Uses the last packed child's ``winfo_y() + winfo_height()`` plus content
+        padding and a fixed extra.  When the capacitor HFSS group is a sibling,
+        its reqheight and the create-body checkbox also floor the bottom.
+        """
+
+        try:
+            self.update_idletasks()
+        except tk.TclError:
+            return 1 + self.SCROLL_EXTRA
+        _pad_left, _pad_top, _pad_right, pad_bottom = self._padding_box(self.content)
+        last_bottom = 0
+        try:
+            children = self.content.winfo_children()
+        except tk.TclError:
+            children = ()
+        packed = []
+        for child in children:
+            try:
+                if child.winfo_manager() != "pack":
+                    continue
+                packed.append(child)
+            except tk.TclError:
+                continue
+        mapped = [child for child in packed if child.winfo_ismapped()]
+        last = (mapped or packed)[-1] if (mapped or packed) else None
+        if last is not None:
+            last_bottom = int(last.winfo_y()) + int(last.winfo_height())
+        try:
+            app = self.winfo_toplevel()
+        except tk.TclError:
+            app = None
+        hfss = getattr(app, "cap_hfss_box", None) if app is not None else None
+        if hfss is not None and getattr(hfss, "master", None) is self.content:
+            last_bottom = max(
+                last_bottom,
+                int(hfss.winfo_y()) + int(hfss.winfo_reqheight()) + 80,
+            )
+            widgets = getattr(app, "widgets", None) or {}
+            checkbox = widgets.get("capacitor.create_body_in_hfss")
+            if checkbox is not None:
+                rel_y = 0
+                owner: Optional[tk.Misc] = checkbox
+                while owner is not None and owner is not self.content:
+                    rel_y += int(owner.winfo_y())
+                    owner = getattr(owner, "master", None)
+                if owner is self.content:
+                    last_bottom = max(
+                        last_bottom,
+                        rel_y + int(checkbox.winfo_height()) + 48,
+                    )
+        return max(1, last_bottom + pad_bottom + self.SCROLL_EXTRA)
 
     def _sync_layout(self) -> None:
         self._layout_job = None
@@ -276,30 +368,57 @@ class ScrollableFrame(ttk.Frame):
             natural_height = max(1, self.content.winfo_reqheight())
         except tk.TclError:
             return
-        window_height = max(viewport_height, natural_height) if self.fill_viewport else natural_height
-        window_size = (viewport_width, window_height)
-        if window_size != self._last_window_size:
+        if self.fill_viewport:
+            window_height = max(viewport_height, natural_height)
+            window_size = (viewport_width, window_height)
+            if window_size != self._last_window_size:
+                self.canvas.itemconfigure(
+                    self._window,
+                    width=viewport_width,
+                    height=window_height,
+                )
+                self._last_window_size = window_size
+            self.canvas.configure(
+                scrollregion=(0, 0, viewport_width, window_height),
+            )
+            return
+        self._syncing = True
+        try:
+            self.update_idletasks()
+            # Always remount packed children at a tall staging height first.
+            # A short previous occupied_bottom would otherwise keep the last
+            # LabelFrame clipped, so later measures stay undercounted.
+            self.canvas.itemconfigure(
+                self._window, width=viewport_width, height=self.STAGING_HEIGHT,
+            )
+            self.update_idletasks()
+            occupied_bottom = self.occupied_content_bottom()
             self.canvas.itemconfigure(
                 self._window,
                 width=viewport_width,
-                height=window_height,
+                height=occupied_bottom,
             )
-            self._last_window_size = window_size
-        self.canvas.configure(
-            scrollregion=(0, 0, viewport_width, window_height),
-        )
+            self._last_window_size = (viewport_width, occupied_bottom)
+            self.canvas.configure(scrollregion=(0, 0, viewport_width, occupied_bottom))
+        except tk.TclError:
+            return
+        finally:
+            self._syncing = False
 
     def refresh_layout(self) -> None:
         """Request a layout pass after font or child-request changes."""
         self._schedule_layout()
 
-    def _wheel(self, event: tk.Event) -> None:
-        self.canvas.yview_scroll(int(-event.delta / 120), "units")
+    def _wheel(self, event: tk.Event) -> str:
+        steps = mousewheel_steps(event)
+        if steps:
+            self.canvas.yview_scroll(steps, "units")
+        return "break"
 
     def scroll_to_widget(self, widget: tk.Widget) -> None:
         """Reveal a descendant parameter widget without assuming fixed row sizes."""
         self.update_idletasks()
-        content_height = max(1, self.content.winfo_reqheight())
+        content_height = max(1, self.occupied_content_bottom())
         viewport_height = max(1, self.canvas.winfo_height())
         movable = max(1, content_height - viewport_height)
         target_y = widget.winfo_rooty() - self.content.winfo_rooty()
@@ -801,7 +920,7 @@ class ElectricalModelDiagram(tk.Canvas):
             detail = (f"{touchstone.ports} 端口 · {touchstone.frequency_summary}" if touchstone else "等待有效的公共模型文件")
         else:
             title = "开路（仅焊盘）"
-            detail = "PAD间隙无铜桥、无RLC、无Touchstone组件"
+            detail = "焊盘间隙无铜桥、无RLC、无Touchstone组件"
 
         title_font = "ViaPreviewTitleFont"
         body_font = "ViaCanvasFont"

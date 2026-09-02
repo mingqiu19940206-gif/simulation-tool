@@ -72,6 +72,56 @@ class AntipadPreviewCanvasTests(unittest.TestCase):
             expected = f"工具体 {tool_count} · 实际连通开窗 {connected_count}"
             self.assertTrue(any(text.startswith(expected) for text in texts), texts)
 
+    def test_capacitor_labels_draw_above_pads_with_numeric_expansion(self) -> None:
+        canvas = self._render("independent_pad")
+        pad_ids = [
+            item for item in canvas.find_all()
+            if canvas.type(item) == "polygon"
+            and canvas.itemcget(item, "fill") in {"#b91c1c", "#1d4ed8"}
+        ]
+        self.assertGreater(len(pad_ids), 0)
+        last_pad = max(pad_ids)
+        capacitor_ids = [
+            item for item in canvas.find_all()
+            if canvas.type(item) == "text" and "电容" in canvas.itemcget(item, "text")
+        ]
+        self.assertGreater(len(capacitor_ids), 0)
+        self.assertTrue(all(item > last_pad for item in capacitor_ids), capacitor_ids)
+        expansions = [
+            canvas.itemcget(item, "text")
+            for item in canvas.find_all()
+            if canvas.type(item) == "text" and canvas.itemcget(item, "text").startswith("E=")
+        ]
+        self.assertTrue(expansions, [canvas.itemcget(item, "text") for item in canvas.find_all()
+                                     if canvas.type(item) == "text"])
+        for text in expansions:
+            self.assertRegex(text, r"E=\s*[\d.]+")
+            self.assertNotEqual(text.strip(), "mil")
+            self.assertNotEqual(text.strip(), "mm")
+
+    def test_label_boxes_contain_text_raised_above_background(self) -> None:
+        canvas = self._render("independent_pad")
+        backgrounds = list(canvas.find_withtag("label-background"))
+        self.assertGreater(len(backgrounds), 0)
+        order = list(canvas.find_all())
+        for background in backgrounds:
+            bbox = canvas.bbox(background)
+            self.assertIsNotNone(bbox)
+            overlapping = [
+                item for item in canvas.find_overlapping(*bbox)
+                if canvas.type(item) == "text" and str(canvas.itemcget(item, "text")).strip()
+            ]
+            self.assertTrue(overlapping, canvas.bbox(background))
+            for text_id in overlapping:
+                self.assertGreater(order.index(text_id), order.index(background))
+                text = str(canvas.itemcget(text_id, "text"))
+                self.assertNotEqual(text.strip(), "")
+                self.assertNotEqual(text.strip(), "mil")
+                self.assertNotEqual(text.strip(), "mm")
+        texts = [canvas.itemcget(item, "text") for item in canvas.find_all() if canvas.type(item) == "text"]
+        self.assertTrue(any("电容" in text for text in texts), texts)
+        self.assertTrue(any(text.startswith("E=") and any(ch.isdigit() for ch in text) for text in texts), texts)
+
 
     def test_independent_openings_are_concentric_with_pads(self) -> None:
         config = copy.deepcopy(self.default)

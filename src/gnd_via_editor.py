@@ -8,8 +8,9 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from config_manager import convert_length, format_length, format_number
 from gui_layout import (
-    CanvasLabelPlacer, canvas_viewport, debounce_after, ellipsize,
-    font_linespace, resolve_font, responsive_grid_columns,
+    CanvasLabelPlacer, WrappingButtonBar, attach_mousewheel, bind_wraplength,
+    canvas_viewport, debounce_after, ellipsize, font_linespace, mousewheel_steps,
+    resolve_font, responsive_grid_columns,
 )
 from gnd_via_semantics import (
     ALL_LAYOUT_FIELDS,
@@ -40,21 +41,23 @@ class ScrollColumn(ttk.Frame):
         super().__init__(master)
         self.canvas = tk.Canvas(self, highlightthickness=0, background="#f7f8fa")
         bar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.content = ttk.Frame(self.canvas, padding=(2, 2))
+        self.content = ttk.Frame(self.canvas, padding=(8, 10))
         self.window = self.canvas.create_window((0, 0), window=self.content, anchor="nw")
         self.canvas.configure(yscrollcommand=bar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         bar.pack(side="right", fill="y")
         self.content.bind("<Configure>", self._configured)
         self.canvas.bind("<Configure>", lambda event: self.canvas.itemconfigure(self.window, width=event.width))
-        for widget in (self.canvas, self.content):
-            widget.bind("<MouseWheel>", self._wheel)
+        attach_mousewheel(self, self.canvas, self.content)
 
     def _configured(self, _event: tk.Event) -> None:
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-    def _wheel(self, event: tk.Event) -> None:
-        self.canvas.yview_scroll(int(-event.delta / 120), "units")
+    def _wheel(self, event: tk.Event) -> str:
+        steps = mousewheel_steps(event)
+        if steps:
+            self.canvas.yview_scroll(steps, "units")
+        return "break"
 
 
 class ViaModeCards(ttk.Frame):
@@ -664,6 +667,9 @@ class GndViaWorkbench(ttk.Frame):
 
         enabled_box = self._section(lroot, "启用与方案")
         self.enabled_widget = self.app._add(enabled_box, 0, "启用 GND VIA", "gnd_vias.enabled", boolean=True)
+        self.enabled_widget.grid_configure(pady=(10, 4))
+        if "gnd_vias.enabled" in self.app.field_labels:
+            self.app.field_labels["gnd_vias.enabled"].grid_configure(pady=(10, 4))
         self.baseline_enabled = self.app._add(
             enabled_box, 1, "同时生成无 VIA 基线和有 VIA 方案",
             "baseline_comparison.enabled", boolean=True,
@@ -672,8 +678,13 @@ class GndViaWorkbench(ttk.Frame):
             enabled_box, 2, "基线比较包含 GND VIA",
             "baseline_comparison.compare_gnd_vias", boolean=True,
         )
-        ttk.Label(enabled_box, text="不预设 VIA 一定改善性能；请对比 Sdd11/Sdd21、Sdc21/Scd21 与 TDR。",
-                  foreground="#475569", wraplength=690).grid(row=3, column=0, columnspan=4, sticky="w", padx=4, pady=(3, 1))
+        self.performance_hint = ttk.Label(
+            enabled_box,
+            text="不预设 VIA 一定改善性能；\n请对比 Sdd11/Sdd21、Sdc21/Scd21 与 TDR。",
+            foreground="#475569", wraplength=360, justify="left",
+        )
+        self.performance_hint.grid(row=3, column=0, columnspan=4, sticky="ew", padx=4, pady=(3, 1))
+        bind_wraplength(self.performance_hint, source=enabled_box, padding=24, min_width=280)
 
         mode_box = self._section(lroot, "布局模式")
         self.app._register_hidden_variable("gnd_vias.pattern")
@@ -684,8 +695,8 @@ class GndViaWorkbench(ttk.Frame):
         fields = (
             ("count", "数量", False, True),
             ("side_orientation", "侧对方向", False, False),
-            ("clearance_x", "X方向信号铜边界—VIA焊盘边缘偏移（有符号）", True, False),
-            ("clearance_y", "Y方向信号铜边界—VIA焊盘边缘偏移（有符号）", True, False),
+            ("clearance_x", "X 向焊盘边偏移（有符号）", True, False),
+            ("clearance_y", "Y 向焊盘边偏移（有符号）", True, False),
             ("pitch_x", "X方向VIA中心节距", True, False),
             ("pitch_y", "Y方向VIA中心节距", True, False),
         )
@@ -727,15 +738,15 @@ class GndViaWorkbench(ttk.Frame):
             self.coord_tree.heading(key, text=label); self.coord_tree.column(key, width=width, anchor="center")
         self.coord_tree.grid(row=0, column=0, columnspan=4, sticky="ew")
         self.coord_tree.bind("<Double-1>", self._edit_coordinate)
-        buttons = ttk.Frame(custom); buttons.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(4, 0))
-        actions = (("添加", self._add_coordinate), ("删除", self._delete_coordinates), ("复制", self._duplicate_coordinates),
-                   ("上移", lambda: self._move_coordinate(-1)), ("下移", lambda: self._move_coordinate(1)),
-                   ("X镜像", lambda: self._mirror_coordinates("x")), ("Y镜像", lambda: self._mirror_coordinates("y")),
-                   ("四象限复制", self._quadrant_copy), ("CSV粘贴", self._paste_csv), ("清空", self._clear_coordinates))
-        self.custom_buttons = []
-        for label, command in actions:
-            button = ttk.Button(buttons, text=label, command=command); button.pack(side="left", padx=2, pady=2)
-            self.custom_buttons.append(button)
+        buttons = WrappingButtonBar(custom, (
+            ("添加", self._add_coordinate), ("删除", self._delete_coordinates),
+            ("复制", self._duplicate_coordinates),
+            ("上移", lambda: self._move_coordinate(-1)), ("下移", lambda: self._move_coordinate(1)),
+            ("X镜像", lambda: self._mirror_coordinates("x")), ("Y镜像", lambda: self._mirror_coordinates("y")),
+            ("四象限复制", self._quadrant_copy), ("CSV粘贴", self._paste_csv), ("清空", self._clear_coordinates),
+        ))
+        buttons.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+        self.custom_buttons = list(buttons.buttons)
         self.custom_hint = ttk.Label(custom, text="自定义布局允许非对称，但会给出回流路径警告；数量由坐标行数自动派生。",
                                      foreground="#9a3412", wraplength=700)
         self.custom_hint.grid(row=2, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 0))
@@ -758,13 +769,13 @@ class GndViaWorkbench(ttk.Frame):
         ttk.Label(manufacture, textvariable=self.derived_var, foreground="#0f766e", justify="left",
                   wraplength=500).grid(row=5, column=0, columnspan=4, sticky="w", padx=4, pady=(6, 2))
 
-        model = self._section(rroot, "桶模型与材料")
-        self.app._add(model, 0, "桶模型", "gnd_vias.barrel_model", values=("hollow", "solid"), display_values=BARREL_LABELS)
+        model = self._section(rroot, "筒壁模型与材料")
+        self.app._add(model, 0, "筒壁模型", "gnd_vias.barrel_model", values=("hollow", "solid"), display_values=BARREL_LABELS)
         self.material_combo = self.app._add(
             model, 1, "导体材料", "gnd_vias.material", values=("copper", "pec"),
             display_values={"copper": "铜 copper", "pec": "理想导体 PEC"},
         )
-        self.model_note_var = tk.StringVar(value="空心镀铜桶：推荐，用于较真实的电磁趋势比较。")
+        self.model_note_var = tk.StringVar(value="空心镀铜筒壁：推荐，用于较真实的电磁趋势比较。")
         self.model_note = ttk.Label(model, textvariable=self.model_note_var, foreground="#166534", wraplength=500)
         self.model_note.grid(row=2, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 1))
 
@@ -922,7 +933,7 @@ class GndViaWorkbench(ttk.Frame):
             self.model_note_var.set("实心圆柱近似：仅用于快速趋势预筛选，会高估铜体积并低估孔内电磁场。")
             self.model_note.configure(foreground="#b45309")
         else:
-            self.model_note_var.set("空心镀铜桶：推荐，表达钻孔、成品孔和孔壁镀铜。")
+            self.model_note_var.set("空心镀铜筒壁：推荐，表达钻孔、成品孔和孔壁镀铜。")
             self.model_note.configure(foreground="#166534")
 
     def show(self, config: Mapping[str, Any], geometry: Any, validation: Any) -> None:

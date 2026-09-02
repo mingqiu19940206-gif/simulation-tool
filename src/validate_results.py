@@ -35,7 +35,7 @@ class ValidateResultsWorkbench(ttk.Frame):
         self.report: Optional[ValidationReport] = None
         self.visible_items: Dict[str, ValidationItem] = {}
         self.filter_var = tk.StringVar(value="全部")
-        self.state_var = tk.StringVar(value="尚未运行 Validate模型检查")
+        self.state_var = tk.StringVar(value="尚未运行模型检查")
         self.mode_var = tk.StringVar(value="检查模式：—")
         self.time_var = tk.StringVar(value="检查时间：—")
         self.revision_var = tk.StringVar(value="配置版本：—")
@@ -46,17 +46,17 @@ class ValidateResultsWorkbench(ttk.Frame):
 
     def _build(self) -> None:
         toolbar = ttk.Frame(self, padding=(4, 2)); toolbar.pack(fill="x")
-        ttk.Button(toolbar, text="快速Validate", command=self.app.validate_model).pack(side="left")
+        ttk.Button(toolbar, text="快速检查", command=self.app.validate_model).pack(side="left")
         ttk.Button(toolbar, text="HFSS工程检查", command=self.app.run_hfss_project_validate).pack(side="left", padx=4)
         ttk.Button(toolbar, text="取消HFSS检查", command=self.app.cancel_hfss_validate).pack(side="left")
         ttk.Button(toolbar, text="导入HFSS结果…", command=self._import_hfss).pack(side="left", padx=(12, 3))
-        ttk.Button(toolbar, text="导出JSON…", command=lambda: self._export(".json")).pack(side="left")
+        ttk.Button(toolbar, text="导出 JSON…", command=lambda: self._export(".json")).pack(side="left")
         ttk.Button(toolbar, text="导出TXT…", command=lambda: self._export(".txt")).pack(side="left", padx=3)
         ttk.Label(toolbar, text="筛选：").pack(side="left", padx=(18, 2))
         combo = ttk.Combobox(toolbar, textvariable=self.filter_var, values=FILTERS, state="readonly", width=12)
         combo.pack(side="left"); combo.bind("<<ComboboxSelected>>", lambda _event: self._rebuild())
 
-        summary = ttk.LabelFrame(self, text="Validate汇总", padding=7); summary.pack(fill="x", padx=4, pady=3)
+        summary = ttk.LabelFrame(self, text="检查汇总", padding=7); summary.pack(fill="x", padx=4, pady=3)
         for index, (key, label, color) in enumerate((
             ("passed", "通过", "#166534"), ("errors", "错误", "#b42318"),
             ("warnings", "警告", "#b45309"), ("not_checked", "未检查", "#64748b"),
@@ -191,13 +191,13 @@ class ValidateResultsWorkbench(ttk.Frame):
 
     def _export(self, suffix: str) -> None:
         if not self.report:
-            messagebox.showinfo("导出Validate报告", "尚无检查结果。", parent=self)
+            messagebox.showinfo("导出检查报告", "尚无检查结果。", parent=self)
             return
         path = filedialog.asksaveasfilename(parent=self, defaultextension=suffix,
                                             filetypes=((suffix[1:].upper(), "*" + suffix),),
                                             initialfile="validate_report" + suffix)
         if path:
-            export_report(self.report, Path(path)); self.app.status.set("Validate报告已导出：" + Path(path).name)
+            export_report(self.report, Path(path)); self.app.status.set("检查报告已导出：" + Path(path).name)
 
     def _import_hfss(self) -> None:
         path = filedialog.askopenfilename(parent=self, filetypes=(("Validate JSON", "*.json"), ("所有文件", "*.*")))

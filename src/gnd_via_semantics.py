@@ -19,7 +19,7 @@ MODE_LABELS = {
     "custom": "自定义坐标",
 }
 SIDE_LABELS = {"top_bottom": "上下两侧", "left_right": "左右两侧"}
-BARREL_LABELS = {"hollow": "空心镀铜桶", "solid": "实心圆柱近似"}
+BARREL_LABELS = {"hollow": "空心镀铜筒壁", "solid": "实心圆柱近似"}
 
 MODE_DESCRIPTIONS = {
     "four_corner": ("固定 4 颗", "X/Y 净距", "适合电容区四角回流缝合"),

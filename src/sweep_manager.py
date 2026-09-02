@@ -241,9 +241,8 @@ def generate_native_optimetrics_sweep(config: Mapping[str, Any], output_root: Pa
     relative_script = str(result.script_path.relative_to(root))
     topology_blocked = bool(plan.topology_axes)
     topology_reason = (
-        "Topology sweeps are classified separately, but this generator does not yet materialize "
-        "multiple HFSS Designs in one AEDT Project. Native numeric Optimetrics is therefore blocked "
-        "for this plan; no frozen-topology fallback is used."
+        "拓扑扫描已单独分类，但当前生成器尚未在同一 AEDT 工程中生成多个 HFSS Design。"
+        "因此本计划不会执行原生数值 Optimetrics，也不会使用冻结拓扑回退。"
         if topology_blocked else ""
     )
     variation_rows = []

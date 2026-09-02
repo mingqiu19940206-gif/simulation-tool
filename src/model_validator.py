@@ -159,7 +159,7 @@ def export_report(report: ValidationReport, path: Path) -> None:
         return
     counts = report.counts
     lines = [
-        "Validate模型检查报告", f"检查模式：{report.mode}", f"检查时间：{report.timestamp}",
+        "模型检查报告", f"检查模式：{report.mode}", f"检查时间：{report.timestamp}",
         f"配置版本：{report.config_revision}",
         f"状态：{report.state}；通过 {counts['passed']}，错误 {counts['errors']}，警告 {counts['warnings']}，未检查 {counts['not_checked']}",
         "说明：通过仅表示具备建模或求解条件，不保证收敛或结果准确。", "",

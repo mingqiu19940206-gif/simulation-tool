@@ -15,7 +15,8 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from config_manager import DEFAULT_DISPLAY_UNIT, convert_length, format_length
 from gui_layout import (
-    canvas_viewport, debounce_after, ellipsize, font_linespace, resolve_font,
+    CanvasLabelPlacer, attach_mousewheel, canvas_viewport, debounce_after,
+    ellipsize, font_linespace, raise_canvas_labels, resolve_font,
     responsive_grid_columns,
 )
 from geometry_v1 import polygons_overlap
@@ -53,8 +54,8 @@ VIA_SIZE_MODE_LABELS = {
     "manual": "完全手动",
 }
 VIA_LAYER_STATE_LABELS = {
-    "entry_connected": "入口连接焊盘",
-    "exit_connected": "出口连接焊盘",
+    "entry_connected": "输入连接焊盘",
+    "exit_connected": "输出连接焊盘",
     "nonfunctional_pad": "保留非功能焊盘",
     "clearance": "生成反焊盘",
     "backdrilled_removed": "背钻影响/生成反焊盘",
@@ -78,10 +79,10 @@ VIA_PARAMETER_HELP = {
     "width_increment": "在自动适配所得宽度上额外增加的总量；仅“自动适配＋用户增量”生效。",
     "return_diameter": "Return VIA 在非连接铜层上的圆形避空直径；连接层仍使用 Return VIA 焊盘。",
     "layer_source": "使用全局值时，本层随全局设置变化；本层覆盖会保存该层自己的拓扑、形状、方向、尺寸控制和尺寸。",
-    "layer_enabled": "只对有可减铜面且位于钻孔跨度内的层有效。入口/出口连接层、保留非功能焊盘层和跨度外层不生成 Signal VIA 反焊盘。",
+    "layer_enabled": "只对有可减铜面且位于钻孔跨度内的层有效。输入/输出连接层、保留非功能焊盘层和跨度外层不生成 Signal VIA 反焊盘。",
 }
 VIA_PARAMETER_TITLES = {
-    "topology": "P/N 开窗拓扑", "shape": "开窗形状",
+    "topology": "P/N 开窗拓扑", "shape": "反焊盘形状",
     "direction_mode": "合并开窗方向", "size_mode": "开窗尺寸控制",
     "diameter": "直径", "length": "端到端总长度", "width": "总宽度",
     "corner_radius": "圆角半径", "rotation_deg": "逆时针旋转角",
@@ -533,7 +534,7 @@ class AntipadPreview(ttk.Frame):
         self.overlay_check.configure(text="叠加" if compact else "多层叠加")
         self.local_check.configure(text="局部" if compact else "局部视图")
         self.signal_check.configure(text="铜" if compact else "信号铜")
-        self.antipad_check.configure(text="开窗" if compact else "反焊盘")
+        self.antipad_check.configure(text="反焊盘" if compact else "反焊盘")
         self.dimension_check.configure(text="标注" if compact else "尺寸标注")
         if compact:
             if self.local_hint.winfo_manager():
@@ -702,13 +703,27 @@ class AntipadPreview(ttk.Frame):
             for shape in self.geometry.pad_shapes.values():
                 canvas.create_polygon([coordinate for point in shape.points for coordinate in xy(point.x, point.y)],
                                       fill=pad_colors[shape.signal], outline="#1f2937", width=2)
+        placer = CanvasLabelPlacer(canvas, width, height)
+        if self.show_signal.get():
+            for shape in self.geometry.pad_shapes.values():
+                xs = [xy(point.x, point.y)[0] for point in shape.points]
+                ys = [xy(point.x, point.y)[1] for point in shape.points]
+                if xs and ys:
+                    placer.reserve((min(xs), min(ys), max(xs), max(ys)))
         for name, outline in self.geometry.body_outlines.items():
             canvas.create_polygon([coordinate for point in outline for coordinate in xy(point.x, point.y)],
                                   fill="", outline="#475569", dash=(4, 3), width=2)
-            center = self.geometry.capacitor_centers[name]
-            tx, ty = xy(center.x, center.y)
-            canvas.create_text(tx, ty, text=name.replace("C_", "") + " 电容", fill="#334155",
-                               tags=("object-label",))
+            xs = [point.x for point in outline]
+            ys = [point.y for point in outline]
+            top_x = (min(xs) + max(xs)) / 2.0
+            top_y = max(ys)
+            tx, ty = xy(top_x, top_y)
+            placer.place(
+                name.replace("C_", "") + " 电容",
+                ((tx, ty - 16), (tx, ty - 32), (tx + 48, ty - 16), (tx - 48, ty - 16)),
+                fill="#334155", background="#f8fafc", outline="#cbd5e1",
+                tags=("object-label",),
+            )
         if self.show_dimensions.get():
             tools = self.geometry.antipads_by_layer.get(layer_name, [])
             if tools:
@@ -720,9 +735,18 @@ class AntipadPreview(ttk.Frame):
                     ax1, ay = xy(source_max, y)
                     ax2, _ = xy(tool.bounds.x_max, y)
                     canvas.create_line(ax1, ay, ax2, ay, arrow="both", fill="#ea580c", width=2)
-                    canvas.create_text((ax1 + ax2) / 2, ay - 12,
-                                       text=f"E={format_length(float(tool.metadata['expansion']), self.unit)} {self.unit}",
-                                       fill="#c2410c", tags=("dimension-label",))
+                    expansion_text = (
+                        f"E={format_length(float(tool.metadata['expansion']), self.unit)} {self.unit}"
+                    )
+                    placer.place(
+                        expansion_text,
+                        (((ax1 + ax2) / 2.0, ay - 16),
+                         ((ax1 + ax2) / 2.0, ay - 32),
+                         (ax2 + 24, ay - 16),
+                         (ax1 - 24, ay - 16)),
+                        fill="#c2410c", background="#fff7ed", outline="#fdba74",
+                        tags=("dimension-label",), force=True,
+                    )
             if not self.local_var.get():
                 model = self.geometry.model_bounds
                 labels = ((model.x_min, plane.x_min, plane.y_min, "输入余量"),
@@ -732,13 +756,21 @@ class AntipadPreview(ttk.Frame):
                     if label == "Y 余量":
                         x, y1 = xy(fixed, first); _, y2 = xy(fixed, second)
                         canvas.create_line(x - 15, y1, x - 15, y2, arrow="both", fill="#7c3aed")
-                        canvas.create_text(x - 20, (y1 + y2) / 2, text=label, angle=90,
-                                           fill="#7c3aed", tags=("dimension-label",))
+                        placer.place(
+                            label,
+                            ((x - 28, (y1 + y2) / 2.0), (x - 44, (y1 + y2) / 2.0)),
+                            fill="#7c3aed", background="#f5f3ff",
+                            tags=("dimension-label",),
+                        )
                     else:
                         x1, y = xy(first, fixed); x2, _ = xy(second, fixed)
                         canvas.create_line(x1, y + 16, x2, y + 16, arrow="both", fill="#7c3aed")
-                        canvas.create_text((x1 + x2) / 2, y + 28, text=label, fill="#7c3aed",
-                                           tags=("dimension-label",))
+                        placer.place(
+                            label,
+                            (((x1 + x2) / 2.0, y + 30), ((x1 + x2) / 2.0, y + 44)),
+                            fill="#7c3aed", background="#f5f3ff",
+                            tags=("dimension-label",),
+                        )
         axis_x, axis_y = 34, height - 28
         canvas.create_line(axis_x, axis_y, axis_x + 42, axis_y, arrow="last", fill="#334155", width=2)
         canvas.create_line(axis_x, axis_y, axis_x, axis_y - 42, arrow="last", fill="#334155", width=2)
@@ -746,6 +778,7 @@ class AntipadPreview(ttk.Frame):
         canvas.create_text(axis_x, max(8, axis_y - 49), text="Y", fill="#334155", tags=("axis-label",))
         canvas.create_text(12, 12, anchor="nw", text=title_text,
                            fill="#0f172a", font=title_font, tags=("hud-label",))
+        raise_canvas_labels(canvas)
 
     def _redraw_via(self) -> None:
         canvas = self.canvas
@@ -1656,9 +1689,10 @@ class LayerEditorDialog(tk.Toplevel):
 
 class AntipadWorkbench:
     """组合预览、参数、叠层表格、截面图、摘要与即时校验。"""
+
     TREE_COLUMNS = (
-        ("name", "层名称", 90), ("type", "层类型", 75), ("thickness", "厚度", 78),
-        ("material", "材料", 90), ("dk", "Dk", 55), ("df", "Df", 55),
+        ("name", "层名称", 110), ("type", "层类型", 100), ("thickness", "厚度", 88),
+        ("material", "材料", 220), ("dk", "Dk", 55), ("df", "Df", 55),
         ("reference", "信号参考平面", 105), ("enabled", "在本层生成反焊盘", 130),
         ("source", "外扩来源", 85), ("override", "本层覆盖值", 90),
         ("effective", "最终有效外扩", 105), ("count", "反焊盘数量", 90),
@@ -1708,6 +1742,9 @@ class AntipadWorkbench:
         window = settings_canvas.create_window((0, 0), window=content, anchor="nw")
         content.bind("<Configure>", lambda _e: settings_canvas.configure(scrollregion=settings_canvas.bbox("all")))
         settings_canvas.bind("<Configure>", lambda e: settings_canvas.itemconfigure(window, width=e.width))
+        settings_box._forwards_mousewheel = True  # type: ignore[attr-defined]
+        settings_box.canvas = settings_canvas  # type: ignore[attr-defined]
+        attach_mousewheel(settings_box, settings_canvas, content)
 
         mode_box = ttk.LabelFrame(content, text="反焊盘几何 · 选择模式", padding=5)
         mode_box.pack(fill="x", pady=3)
@@ -1736,7 +1773,7 @@ class AntipadWorkbench:
             values=("independent", "merged_pair"),
             display_values=VIA_TOPOLOGY_LABELS)
         self.via_shape = self.app._add(
-            self.via_box, 1, "开窗形状", "via_transition.padstack.antipad.shape",
+            self.via_box, 1, "反焊盘形状", "via_transition.padstack.antipad.shape",
             values=("circle", "ellipse", "capsule", "rounded_rectangle"),
             display_values=VIA_SHAPE_LABELS)
         self.via_direction = self.app._add(
@@ -1787,7 +1824,7 @@ class AntipadWorkbench:
         self.via_geometry_status_label = ttk.Label(
             self.via_box, textvariable=self.via_geometry_status, foreground="#334155",
             wraplength=430, justify="left")
-        self.via_geometry_status_label.grid(row=16, column=0, columnspan=3, sticky="w", pady=3)
+        self.via_geometry_status_label.grid(row=16, column=0, columnspan=3, sticky="ew", pady=(3, 8))
         self.via_scan_status = tk.StringVar(value="circle 直径可进入原生 Optimetrics；拓扑/形状切换属于拓扑轴。")
         self.via_scan_status_label = ttk.Label(
             self.via_box, textvariable=self.via_scan_status, foreground="#0f766e",
@@ -2054,9 +2091,16 @@ class AntipadWorkbench:
         tree_frame = ttk.Frame(table_box)
         tree_frame.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(tree_frame, columns=[item[0] for item in self.TREE_COLUMNS], show="headings", height=4)
+        stretchy = {"name", "type", "material", "hfss_status"}
         for key, label, width in self.TREE_COLUMNS:
             self.tree.heading(key, text=label)
-            self.tree.column(key, width=width, minwidth=45, anchor="center", stretch=False)
+            minwidth = 96 if key == "type" else 180 if key == "material" else 80 if key in stretchy else 45
+            self.tree.column(
+                key, width=width,
+                minwidth=minwidth,
+                anchor="w" if key in stretchy else "center",
+                stretch=key in stretchy,
+            )
         tree_y = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
         tree_x = ttk.Scrollbar(tree_frame, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=tree_y.set, xscrollcommand=tree_x.set)

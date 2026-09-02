@@ -19,7 +19,7 @@ import tkinter as tk
 import traceback
 from tkinter import font as tkfont, messagebox
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 
 def _enable_windows_dpi_awareness() -> None:
@@ -50,9 +50,19 @@ def _enable_windows_dpi_awareness() -> None:
 
 _enable_windows_dpi_awareness()
 
+
+def _widget_is_under(widget: Any, ancestor: Any) -> bool:
+    owner = widget
+    while owner is not None:
+        if owner is ancestor:
+            return True
+        owner = getattr(owner, "master", None)
+    return False
+
+
 import main_gui_legacy as _legacy
 from antipad_editor import AntipadWorkbench
-from build_info import build_identity_line, get_build_info
+from build_info import about_message, get_build_info, product_title, ready_status_line
 from capacitor_editor import ScrollableFrame
 from config_manager import (
     config_hash, convert_length, format_length, make_generation_snapshot,
@@ -60,6 +70,9 @@ from config_manager import (
 )
 from geometry_calculator import GeometryCalculator
 from gnd_via_editor import GndViaWorkbench
+from gui_layout import (
+    bind_existing_wraplength_labels, bind_wraplength, mousewheel_steps,
+)
 from model_preview import ModelPreviewWorkbench
 from model_validator import (
     ModelValidator, ValidationItem, ValidationReport, config_revision,
@@ -101,35 +114,59 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
     def __init__(self) -> None:
         super().__init__()
         self._install_combobox_wheel_guard()
-        build = get_build_info()
-        short_hash = str(build["source_hash"])[:12]
-        self.title(
-            f"PCIe AC耦合电容区域无源优化工具 V{build['software_version']} · "
-            f"{build['sweep_backend_version']} · {short_hash}"
-        )
-        identity = build_identity_line()
-        self.status.set("就绪 | " + identity)
-        if hasattr(self, "log_text"):
-            self.log_text.insert("1.0", "软件构建标识\n" + identity + "\n\n")
+        self.title(product_title())
+        self._set_ready_status()
+        bind_existing_wraplength_labels(self)
+
+    def _set_ready_status(self) -> None:
+        self.status.set(ready_status_line(self.display_unit))
+
+    def _show_about(self) -> None:
+        messagebox.showinfo("关于 SurfaceCapAntipadTool", about_message(), parent=self)
+
+    def _unit_changed(self, _event: Any = None) -> None:
+        super()._unit_changed(_event)
+        if self.unit_var.get() == self.display_unit:
+            self._set_ready_status()
 
     def _install_combobox_wheel_guard(self) -> None:
         """Keep a closed combobox from consuming the page-scroll wheel event."""
 
-        self.bind_class("TCombobox", "<MouseWheel>", self._on_closed_combobox_wheel)
+        for class_name in (
+            "TCombobox", "TEntry", "TCheckbutton", "TRadiobutton", "TLabel",
+            "TLabelframe", "TFrame", "TButton", "TPanedwindow",
+            "Frame", "Label", "Entry", "Checkbutton", "Button", "LabelFrame",
+        ):
+            self.bind_class(class_name, "<MouseWheel>", self._on_closed_combobox_wheel)
+            self.bind_class(class_name, "<Button-4>", self._on_closed_combobox_wheel)
+            self.bind_class(class_name, "<Button-5>", self._on_closed_combobox_wheel)
 
-    def _on_closed_combobox_wheel(self, event: tk.Event) -> str:
+    def _on_closed_combobox_wheel(self, event: tk.Event) -> Optional[str]:
         owner: tk.Misc | None = event.widget
+        steps = mousewheel_steps(event)
+        cap = getattr(self, "cap_parameter_scroller", None)
+        if cap is not None and _widget_is_under(event.widget, cap):
+            if steps:
+                cap.canvas.yview_scroll(steps, "units")
+            return "break"
         while owner is not None:
+            if getattr(owner, "_forwards_mousewheel", False) and hasattr(owner, "canvas"):
+                if steps:
+                    owner.canvas.yview_scroll(steps, "units")
+                return "break"
             if isinstance(owner, ScrollableFrame):
-                owner.canvas.yview_scroll(int(-event.delta / 120), "units")
+                if steps:
+                    owner.canvas.yview_scroll(steps, "units")
                 return "break"
             owner = getattr(owner, "master", None)
         workbench = getattr(self, "antipad_workbench", None)
         if workbench is not None:
             widget_name = str(event.widget)
             if widget_name.startswith(str(workbench.settings_content)):
-                workbench.settings_canvas.yview_scroll(int(-event.delta / 120), "units")
-        return "break"
+                if steps:
+                    workbench.settings_canvas.yview_scroll(steps, "units")
+                return "break"
+        return None
 
     def report_callback_exception(self, exc_type: Any, exc_value: BaseException,
                                   exc_traceback: Any) -> None:
@@ -322,6 +359,9 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
 
     def _build_capacitor(self) -> None:
         super()._build_capacitor()
+        bind_wraplength(
+            self.cap_detail_label, source=self.cap_status_box, padding=24, min_width=360,
+        )
         advanced = _legacy.ttk.LabelFrame(
             getattr(self, "cap_page_content", self.tabs["电容与模型"]),
             text="布尔连接容差", padding=(8, 5)
@@ -353,7 +393,8 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             page, content = sections[section]
             frame = _legacy.ttk.LabelFrame(content, text=title, padding=8)
             frame.pack(fill="x", padx=3, pady=4)
-            frame.columnconfigure(1, weight=1)
+            frame.columnconfigure(1, weight=1, minsize=176)
+            frame.columnconfigure(0, minsize=0)
             return frame
 
         def remember(section: str, path: str, widget: tk.Widget | None = None) -> None:
@@ -389,29 +430,34 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         add("route", frame, 3, "㉑ 信号孔中心距（孔间距）", "via_transition.signal_via_pitch", length=True)
         add("route", frame, 4, "中心 X", "via_transition.center_x", length=True)
         add("route", frame, 5, "中心 Y", "via_transition.center_y", length=True)
-        add("route", frame, 6, "③ 输入层 (entry)", "via_transition.entry_layer", values=signal_layers)
-        add("route", frame, 7, "④ 输出层 (exit)", "via_transition.exit_layer", values=signal_layers)
+        add("route", frame, 6, "③ 输入层", "via_transition.entry_layer", values=signal_layers)
+        add("route", frame, 7, "④ 输出层", "via_transition.exit_layer", values=signal_layers)
         add("route", frame, 8, "⑤ 机械钻孔起始层", "via_transition.drill_start_layer",
             values=conductive_layers)
         add("route", frame, 9, "⑥ 机械钻孔终止层", "via_transition.drill_end_layer",
             values=conductive_layers)
-        _legacy.ttk.Label(
-            frame, text="层名来自下方叠层；entry/exit 仅允许 signal，机械钻孔仅允许导体层。",
-            foreground="#64748b", wraplength=430,
-        ).grid(row=10, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 0))
+        self.via_layer_hint = _legacy.ttk.Label(
+            frame,
+            text="层名来自“反焊盘与叠层”。输入/输出层须为信号层，机械钻孔须为导体层。",
+            foreground="#64748b", wraplength=430, justify="left",
+        )
+        self.via_layer_hint.grid(row=10, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 0))
+        bind_wraplength(self.via_layer_hint, source=frame)
 
         frame = group("route", "走线扇出")
         add("route", frame, 0, "㉒ 扇出方式", "via_transition.fanout.style",
             values=("deg45", "arc"), display_values={"deg45": "45° 折线", "arc": "圆弧"},
-            formula="孔间距等于差分对间距时由其他参数决定")
+            formula="孔间距等于差分对中心距时，扇出三项自动停用。")
         add("route", frame, 1, "㉓ 扇出方向", "via_transition.fanout.direction",
             values=("auto", "expand", "contract"),
             display_values={"auto": "自动", "expand": "向外", "contract": "向内"})
         add("route", frame, 2, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
-        _legacy.ttk.Label(
-            frame, text="孔间距等于走线中心距时扇出设置自动停用；几何规则保持原实现。",
-            foreground="#64748b", wraplength=430,
-        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 0))
+        self.via_fanout_hint = _legacy.ttk.Label(
+            frame, text="孔间距等于差分对中心距时，扇出三项自动停用。",
+            foreground="#64748b", wraplength=430, justify="left",
+        )
+        self.via_fanout_hint.grid(row=3, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 0))
+        bind_wraplength(self.via_fanout_hint, source=frame)
 
         frame = group("route", "输入/输出传输线")
         add("route", frame, 0, "⑦ 输入传输线长度", "via_transition.entry_trace.length", length=True)
@@ -441,7 +487,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         legacy_antipad.configure(state="readonly")
         add("signal", frame, 7, "筒壁模型", "via_transition.padstack.barrel_model",
             values=("hollow", "solid"),
-            display_values={"hollow": "空心镀铜桶", "solid": "实心（仅趋势近似）"})
+            display_values={"hollow": "空心镀铜筒壁", "solid": "实心（仅趋势近似）"})
         self.signal_via_material_combo = add(
             "signal", frame, 8, "导体材料", "via_transition.padstack.material",
             values=("copper", "pec"),
@@ -458,12 +504,12 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         add("signal", frame, 3, "⑰ 背钻孔径", "via_transition.backdrill.drill_diameter", length=True)
         add("signal", frame, 4, "⑱ 目标残桩长度", "via_transition.backdrill.residual_stub", length=True)
         self.backdrill_hint_label = _legacy.ttk.Label(
-            frame, text=("背钻孔径必须大于原始钻孔；残桩从背钻侧最近的功能连接层铜边界起算；"
-                         "entry/exit 仅表示信号方向。"),
-            foreground="#64748b", wraplength=430,
+            frame, text="残桩从背钻侧最近功能连接层起算；与输入/输出层无关。",
+            foreground="#64748b", wraplength=430, justify="left",
         )
         self.backdrill_hint_label.grid(
-            row=5, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 0))
+            row=5, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 0))
+        bind_wraplength(self.backdrill_hint_label, source=frame)
 
         frame = group("return", "回流地孔（Return VIA）· 布局与层连接")
         add("return", frame, 0, "启用回流地孔", "via_transition.return_vias.enabled", boolean=True)
@@ -543,7 +589,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             "via_transition.return_vias.antipad_diameter", length=True)
         add("return", frame, 5, "筒壁模型", "via_transition.return_vias.barrel_model",
             values=("hollow", "solid"),
-            display_values={"hollow": "空心镀铜桶", "solid": "实心（仅趋势近似）"})
+            display_values={"hollow": "空心镀铜筒壁", "solid": "实心（仅趋势近似）"})
         self.return_via_material_combo = add(
             "return", frame, 6, "导体材料", "via_transition.return_vias.material",
             values=("copper", "pec"),
@@ -1009,7 +1055,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         )
 
     def _build_validate_results(self) -> None:
-        self.validate_workbench = ValidateResultsWorkbench(self.tabs["Validate结果"], self)
+        self.validate_workbench = ValidateResultsWorkbench(self.tabs["检查结果"], self)
         # Preserve the legacy logging contract for generation and scan code.
         self.log_text = self.validate_workbench.raw_text
 
@@ -1030,7 +1076,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         elif path.startswith(("simulation.", "sweeps.", "sweep_execution.")):
             page = "仿真与扫描"
         else:
-            page = "Validate结果"
+            page = "检查结果"
         self.notebook.select(self.tabs[page])
         widget = self.widgets.get(path)
         if widget is None:
@@ -1076,15 +1122,15 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             report = validator.failed_report(raw, f"无法读取当前输入：{exc}")
             self.validate_report = report
             self.validate_workbench.show_report(report)
-            self.notebook.select(self.tabs["Validate结果"])
+            self.notebook.select(self.tabs["检查结果"])
             if show_dialog:
-                messagebox.showerror("Validate模型检查", "快速预检失败，请查看Validate结果。", parent=self)
+                messagebox.showerror("模型检查", "快速预检失败，请查看检查结果。", parent=self)
             return False
         self.validate_workbench.set_progress("正在开始本地快速预检", 2)
         report, config, geometry = validator.run_local(raw, self.validate_workbench.set_progress)
         self.validate_report = report
         self.validate_workbench.show_report(report)
-        self.notebook.select(self.tabs["Validate结果"])
+        self.notebook.select(self.tabs["检查结果"])
         if config is not None:
             self.config = config
             self._validated_config = copy.deepcopy(config)
@@ -1097,16 +1143,16 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         valid = report.counts["errors"] == 0 and not report.incomplete
         if show_dialog:
             if not valid:
-                messagebox.showerror("Validate模型检查", "快速预检失败；存在阻止建模的错误。", parent=self)
+                messagebox.showerror("模型检查", "快速预检失败；存在阻止建模的错误。", parent=self)
             elif report.counts["warnings"]:
                 messagebox.showwarning(
-                    "Validate模型检查",
+                    "模型检查",
                     "快速预检通过但有警告。当前模型具备建模条件，但不代表仿真一定收敛或结果准确。",
                     parent=self,
                 )
             else:
                 messagebox.showinfo(
-                    "Validate模型检查",
+                    "模型检查",
                     "本地快速预检通过：当前模型具备建模条件。\n此结论不代表仿真一定收敛或结果准确；HFSS实际工程仍需建模后检查。",
                     parent=self,
                 )
@@ -1120,7 +1166,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         if not report or not report.counts["warnings"]:
             return True
         return messagebox.askyesno(
-            "确认Validate警告",
+            "确认模型检查警告",
             f"快速预检有 {report.counts['warnings']} 条警告。\n"
             "警告不会阻止生成，但建议先复核。是否确认并继续？",
             parent=self,
@@ -1130,7 +1176,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         snapshot = getattr(self, "_validated_snapshot", None)
         if snapshot is None:
             if not self.validate_model(show_dialog=False):
-                raise _legacy.ScriptGenerationError("快速Validate存在错误，已禁止生成HFSS脚本。")
+                raise _legacy.ScriptGenerationError("快速模型检查存在错误，已禁止生成 HFSS 脚本。")
             snapshot = getattr(self, "_validated_snapshot", None)
         if snapshot is None:
             raise _legacy.ScriptGenerationError("尚未生成有效的预览快照，已停止HFSS生成。")
@@ -1163,7 +1209,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         if preview_validation is not None and getattr(preview_validation, "errors", None):
             raise _legacy.ScriptGenerationError("当前预览快照存在几何/配置错误，已停止HFSS生成。")
         if not self._confirm_validate_warnings():
-            raise _legacy.ScriptGenerationError("用户未确认Validate警告，已取消生成。")
+            raise _legacy.ScriptGenerationError("用户未确认模型检查警告，已取消生成。")
         config = copy.deepcopy(self._validated_config)
         generated = _legacy.HfssScriptGenerator(config, _legacy.SOURCE_DIRECTORY).generate(snapshot=snapshot)
         self.config = config
@@ -1173,7 +1219,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             "\n".join("[警告] " + item for item in generated.warnings),
         )
         self.log_text.see("end")
-        self.notebook.select(self.tabs["Validate结果"])
+        self.notebook.select(self.tabs["检查结果"])
         return generated
 
     def generate_sweeps(self) -> None:
@@ -1181,11 +1227,11 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         try:
             if not self.validate_model(show_dialog=False):
                 raise _legacy.ScriptGenerationError(
-                    "快速Validate存在错误，已禁止创建参数扫描。"
+                    "快速模型检查存在错误，已禁止创建参数扫描。"
                 )
             if not self._confirm_validate_warnings():
                 raise _legacy.ScriptGenerationError(
-                    "用户未确认Validate警告，已取消创建参数扫描。"
+                    "用户未确认模型检查警告，已取消创建参数扫描。"
                 )
             config = copy.deepcopy(self._validated_config)
             root = (self.manager.output_directory(config) /
@@ -1213,7 +1259,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                 f"\n清单：{generated.manifest_path}",
             )
             self.log_text.see("end")
-            self.notebook.select(self.tabs["Validate结果"])
+            self.notebook.select(self.tabs["检查结果"])
         except Exception as exc:
             messagebox.showerror("扫描生成失败", str(exc), parent=self)
 
@@ -1296,7 +1342,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                 getattr(self, "_validated_snapshot", None),
             )
             self.model_preview_workbench.update_pending()
-        self.notebook.select(self.tabs["Validate结果"])
+        self.notebook.select(self.tabs["检查结果"])
 
     def locate_validate_item(self, item: ValidationItem) -> None:
         if item.object_keys:
@@ -1568,7 +1614,7 @@ def _run_native_ui_acceptance(report_path: Path, output_parent: Path,
             "start": "0.10mm", "stop": "0.40mm", "step": "0.05mm",
         })
 
-        preview_button = _find_button(workbench, "预览Variations")
+        preview_button = _find_button(workbench, "预览变量")
         preview_button.invoke()
         app.update_idletasks()
         preview_rows = [
@@ -1762,7 +1808,7 @@ def main() -> int:
                     if not app.validate_model(show_dialog=False):
                         raise RuntimeError("打包自检失败：默认仿真配置未通过 Validate。")
                     workbench.update_pending()
-                    app.notebook.select(app.tabs["Validate结果"])
+                    app.notebook.select(app.tabs["检查结果"])
                     app.notebook.select(app.tabs["模型预览"])
                     if not all(key in workbench.objects for key in (*port_keys, "airbox", "open_boundary")):
                         raise RuntimeError("打包自检失败：Validate 后仿真预览对象消失。")
