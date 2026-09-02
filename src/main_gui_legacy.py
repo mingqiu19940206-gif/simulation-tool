@@ -235,9 +235,7 @@ class SurfaceCapAntipadApp(tk.Tk):
     def _apply_main_toolbar_layout(self) -> None:
         compact = self.winfo_width() < 1320
         for button, full_text, compact_text in self.main_toolbar_buttons:
-            if (full_text == "生成并运行"
-                    and callable(getattr(self, "_scenario_is_via", None))
-                    and self._scenario_is_via()):
+            if full_text == "生成并运行" and getattr(self, "_via_run_button_offline", False):
                 continue
             button.configure(text=compact_text if compact else full_text)
         self.unit_caption.configure(text="单位：" if compact else "显示/保存单位：")

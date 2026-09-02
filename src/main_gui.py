@@ -1014,7 +1014,11 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
     def _update_generate_and_run_button(self) -> None:
         """On VIA, the run button must not look like an HFSS solve action."""
         buttons = getattr(self, "main_toolbar_buttons", ())
-        is_via = self._scenario_is_via()
+        try:
+            is_via = self._scenario_is_via()
+        except (KeyError, tk.TclError, AttributeError):
+            return
+        self._via_run_button_offline = is_via
         compact = False
         try:
             compact = int(self.winfo_width() or 0) < 1320
