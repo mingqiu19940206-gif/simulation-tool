@@ -426,34 +426,38 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
               "差分对（当前仅支持）")
         add("route", frame, 1, "② 换层方向", "via_transition.route_axis",
             values=("x", "y"), display_values={"x": "X 方向", "y": "Y 方向"})
-        add("route", frame, 2, "① 差分对中心距（走线）", "via_transition.pair_pitch", length=True)
-        add("route", frame, 3, "㉑ 信号孔中心距（孔间距）", "via_transition.signal_via_pitch", length=True)
-        add("route", frame, 4, "中心 X", "via_transition.center_x", length=True)
-        add("route", frame, 5, "中心 Y", "via_transition.center_y", length=True)
-        add("route", frame, 6, "③ 输入层", "via_transition.entry_layer", values=signal_layers)
-        add("route", frame, 7, "④ 输出层", "via_transition.exit_layer", values=signal_layers)
-        add("route", frame, 8, "⑤ 机械钻孔起始层", "via_transition.drill_start_layer",
+        # pair_pitch remains a JSON/sweep compatibility field, not a second
+        # editable source of truth.  Center-to-center is width+GAP per end.
+        self._register_hidden_variable("via_transition.pair_pitch")
+        self.length_paths.add("via_transition.pair_pitch")
+        self.numeric_paths.add("via_transition.pair_pitch")
+        add("route", frame, 2, "㉑ 信号孔中心距（孔间距）", "via_transition.signal_via_pitch", length=True)
+        add("route", frame, 3, "中心 X", "via_transition.center_x", length=True)
+        add("route", frame, 4, "中心 Y", "via_transition.center_y", length=True)
+        add("route", frame, 5, "③ 输入层", "via_transition.entry_layer", values=signal_layers)
+        add("route", frame, 6, "④ 输出层", "via_transition.exit_layer", values=signal_layers)
+        add("route", frame, 7, "⑤ 机械钻孔起始层", "via_transition.drill_start_layer",
             values=conductive_layers)
-        add("route", frame, 9, "⑥ 机械钻孔终止层", "via_transition.drill_end_layer",
+        add("route", frame, 8, "⑥ 机械钻孔终止层", "via_transition.drill_end_layer",
             values=conductive_layers)
         self.via_layer_hint = _legacy.ttk.Label(
             frame,
             text="层名来自“反焊盘与叠层”。输入/输出层须为信号层，机械钻孔须为导体层。",
             foreground="#64748b", wraplength=430, justify="left",
         )
-        self.via_layer_hint.grid(row=10, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 0))
+        self.via_layer_hint.grid(row=9, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 0))
         bind_wraplength(self.via_layer_hint, source=frame)
 
         frame = group("route", "走线扇出")
         add("route", frame, 0, "㉒ 扇出方式", "via_transition.fanout.style",
             values=("deg45", "arc"), display_values={"deg45": "45° 折线", "arc": "圆弧"},
-            formula="孔间距等于差分对中心距时，扇出三项自动停用。")
+            formula="两侧走线中心距均等于孔间距时，扇出三项自动停用。")
         add("route", frame, 1, "㉓ 扇出方向", "via_transition.fanout.direction",
             values=("auto", "expand", "contract"),
             display_values={"auto": "自动", "expand": "向外", "contract": "向内"})
         add("route", frame, 2, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
         self.via_fanout_hint = _legacy.ttk.Label(
-            frame, text="孔间距等于差分对中心距时，扇出三项自动停用。",
+            frame, text="两侧走线中心距均等于孔间距时，扇出三项自动停用。",
             foreground="#64748b", wraplength=430, justify="left",
         )
         self.via_fanout_hint.grid(row=3, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 0))
@@ -462,8 +466,20 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         frame = group("route", "输入/输出传输线")
         add("route", frame, 0, "⑦ 输入传输线长度", "via_transition.entry_trace.length", length=True)
         add("route", frame, 1, "⑧ 输入传输线宽度", "via_transition.entry_trace.width", length=True)
-        add("route", frame, 2, "⑨ 输出传输线长度", "via_transition.exit_trace.length", length=True)
-        add("route", frame, 3, "⑩ 输出传输线宽度", "via_transition.exit_trace.width", length=True)
+        add("route", frame, 2, "输入 GAP", "via_transition.entry_trace.gap", length=True)
+        add("route", frame, 3, "输入中心距", "via_transition.entry_trace.center_to_center",
+            length=True, formula="= 宽度 + GAP")
+        self._derived_display_paths.add("via_transition.entry_trace.center_to_center")
+        self._set_derived_state(
+            "via_transition.entry_trace.center_to_center", True, "= 宽度 + GAP")
+        add("route", frame, 4, "⑨ 输出传输线长度", "via_transition.exit_trace.length", length=True)
+        add("route", frame, 5, "⑩ 输出传输线宽度", "via_transition.exit_trace.width", length=True)
+        add("route", frame, 6, "输出 GAP", "via_transition.exit_trace.gap", length=True)
+        add("route", frame, 7, "输出中心距", "via_transition.exit_trace.center_to_center",
+            length=True, formula="= 宽度 + GAP")
+        self._derived_display_paths.add("via_transition.exit_trace.center_to_center")
+        self._set_derived_state(
+            "via_transition.exit_trace.center_to_center", True, "= 宽度 + GAP")
 
         frame = group("signal", "信号孔（Signal VIA）")
         add("signal", frame, 0, "⑪ 钻孔直径", "via_transition.padstack.drill_diameter", length=True)
@@ -1031,10 +1047,12 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             signal_pitch = convert_length(
                 float(self.variables["via_transition.signal_via_pitch"].get()),
                 self.display_unit, "mm")
-            pair_pitch = convert_length(
-                float(self.variables["via_transition.pair_pitch"].get()),
-                self.display_unit, "mm")
-            fanout_active = not math.isclose(signal_pitch, pair_pitch, abs_tol=1e-12)
+            entry_c = self._via_side_center_mm("entry_trace")
+            exit_c = self._via_side_center_mm("exit_trace")
+            fanout_active = (
+                not math.isclose(signal_pitch, entry_c, abs_tol=1e-12)
+                or not math.isclose(signal_pitch, exit_c, abs_tol=1e-12)
+            )
         except (KeyError, TypeError, ValueError, tk.TclError):
             fanout_active = True
         for path in (

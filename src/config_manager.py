@@ -201,8 +201,8 @@ _SECTION_LENGTH_FIELDS: Dict[str, set[str]] = {
     "via_transition": {
         "pair_pitch", "signal_via_pitch", "center_x", "center_y",
         "fanout.straight_length",
-        "entry_trace.length", "entry_trace.width",
-        "exit_trace.length", "exit_trace.width",
+        "entry_trace.length", "entry_trace.width", "entry_trace.gap",
+        "exit_trace.length", "exit_trace.width", "exit_trace.gap",
         "padstack.drill_diameter", "padstack.finished_hole_diameter",
         "padstack.plating_thickness", "padstack.connected_pad_diameter",
         "padstack.nonfunctional_pad_diameter", "padstack.antipad_diameter",
@@ -448,6 +448,24 @@ def derive_capacitor_values(capacitor: Mapping[str, Any], overlap: float) -> Dic
                      if capacitor.get("bridge_length_mode") == "auto"
                      else float(capacitor["bridge_length"]))
     return {"pad_gap": pad_gap, "pad_pitch": pad_pitch, "bridge_length": bridge_length}
+
+
+def via_trace_center_pitch(trace: Mapping[str, Any], pair_pitch: float) -> float:
+    """VIA 走线中心距 = width + GAP；缺 GAP 时回退到旧 pair_pitch。"""
+    width = float(trace.get("width", 0.0) or 0.0)
+    if "gap" in trace and trace["gap"] not in (None, ""):
+        return width + float(trace["gap"])
+    return float(pair_pitch)
+
+
+def apply_pair_pitch_to_trace_gaps(via_transition: Dict[str, Any], pair_pitch: float) -> None:
+    """Legacy both-end pitch setter: pair_pitch becomes width+GAP on both traces."""
+    pitch = float(pair_pitch)
+    via_transition["pair_pitch"] = pitch
+    for side in ("entry_trace", "exit_trace"):
+        trace = via_transition.setdefault(side, {})
+        width = float(trace.get("width", 0.0) or 0.0)
+        trace["gap"] = pitch - width
 
 
 def _deep_merge(defaults: Any, supplied: Any) -> Any:
@@ -878,6 +896,29 @@ def normalize_config(raw_config: Mapping[str, Any]) -> Tuple[Dict[str, Any], Lis
         converted["via_transition"]["signal_via_pitch"] = float(converted["via_transition"]["pair_pitch"])
         corrections.append(
             "旧配置缺少 via_transition.signal_via_pitch，已回填为 pair_pitch（信号孔与走线同中心距，无扇出）。"
+        )
+    # Independent entry/exit GAP is the source of truth for walk-line pitch.
+    # Legacy files with only pair_pitch get both gaps = pair_pitch − width so
+    # geometry still matches the old same-pitch-both-ends contract.  Defaults
+    # merge would otherwise inject the production GAP (0.7 mm) and silently
+    # change a file whose pair_pitch was not 0.8 mm.
+    pair_pitch = float(converted["via_transition"].get("pair_pitch", 0.0))
+    backfilled_gap_sides: List[str] = []
+    for side in ("entry_trace", "exit_trace"):
+        supplied_side = (supplied_via_transition.get(side)
+                         if isinstance(supplied_via_transition.get(side), Mapping) else {})
+        trace = converted["via_transition"].setdefault(side, {})
+        width = float(trace.get("width", 0.0) or 0.0)
+        if "gap" not in supplied_side:
+            trace["gap"] = pair_pitch - width
+            backfilled_gap_sides.append(side)
+        else:
+            trace["gap"] = float(trace.get("gap", pair_pitch - width))
+    if backfilled_gap_sides:
+        corrections.append(
+            "旧配置缺少 via_transition."
+            + "/".join(f"{side}.gap" for side in backfilled_gap_sides)
+            + "，已按 pair_pitch − width 回填（两端走线中心距与旧 pair_pitch 一致）。"
         )
     # Re-normalize arbitrary per-layer keys retained by the extensible schema,
     # then derive legacy read-only aliases in one direction.

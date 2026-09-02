@@ -20,6 +20,8 @@ from via_transition_geometry import derive_functional_barrel_span
 # 规格 §11.1：拓扑不变的数值轴（可进入原生 Optimetrics）。
 VIA_SAFE_SWEEP_PATHS: Tuple[str, ...] = (
     "via_transition.pair_pitch",
+    "via_transition.entry_trace.gap",
+    "via_transition.exit_trace.gap",
     "via_transition.padstack.drill_diameter",
     "via_transition.padstack.connected_pad_diameter",
     "via_transition.padstack.antipad.diameter",
@@ -89,6 +91,8 @@ class ViaSweepSpec:
 # (label, minimum, maximum, signed) 保守默认界，mm 内部单位。
 _SPECS = {
     "via_transition.pair_pitch": ("差分对中心距", 0.2, 2.0, False),
+    "via_transition.entry_trace.gap": ("输入传输线 GAP", 0.0, 2.0, False),
+    "via_transition.exit_trace.gap": ("输出传输线 GAP", 0.0, 2.0, False),
     "via_transition.padstack.drill_diameter": ("信号孔钻孔直径", 0.05, 1.0, False),
     "via_transition.padstack.connected_pad_diameter": ("功能焊盘直径", 0.1, 2.0, False),
     "via_transition.padstack.antipad.diameter": ("圆形反焊盘直径", 0.2, 3.0, False),

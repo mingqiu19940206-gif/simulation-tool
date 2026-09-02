@@ -13,8 +13,8 @@
     "exit_layer": "L10",
     "drill_start_layer": "L1",
     "drill_end_layer": "L14",
-    "entry_trace": {"length": 3.0, "width": 0.1},
-    "exit_trace": {"length": 3.0, "width": 0.1},
+    "entry_trace": {"length": 3.0, "width": 0.1, "gap": 0.7},
+    "exit_trace": {"length": 3.0, "width": 0.1, "gap": 0.7},
     "padstack": {
       "drill_diameter": 0.2,
       "finished_hole_diameter": 0.15,

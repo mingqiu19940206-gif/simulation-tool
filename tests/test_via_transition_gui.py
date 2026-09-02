@@ -78,6 +78,19 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.assertEqual(vt["fanout"]["style"], "deg45")
         self.assertEqual(vt["fanout"]["direction"], "auto")
         self.assertGreaterEqual(vt["fanout"]["straight_length"], 0.0)
+        self.assertAlmostEqual(vt["entry_trace"]["gap"], 0.7)
+        self.assertAlmostEqual(vt["exit_trace"]["gap"], 0.7)
+        self.assertAlmostEqual(
+            vt["entry_trace"]["width"] + vt["entry_trace"]["gap"], vt["pair_pitch"])
+        self.assertIn("via_transition.entry_trace.gap", self.app.widgets)
+        self.assertIn("via_transition.exit_trace.gap", self.app.widgets)
+        self.assertNotIn("via_transition.pair_pitch", self.app.widgets)
+        self.assertEqual(
+            str(self.app.widgets["via_transition.entry_trace.center_to_center"].cget("state")),
+            "readonly")
+        self.assertEqual(
+            str(self.app.widgets["via_transition.exit_trace.center_to_center"].cget("state")),
+            "readonly")
         self.assertIn("残桩从背钻侧最近功能连接层起算",
                       self.app.backdrill_hint_label.cget("text"))
         self.assertIn("与输入/输出层无关",
@@ -453,6 +466,8 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.app.variables["scenario.type"].set("via_transition")
         cases = {
             "via_transition.entry_trace.width": ("VIA 换层", "换层与传输线"),
+            "via_transition.entry_trace.gap": ("VIA 换层", "换层与传输线"),
+            "via_transition.exit_trace.center_to_center": ("VIA 换层", "换层与传输线"),
             "via_transition.backdrill.residual_stub": ("VIA 换层", "信号孔与背钻"),
             "via_transition.return_vias.pad_diameter": ("VIA 换层", "回流地孔"),
             "via_transition.padstack.antipad.diameter": ("反焊盘与叠层", None),
@@ -568,6 +583,23 @@ class ViaTransitionGuiTests(unittest.TestCase):
         finally:
             self.app._load_to_widgets(original)
 
+    def test_26_independent_entry_gap_does_not_change_exit_center_widget(self) -> None:
+        self.app.variables["scenario.type"].set("via_transition")
+        self.app.update_idletasks()
+        exit_before = str(self.app.variables["via_transition.exit_trace.center_to_center"].get())
+        self.app.variables["via_transition.entry_trace.gap"].set(
+            format_length(0.5, self.app.display_unit))
+        self.app._sync_via_fields()
+        self.app.update_idletasks()
+        self.assertEqual(
+            str(self.app.variables["via_transition.exit_trace.center_to_center"].get()),
+            exit_before)
+        collected = self.app._collect()
+        self.assertAlmostEqual(collected["via_transition"]["entry_trace"]["gap"], 0.5)
+        self.assertAlmostEqual(collected["via_transition"]["exit_trace"]["gap"], 0.7)
+        self.assertNotIn("center_to_center", collected["via_transition"]["entry_trace"])
+        self.assertNotIn("center_to_center", collected["via_transition"]["exit_trace"])
+
     def test_25_every_default_via_leaf_has_one_gui_binding(self) -> None:
         def leaves(node, prefix="via_transition"):
             result = []
@@ -582,7 +614,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
 
         default_via = self.app.manager.default()["via_transition"]
         paths = leaves(default_via)
-        self.assertEqual(len(paths), 63)
+        self.assertEqual(len(paths), 65)
         self.assertEqual([path for path in paths if path not in self.app.variables], [])
 
 
