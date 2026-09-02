@@ -233,7 +233,7 @@ class GuiLayoutRegressionTests(unittest.TestCase):
         self.assertGreaterEqual(description.winfo_rooty(), card_bottom, label)
 
     def _show_page(self, name: str) -> None:
-        self.app.notebook.select(self.app.tabs[name])
+        self.app.show_workspace_page(name)
         self._settle()
 
     def _assert_via_layout(self) -> None:

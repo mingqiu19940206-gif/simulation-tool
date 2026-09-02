@@ -141,13 +141,14 @@ class ValidateGuiTests(unittest.TestCase):
             self.app.destroy()
 
     def test_validate_results_page_replaces_legacy_log_and_runs_quick_check(self) -> None:
-        self.assertIn("Validate结果", self.app.tabs)
+        self.assertNotIn("Validate结果", self.app.tabs)
         self.assertNotIn("日志与检查", self.app.tabs)
         self.assertTrue(self.app.validate_model(show_dialog=False))
         report = self.app.validate_workbench.report
         self.assertIsNotNone(report)
         self.assertEqual(report.mode, "本地快速预检")
-        self.assertEqual(self.app.notebook.select(), str(self.app.tabs["Validate结果"]))
+        self.assertTrue(self.app._validate_overlay_open)
+        self.assertTrue(self.app.validate_overlay.winfo_manager())
 
     def test_parameter_change_marks_previous_result_stale(self) -> None:
         self.assertTrue(self.app.validate_model(show_dialog=False))
@@ -164,7 +165,7 @@ class ValidateGuiTests(unittest.TestCase):
         )
         self.app.locate_validate_item(item)
         self.app.update()
-        self.assertEqual(self.app.notebook.select(), str(self.app.tabs["模型预览"]))
+        self.assertEqual(self.app.preview_view_bar.active, "等轴")
         self.assertTrue(self.app.model_preview_workbench.validation_marker_actors)
         hfss_item = ValidationItem(
             "HFSS-TEST", "error", "HFSS实际工程", "实际对象定位",

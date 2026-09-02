@@ -204,7 +204,7 @@ class ModelPreviewGuiTests(unittest.TestCase):
             self.app.destroy()
 
     def test_tab_defaults_to_real_3d_workbench(self) -> None:
-        self.assertIn("模型预览", self.app.tabs)
+        self.assertNotIn("模型预览", self.app.tabs)
         self.assertNotIn("二维预览", self.app.tabs)
         self.assertFalse(hasattr(self.app, "preview_canvas"))
         workbench = self.app.model_preview_workbench
@@ -223,9 +223,9 @@ class ModelPreviewGuiTests(unittest.TestCase):
     def test_switching_model_preview_tab_uses_stable_canvas_and_draws_ports(self) -> None:
         workbench = self.app.model_preview_workbench
         self.app.variables["simulation.enabled"].set(True)
-        self.app.notebook.select(self.app.tabs["项目与走线"])
+        self.app.show_workspace_page("项目与走线")
         self.app.update()
-        self.app.notebook.select(self.app.tabs["模型预览"])
+        self.app.show_workspace_page("模型预览")
         self.app.refresh_visuals(); workbench.update_pending(); self.app.update()
         port_keys = [key for key, item in workbench.objects.items() if item.category == "Port"]
         self.assertEqual(len(port_keys), 4)

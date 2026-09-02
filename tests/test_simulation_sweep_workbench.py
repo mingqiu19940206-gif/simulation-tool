@@ -122,7 +122,8 @@ class SimulationSweepGuiTests(unittest.TestCase):
             app.geometry("1120x720")
             app.update()
             workbench = app.simulation_sweep_workbench
-            app.notebook.select(app.tabs["仿真与扫描"])
+            app.open_sweep_sheet()
+            app.update()
             app.variables["simulation.enabled"].set(False)
             config, validation = app.manager.validate(app._collect(), check_output_directory=False)
             workbench.show(config, None, validation)
@@ -142,7 +143,7 @@ class SimulationSweepGuiTests(unittest.TestCase):
         from main_gui import SurfaceCapAntipadApp
         app = SurfaceCapAntipadApp()
         try:
-            app.variables["scenario.type"].set("VIA 换层")
+            app.variables["scenario.type"].set("via_transition")
             app.update()
             workbench = app.simulation_sweep_workbench
             iid = "backfill-via-antipad"
@@ -166,7 +167,7 @@ class SimulationSweepGuiTests(unittest.TestCase):
         from main_gui import SurfaceCapAntipadApp
         app = SurfaceCapAntipadApp()
         try:
-            app.variables["scenario.type"].set("VIA 换层")
+            app.variables["scenario.type"].set("via_transition")
             app.update()
             config = app._collect()
             config["via_transition"]["padstack"]["antipad"]["per_layer"] = {
