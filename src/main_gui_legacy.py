@@ -20,6 +20,7 @@ from config_manager import (
     convert_length, derive_capacitor_values, format_length, format_number,
     format_validation_report,
 )
+from build_info import about_message
 from capacitor_editor import (
     ENUM_LABELS, ElectricalModelDiagram, GeometryDiagram, ScrollableFrame,
     calculate_srf_ghz, inspect_touchstone, validate_capacitor_editor,
@@ -144,6 +145,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         self.widgets: Dict[str, tk.Widget] = {}
         self.enum_labels: Dict[str, Dict[str, str]] = {}
         self.formula_labels: Dict[str, ttk.Label] = {}
+        self.field_labels: Dict[str, ttk.Label] = {}
         self.length_paths: set[str] = set()
         self._length_mm_cache: Dict[str, float] = {}
         self._length_display_snapshot: Dict[str, str] = {}
@@ -193,9 +195,9 @@ class SurfaceCapAntipadApp(tk.Tk):
         self.main_toolbar = bar
         bar.pack(fill="x")
         toolbar_actions = (
-            ("载入JSON", "载入", self.load_json),
-            ("保存JSON", "保存", self.save_json),
-            ("Validate模型检查", "Validate", self.validate_model),
+            ("载入 JSON", "载入", self.load_json),
+            ("保存 JSON", "保存", self.save_json),
+            ("模型检查", "模型检查", self.validate_model),
             ("生成HFSS脚本", "生成脚本", self.generate_script),
             ("生成并运行", "生成并运行", self.generate_and_run),
         )
@@ -232,24 +234,26 @@ class SurfaceCapAntipadApp(tk.Tk):
             self.unit_hint_label.pack(side="left", padx=8, after=self.unit_combo)
 
     def _show_about(self) -> None:
-        """Show the same release identity used by the title and build metadata."""
+        """Show release identity that used to appear in the title and status bar."""
 
         try:
-            from build_info import build_identity_line
-            identity = build_identity_line()
+            identity = about_message()
         except Exception:
-            identity = f"version={APP_VERSION}"
+            identity = f"PCIe AC耦合电容区域无源优化工具\n版本 {APP_VERSION}"
         messagebox.showinfo(
             "关于 SurfaceCapAntipadTool",
-            f"PCIe AC耦合电容区域无源优化工具\n版本 {APP_VERSION}\n\n{identity}",
+            identity,
             parent=self,
         )
+
+    def _set_ready_status(self) -> None:
+        self.status.set(f"就绪 · V{APP_VERSION} · 显示单位 {self.display_unit}")
 
     def _build_tabs(self) -> None:
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=8, pady=(0, 8))
         names = ["项目与走线", "电容与模型", "反焊盘与叠层", "GND VIA", "VIA 换层", "仿真与扫描",
-                 "模型预览", "Validate结果"]
+                 "模型预览", "检查结果"]
         self.tabs: Dict[str, ttk.Frame] = {}
         self.scenario_hints: Dict[str, ttk.Label] = {}
         # "反焊盘与叠层" hosts a tight vertical PanedWindow whose preview canvas
@@ -277,7 +281,7 @@ class SurfaceCapAntipadApp(tk.Tk):
 
     def _build_validate_results(self) -> None:
         """Legacy text fallback; the V2 entry point installs structured results."""
-        self.log_text = tk.Text(self.tabs["Validate结果"], wrap="word", font=("TkFixedFont", 10),
+        self.log_text = tk.Text(self.tabs["检查结果"], wrap="word", font=("TkFixedFont", 10),
                                 background="#101418", foreground="#e6edf3")
         self.log_text.pack(fill="both", expand=True)
 
@@ -297,7 +301,9 @@ class SurfaceCapAntipadApp(tk.Tk):
              numeric: bool = False, integer: bool = False, boolean: bool = False,
              values: Optional[Sequence[str]] = None, unit: str = "",
              display_values: Optional[Mapping[str, str]] = None, formula: str = "") -> tk.Widget:
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=4, pady=3)
+        label_widget = ttk.Label(parent, text=label)
+        label_widget.grid(row=row, column=0, sticky="w", padx=4, pady=3)
+        self.field_labels[path] = label_widget
         var: tk.Variable = tk.BooleanVar() if boolean else tk.StringVar()
         self.variables[path] = var
         if boolean:
@@ -442,7 +448,7 @@ class SurfaceCapAntipadApp(tk.Tk):
 
         if is_via:
             set_hint("项目与走线",
-                     "⚠ 当前场景：差分 VIA 换层 —— 下方差分走线（trace.*）参数不生效，请在“VIA 换层”页设置输入/输出传输线；工程参数仍生效。",
+                     "⚠ 当前场景：差分 VIA 换层 —— 下方差分走线参数不生效，请在“VIA 换层”页设置输入/输出传输线；工程参数仍生效。",
                      "warn")
             set_hint("电容与模型",
                      "⚠ 当前场景：差分 VIA 换层 —— 本页电容参数不参与几何/校验/HFSS 生成。",
@@ -458,11 +464,12 @@ class SurfaceCapAntipadApp(tk.Tk):
                      "ok")
             set_hint("仿真与扫描",
                      "✓ 当前场景：差分 VIA 换层 —— 已绑定尺寸轴进入原生 Optimetrics；"
-                     "拓扑、clearance 与逐层轴生成独立重算 Design/case；未实现轴 fail closed。",
+                     "拓扑、clearance 与逐层轴生成独立重算 Design/case；未实现的轴按失败关闭处理。",
                      "ok")
         else:
             set_hint("项目与走线",
-                     "✓ 当前场景：AC 耦合电容 —— 下方差分走线（trace.*）参数生效。",
+                     "✓ 当前场景：AC 耦合电容 —— 下方差分走线参数生效。"
+                     "VIA 换层仅在仿真场景选“差分 VIA 换层”后可用。",
                      "ok")
             set_hint("电容与模型",
                      "✓ 当前场景：AC 耦合电容 —— 本页电容参数生效。",
@@ -474,7 +481,8 @@ class SurfaceCapAntipadApp(tk.Tk):
                      "✓ 当前场景：AC 耦合电容 —— 本页 GND VIA 参数生效。",
                      "ok")
             set_hint("VIA 换层",
-                     "⚠ 当前场景：AC 耦合电容 —— 本页 VIA 换层参数不生效。",
+                     "⚠ 当前场景：AC 耦合电容 —— 本页 VIA 换层参数不生效。"
+                     "VIA 换层仅在仿真场景选“差分 VIA 换层”后可用。",
                      "warn")
             set_hint("仿真与扫描",
                      "✓ 当前场景：AC 耦合电容 —— 参数扫描可用。",
@@ -496,20 +504,20 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._add(left, 4, "AEDT 目标版本", "project.aedt_version",
                   values=tuple(sorted(SUPPORTED_AEDT_VERSIONS)),
                   display_values=AEDT_VERSION_LABELS)
-        self._add(left, 5, "覆盖V2同名输出", "project.overwrite_existing", boolean=True)
-        self._add(left, 6, "保持AEDT打开", "project.open_aedt_after_build", boolean=True)
+        self._add(left, 5, "覆盖 V2 同名输出", "project.overwrite_existing", boolean=True)
+        self._add(left, 6, "保持 AEDT 打开", "project.open_aedt_after_build", boolean=True)
         ttk.Label(left, text="支持 AEDT 2022 R2 / 2023 R2；配置中保存为 2022.2 / 2023.2。",
                   foreground="#475569", wraplength=440).grid(
                       row=7, column=0, columnspan=3, sticky="w", padx=4, pady=(6, 2))
-        trace_fields = [("走线宽度 trace_width", "trace.trace_width"),
-                        ("差分中心距 trace_pitch", "trace.trace_pitch"),
-                        ("铜皮边到边间距 trace_gap", "trace.trace_gap"),
+        trace_fields = [("走线宽度", "trace.trace_width"),
+                        ("差分中心距", "trace.trace_pitch"),
+                        ("铜皮边到边间距", "trace.trace_gap"),
                         ("顶层铜厚", "trace.copper_thickness"),
                         ("输入直线长度", "trace.input_straight_length"),
                         ("输出直线长度", "trace.output_straight_length")]
         for row, (label, path) in enumerate(trace_fields):
             self._add(right, row, label, path, length=True)
-        self._add(right, 6, "PAD 出线模式", "trace.pad_escape_mode",
+        self._add(right, 6, "焊盘出线模式", "trace.pad_escape_mode",
                   values=("direct_45", "smooth_s_bend", "lead_then_45"),
                   display_values={"direct_45": "直接 45°（默认）",
                                   "smooth_s_bend": "平滑 S 弯",
@@ -517,9 +525,9 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._add(right, 7, "过渡方向", "trace.transition_direction",
                   values=("auto", "contract", "expand"),
                   display_values={"auto": "自动", "contract": "仅向内收缩", "expand": "仅向外展开"})
-        self._add(right, 8, "输入 PAD 引线（仅兼容模式）", "trace.pad_lead_in_length", length=True)
-        self._add(right, 9, "输出 PAD 引线（仅兼容模式）", "trace.pad_lead_out_length", length=True)
-        self._add(right, 10, "S 弯过渡长度 transition_length", "trace.transition_length", length=True)
+        self._add(right, 8, "输入焊盘引线（仅兼容模式）", "trace.pad_lead_in_length", length=True)
+        self._add(right, 9, "输出焊盘引线（仅兼容模式）", "trace.pad_lead_out_length", length=True)
+        self._add(right, 10, "S 弯过渡长度", "trace.transition_length", length=True)
 
     def _cap_section(self, parent: ttk.Frame, title: str) -> ttk.LabelFrame:
         frame = ttk.LabelFrame(parent, text=title, padding=(8, 6))
@@ -617,28 +625,28 @@ class SurfaceCapAntipadApp(tk.Tk):
                   foreground="#9a3412", wraplength=640).grid(row=3, column=0, columnspan=4, sticky="w", padx=4, pady=(3, 1))
 
         body = self._cap_section(parameter_root, "电容本体")
-        self._add(body, 0, "本体长度 body_length", "capacitor.body_length", length=True)
-        self._add(body, 1, "本体宽度 body_width", "capacitor.body_width", length=True)
-        self._add(body, 2, "本体高度 body_height", "capacitor.body_height", length=True)
+        self._add(body, 0, "本体长度", "capacitor.body_length", length=True)
+        self._add(body, 1, "本体宽度", "capacitor.body_width", length=True)
+        self._add(body, 2, "本体高度", "capacitor.body_height", length=True)
 
         pads = self._cap_section(parameter_root, "焊盘")
-        self._add(pads, 0, "焊盘长度 pad_length", "capacitor.pad_length", length=True)
-        self._add(pads, 1, "焊盘宽度 pad_width", "capacitor.pad_width", length=True)
-        self._add(pads, 2, "焊盘内侧间隙 pad_gap", "capacitor.pad_gap", length=True, formula="用户输入")
-        self._add(pads, 3, "焊盘中心距 pad_pitch", "capacitor.pad_pitch", length=True, formula="= pad_length + pad_gap")
-        self._add(pads, 4, "焊盘旋转 pad_rotation", "capacitor.pad_rotation", numeric=True, unit="deg")
+        self._add(pads, 0, "焊盘长度", "capacitor.pad_length", length=True)
+        self._add(pads, 1, "焊盘宽度", "capacitor.pad_width", length=True)
+        self._add(pads, 2, "焊盘内侧间隙", "capacitor.pad_gap", length=True, formula="用户输入")
+        self._add(pads, 3, "焊盘中心距", "capacitor.pad_pitch", length=True, formula="= 焊盘长度 + 内侧间隙")
+        self._add(pads, 4, "焊盘旋转", "capacitor.pad_rotation", numeric=True, unit="deg")
         self._add(pads, 5, "中心距模式", "capacitor.pad_pitch_mode",
                   values=("auto_from_gap", "advanced_pitch"), display_values=ENUM_LABELS["capacitor.pad_pitch_mode"])
 
         layout = self._cap_section(parameter_root, "P/N 两颗电容布置")
-        self._add(layout, 0, "P/N 中心距 cap_pitch", "capacitor.cap_pitch", length=True)
-        self._add(layout, 1, "电容中心 X cap_center_x", "capacitor.cap_center_x", length=True)
+        self._add(layout, 0, "P/N 中心距", "capacitor.cap_pitch", length=True)
+        self._add(layout, 1, "电容中心 X", "capacitor.cap_center_x", length=True)
         self._add(layout, 2, "中心 X 偏移", "capacitor.cap_center_x_offset", length=True)
         self._add(layout, 3, "关于 Y 轴对称", "capacitor.symmetric_about_y", boolean=True)
 
         bridge = self._cap_section(parameter_root, "桥接结构")
-        self._add(bridge, 0, "桥接宽度 bridge_width", "capacitor.bridge_width", length=True)
-        self._add(bridge, 1, "桥接长度 bridge_length", "capacitor.bridge_length", length=True,
+        self._add(bridge, 0, "桥接宽度", "capacitor.bridge_width", length=True)
+        self._add(bridge, 1, "桥接长度", "capacitor.bridge_length", length=True,
                   formula="= pad_gap + 2 × overlap")
         self._add(bridge, 2, "桥接长度模式", "capacitor.bridge_length_mode", values=("auto", "manual"),
                   display_values=ENUM_LABELS["capacitor.bridge_length_mode"])
@@ -666,7 +674,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         self.model_frames: Dict[str, ttk.Frame] = {}
         ideal = ttk.Frame(self.model_parameters)
         self.model_frames["ideal_bridge"] = ideal
-        ttk.Label(ideal, text="两个PAD将由铜导体直接连接，电容值、ESR和ESL不会参与仿真。",
+        ttk.Label(ideal, text="两个焊盘将由铜导体直接连接，电容值、ESR和ESL不会参与仿真。",
                   foreground="#6b3f19", wraplength=390).pack(fill="x", pady=5)
         ttk.Label(ideal, text="桥接宽度、长度和自动/手动模式请在左侧“桥接结构”中编辑。",
                   foreground="#475569", wraplength=390).pack(fill="x")
@@ -678,7 +686,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._add(rlc, 1, "ESR", "capacitor_model.esr_ohm", numeric=True, unit="Ω")
         self._add(rlc, 2, "ESL", "capacitor_model.esl_nh", numeric=True, unit="nH")
         self._add(rlc, 3, "RLC Sheet宽度", "capacitor_model.sheet_width", length=True)
-        ttk.Label(rlc, text="PAD之间不会创建铜桥。积分线沿电容局部长度方向：输入PAD → 输出PAD。",
+        ttk.Label(rlc, text="焊盘之间不会创建铜桥。积分线沿电容局部长度方向：输入焊盘 → 输出焊盘。",
                   foreground="#475569", wraplength=390).grid(row=4, column=0, columnspan=3, sticky="w", pady=(8, 2))
 
         spar = ttk.Frame(self.model_parameters)
@@ -698,7 +706,7 @@ class SurfaceCapAntipadApp(tk.Tk):
 
         opened = ttk.Frame(self.model_parameters)
         self.model_frames["open"] = opened
-        ttk.Label(opened, text="仅保留分离PAD：无铜桥、无RLC、无Touchstone组件。",
+        ttk.Label(opened, text="仅保留分离焊盘：无铜桥、无RLC、无Touchstone组件。",
                   foreground="#475569", wraplength=390).pack(fill="x", pady=5)
 
         summary = ttk.LabelFrame(right, text="模型摘要与派生结果", padding=8)
@@ -791,7 +799,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         tab = self.tabs["GND VIA"]
         left = self._frame(tab, "布局与制造", "left")
         right = self._frame(tab, "层连接与安装面GND", "left")
-        self._add(left, 0, "启用GND VIA", "gnd_vias.enabled", boolean=True)
+        self._add(left, 0, "启用 GND VIA", "gnd_vias.enabled", boolean=True)
         self._add(left, 1, "布局模式", "gnd_vias.pattern", values=("four_corner", "side_pair", "rectangular_fence", "custom"))
         self._add(left, 2, "数量", "gnd_vias.count", numeric=True, integer=True)
         self._add(left, 3, "侧对方向", "gnd_vias.side_orientation", values=("top_bottom", "left_right"))
@@ -805,11 +813,11 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._add(right, 1, "终止层", "gnd_vias.end_layer")
         self._add(right, 2, "连接参考层（逗号分隔）", "gnd_vias.connect_layers")
         self._add(right, 3, "材料", "gnd_vias.material")
-        self._add(right, 4, "桶模型", "gnd_vias.barrel_model", values=("hollow", "solid"))
+        self._add(right, 4, "筒壁模型", "gnd_vias.barrel_model", values=("hollow", "solid"))
         self._add(right, 5, "创建安装面GND铜皮", "gnd_vias.create_top_ground_copper", boolean=True)
         self._add(right, 6, "安装面GND信号净距", "gnd_vias.top_ground_clearance", length=True)
         self._add(right, 7, "自定义坐标 x,y; x,y", "gnd_vias.custom_coordinates")
-        ttk.Label(right, text="优先使用空心镀铜桶；实心模式仅用于趋势近似。自动布局关于差分中心对称。",
+        ttk.Label(right, text="优先使用空心镀铜筒壁；实心模式仅用于趋势近似。自动布局关于差分中心对称。",
                   foreground="#555", wraplength=430).grid(row=8, column=0, columnspan=3, sticky="w", pady=12)
 
     def _build_via_transition(self) -> None:
@@ -842,12 +850,13 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._add(f, 3, "㉑ 信号孔中心距（孔间距）", "via_transition.signal_via_pitch", length=True)
         self._add(f, 4, "中心 X", "via_transition.center_x", length=True)
         self._add(f, 5, "中心 Y", "via_transition.center_y", length=True)
-        self._add(f, 6, "③ 输入层 (entry)", "via_transition.entry_layer", values=signal_layers)
-        self._add(f, 7, "④ 输出层 (exit)", "via_transition.exit_layer", values=signal_layers)
+        self._add(f, 6, "③ 输入层", "via_transition.entry_layer", values=signal_layers)
+        self._add(f, 7, "④ 输出层", "via_transition.exit_layer", values=signal_layers)
         self._add(f, 8, "⑤ 机械钻孔起始层", "via_transition.drill_start_layer", values=conductive_layers)
         self._add(f, 9, "⑥ 机械钻孔终止层", "via_transition.drill_end_layer", values=conductive_layers)
-        ttk.Label(f, text="层名需与“反焊盘与叠层”页的叠层一致（entry/exit 须为 signal 层）。",
-                  foreground="#64748b", font=("TkDefaultFont", 8)).grid(row=10, column=0, columnspan=3, sticky="w", pady=(2, 0))
+        ttk.Label(f, text="层名来自“反焊盘与叠层”。输入/输出层须为信号层，机械钻孔须为导体层。",
+                  foreground="#64748b", wraplength=430, justify="left").grid(
+                      row=10, column=0, columnspan=3, sticky="ew", pady=(2, 0))
 
         f = group("走线扇出")
         self._add(f, 0, "㉒ 扇出方式", "via_transition.fanout.style",
@@ -856,9 +865,9 @@ class SurfaceCapAntipadApp(tk.Tk):
                   values=("auto", "expand", "contract"),
                   display_values={"auto": "自动", "expand": "向外", "contract": "向内"})
         self._add(f, 2, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
-        ttk.Label(f, text="信号孔间距 ≠ 走线中心距时，走线从孔 45° 折出/圆弧过渡到耦合直线段；"
-                          "同值时自动直连（扇出设置不生效）。",
-                  foreground="#64748b", font=("TkDefaultFont", 8)).grid(row=3, column=0, columnspan=3, sticky="w", pady=(2, 0))
+        ttk.Label(f, text="孔间距等于差分对中心距时，扇出三项自动停用。",
+                  foreground="#64748b", wraplength=430, justify="left").grid(
+                      row=3, column=0, columnspan=3, sticky="ew", pady=(2, 0))
 
         f = group("输入/输出走线")
         self._add(f, 0, "⑦ 输入走线长度", "via_transition.entry_trace.length", length=True)
@@ -876,8 +885,8 @@ class SurfaceCapAntipadApp(tk.Tk):
                   values=("remove", "keep"), display_values={"remove": "移除", "keep": "保留"})
         self._add(f, 5, "⑮ 非功能焊盘直径", "via_transition.padstack.nonfunctional_pad_diameter", length=True)
         self._add(f, 6, "⑯ 反焊盘直径", "via_transition.padstack.antipad_diameter", length=True)
-        self._add(f, 7, "桶模型", "via_transition.padstack.barrel_model", values=("hollow", "solid"),
-                  display_values={"hollow": "空心镀铜桶", "solid": "实心（仅趋势近似）"})
+        self._add(f, 7, "筒壁模型", "via_transition.padstack.barrel_model", values=("hollow", "solid"),
+                  display_values={"hollow": "空心镀铜筒壁", "solid": "实心（仅趋势近似）"})
 
         f = group("背钻与残桩")
         self._add(f, 0, "启用背钻", "via_transition.backdrill.enabled", boolean=True)
@@ -888,8 +897,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._add(f, 3, "⑰ 背钻孔径", "via_transition.backdrill.drill_diameter", length=True)
         self._add(f, 4, "⑱ 目标残桩长度", "via_transition.backdrill.residual_stub", length=True)
         self.backdrill_hint_label = ttk.Label(
-            f, text=("背钻孔径必须大于原始钻孔；残桩从背钻侧最近的功能连接层铜边界起算；"
-                     "entry/exit 仅表示信号方向。"),
+            f, text="残桩从背钻侧最近功能连接层起算；与输入/输出层无关。",
             foreground="#64748b", font=("TkDefaultFont", 8))
         self.backdrill_hint_label.grid(
             row=5, column=0, columnspan=3, sticky="w", pady=(2, 0))
@@ -1191,6 +1199,8 @@ class SurfaceCapAntipadApp(tk.Tk):
             self._load_to_widgets(data)
             self._update_package_state()
             self.status.set(f"显示单位已切换为 {new_unit}，内部物理尺寸保持不变")
+            if hasattr(self, "_set_ready_status"):
+                self._set_ready_status()
         except Exception as exc:
             self.unit_var.set(self.display_unit)
             messagebox.showerror("单位切换失败", str(exc), parent=self)
@@ -1563,7 +1573,7 @@ class SurfaceCapAntipadApp(tk.Tk):
             else:
                 text += "请选择并通过检查的公共 Touchstone 文件。"
         else:
-            text = "HFSS 实现：仅创建分离焊盘，PAD间隙保持开路；不创建铜桥、RLC或Touchstone组件。"
+            text = "HFSS 实现：仅创建分离焊盘，焊盘间隙保持开路；不创建铜桥、RLC或Touchstone组件。"
         self.model_summary_var.set(text)
 
     def _update_capacitor_feedback(self, config: Mapping[str, Any], validation: Any, geometry: Any) -> None:
@@ -1633,7 +1643,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         lines = [f"成品孔径 = 钻孔 − 2×镀铜 = {format_length(finished, self.display_unit)} {self.display_unit}"]
         for via in getattr(geometry, "signal_vias", []):
             backdrill = "有" if getattr(via, "backdrilled", False) else "无"
-            lines.append(f"{via.name}（{via.signal}）：entry={via.entry_layer} exit={via.exit_layer}；"
+            lines.append(f"{via.name}（{via.signal}）：输入={via.entry_layer} 输出={via.exit_layer}；"
                          f"背钻={backdrill}；残桩={format_length(getattr(via, 'actual_residual_stub', 0.0), self.display_unit)} {self.display_unit}")
         if getattr(geometry, "return_vias", []):
             lines.append(f"回流地孔（Return VIA）数量：{len(geometry.return_vias)}")
@@ -1804,22 +1814,22 @@ class SurfaceCapAntipadApp(tk.Tk):
                          (center_x - entry_len, center_y - pair_pitch / 2.0 + entry_w / 2.0),
                          True, 0))
         dims.append(("via_transition.entry_trace.width",
-                     f"⑧ entry 宽 {fmt(entry_w)} {unit}",
+                     f"⑧ 输入宽 {fmt(entry_w)} {unit}",
                      (center_x - entry_len / 2.0, center_y + trace_y - entry_w / 2.0),
                      (center_x - entry_len / 2.0, center_y + trace_y + entry_w / 2.0),
                      False, 0))
         dims.append(("via_transition.entry_trace.length",
-                     f"⑦ entry 长 {fmt(entry_len)} {unit}",
+                     f"⑦ 输入长 {fmt(entry_len)} {unit}",
                      (center_x - entry_len, center_y + trace_y + entry_w / 2.0),
                      (center_x, center_y + trace_y + entry_w / 2.0),
                      False, 1))
         dims.append(("via_transition.exit_trace.width",
-                     f"⑩ exit 宽 {fmt(exit_w)} {unit}",
+                     f"⑩ 输出宽 {fmt(exit_w)} {unit}",
                      (center_x + exit_len / 2.0, center_y + trace_y - exit_w / 2.0),
                      (center_x + exit_len / 2.0, center_y + trace_y + exit_w / 2.0),
                      False, 0))
         dims.append(("via_transition.exit_trace.length",
-                     f"⑨ exit 长 {fmt(exit_len)} {unit}",
+                     f"⑨ 输出长 {fmt(exit_len)} {unit}",
                      (center_x, center_y + trace_y + exit_w / 2.0),
                      (center_x + exit_len, center_y + trace_y + exit_w / 2.0),
                      False, 1))
@@ -2024,7 +2034,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         row_minimum = max(small_line + 4, 16)
         total = sum(float(layer.thickness) for layer in layers) or 1.0
         marker_font = ("TkDefaultFont", 9, "bold")
-        marker_labels = ["③ entry", "④ exit", "⑤ 钻孔起", "⑥ 钻孔止"]
+        marker_labels = ["③ 输入", "④ 输出", "⑤ 钻孔起", "⑥ 钻孔止"]
         marker_width = max((text_size(canvas, label, marker_font)[0] for label in marker_labels), default=0)
         # Entry/exit and drill-span markers commonly name the same physical
         # layer (for example L1 is both entry and drill start).  Reserve two
@@ -2218,9 +2228,9 @@ class SurfaceCapAntipadApp(tk.Tk):
             canvas.create_line(marker_right + 2, mid, marker_right + 12, mid, fill=color,
                                width=2, arrow="last", tags=num_tags(path) + ("entry-exit-marker",))
 
-        mark_layer(getattr(via0, "entry_layer", ""), "③ entry", "#166534",
+        mark_layer(getattr(via0, "entry_layer", ""), "③ 输入", "#166534",
                    "via_transition.entry_layer", 0)
-        mark_layer(getattr(via0, "exit_layer", ""), "④ exit", "#b45309",
+        mark_layer(getattr(via0, "exit_layer", ""), "④ 输出", "#b45309",
                    "via_transition.exit_layer", 0)
         mark_layer(getattr(via0, "drill_start_layer", ""), "⑤ 钻孔起", "#0f766e",
                    "via_transition.drill_start_layer", 1)
@@ -2429,12 +2439,12 @@ class SurfaceCapAntipadApp(tk.Tk):
                     result.add_error(error)
             self.config = config
             self._set_log(format_validation_report(result))
-            self.notebook.select(self.tabs["Validate结果"])
+            self.notebook.select(self.tabs["检查结果"])
             if show_dialog:
-                (messagebox.showinfo if result.is_valid else messagebox.showerror)("Validate模型检查", "通过" if result.is_valid else "失败，请查看Validate结果", parent=self)
+                (messagebox.showinfo if result.is_valid else messagebox.showerror)("模型检查", "通过" if result.is_valid else "失败，请查看检查结果", parent=self)
             return result.is_valid
         except Exception as exc:
-            self._set_log("Validate模型检查异常：\n" + str(exc))
+            self._set_log("模型检查异常：\n" + str(exc))
             return False
 
     def validate_model(self, show_dialog: bool = True) -> bool:
@@ -2449,7 +2459,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         self.config = config
         self._set_log("V2独立HFSS脚本生成完成\n" + str(generated.script_path) + "\n" +
                       "\n".join("[警告] " + item for item in generated.warnings))
-        self.notebook.select(self.tabs["Validate结果"])
+        self.notebook.select(self.tabs["检查结果"])
         return generated
 
     def generate_script(self) -> None:
@@ -2467,7 +2477,7 @@ class SurfaceCapAntipadApp(tk.Tk):
             root = self.manager.output_directory(config) / (config["project"]["project_name"] + "_SWEEPS")
             generated = generate_sweep_cases(config, root)
             self._set_log(f"已生成 {len(generated.cases)} 个离散重算扫描案例。\n清单：{generated.manifest_path}")
-            self.notebook.select(self.tabs["Validate结果"])
+            self.notebook.select(self.tabs["检查结果"])
         except Exception as exc:
             messagebox.showerror("扫描生成失败", str(exc), parent=self)
     def generate_and_run(self) -> None:

@@ -227,7 +227,7 @@ def _apply_via_signal_drill(config: Dict[str, Any], value: Any) -> None:
 def _need_via_transition(config: Mapping[str, Any]) -> Optional[str]:
     scenario = config.get("scenario", {})
     return (None if str(scenario.get("type", "surface_capacitor")) == "via_transition"
-            else "依赖：请先把 scenario.type 切换为 via_transition。")
+            else "依赖：请先把仿真场景切换为差分 VIA 换层。")
 
 
 def _need_via_circle_antipad(config: Mapping[str, Any]) -> Optional[str]:
@@ -236,7 +236,7 @@ def _need_via_circle_antipad(config: Mapping[str, Any]) -> Optional[str]:
         return reason
     antipad = config.get("via_transition", {}).get("padstack", {}).get("antipad", {})
     if str(antipad.get("shape", "circle")) != "circle":
-        return "依赖：原生直径轴仅适用于 circle；非圆形 length/width 尚未变量化，已 fail closed。"
+        return "依赖：原生直径轴仅适用于圆形；非圆形长/宽尚未变量化，已按失败关闭处理。"
     return None
 
 

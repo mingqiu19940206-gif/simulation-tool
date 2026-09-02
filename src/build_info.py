@@ -46,3 +46,31 @@ def build_identity_line() -> str:
         "source_hash={source_hash} | sweep_backend={sweep_backend_version} | "
         "config_schema={config_schema_version}"
     ).format(**info)
+
+
+def product_title() -> str:
+    """Window title: product name and version only."""
+
+    info = get_build_info()
+    return f"PCIe AC耦合电容区域无源优化工具 V{info['software_version']}"
+
+
+def ready_status_line(display_unit: str) -> str:
+    """Status-bar identity: ready state, version and the live display unit."""
+
+    info = get_build_info()
+    return f"就绪 · V{info['software_version']} · 显示单位 {display_unit}"
+
+
+def about_message() -> str:
+    """Help → About body, including hash / backend / schema."""
+
+    info = get_build_info()
+    return (
+        "PCIe AC耦合电容区域无源优化工具\n"
+        f"版本 {info['software_version']}\n\n"
+        f"构建时间：{info['build_time_utc']}\n"
+        f"源码哈希：{info['source_hash']}\n"
+        f"扫描后端：{info['sweep_backend_version']}\n"
+        f"配置 schema：{info['config_schema_version']}"
+    )

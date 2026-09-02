@@ -46,7 +46,7 @@ def validate_via_transition(
                            path, "选择叠层中存在的 signal 层。"))
         elif types.get(value) != "signal":
             issues.append(("VIA-TRN-002", "error", f"{path} {value!r} 不是 signal 层。",
-                           path, "entry/exit 必须是 signal 层。"))
+                           path, "输入/输出层必须是信号层。"))
     if entry == exit_layer and entry:
         issues.append(("VIA-TRN-003", "error", "entry_layer 与 exit_layer 不得相同。",
                        "via_transition.exit_layer", "为 exit_layer 选择不同的 signal 层。"))

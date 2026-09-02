@@ -11,8 +11,8 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from config_manager import format_length, format_number
 from gui_layout import (
-    CanvasLabelPlacer, canvas_viewport, debounce_after, ellipsize,
-    font_linespace, resolve_font,
+    CanvasLabelPlacer, attach_mousewheel, canvas_viewport, debounce_after, ellipsize,
+    font_linespace, mousewheel_steps, resolve_font,
 )
 
 ENUM_LABELS: Dict[str, Dict[str, str]] = {
@@ -114,32 +114,32 @@ def build_dimension_specs(geometry: Any) -> List[DimensionSpec]:
         pad_out_center.x - pad_in_center.x,
     ))
     result = [
-        DimensionSpec("capacitor.body_length", "body_length", "body", _distance(*body_length),
+        DimensionSpec("capacitor.body_length", "本体长度", "body", _distance(*body_length),
                       *body_length, -14, ("body",)),
-        DimensionSpec("capacitor.body_width", "body_width", "body", _distance(*body_width),
+        DimensionSpec("capacitor.body_width", "本体宽度", "body", _distance(*body_width),
                       *body_width, -14, ("body",)),
-        DimensionSpec("capacitor.pad_length", "pad_length", "pad", _distance(*pad_length),
+        DimensionSpec("capacitor.pad_length", "焊盘长度", "pad", _distance(*pad_length),
                       *pad_length, 13, ("pad",)),
-        DimensionSpec("capacitor.pad_width", "pad_width", "pad", _distance(*pad_width),
+        DimensionSpec("capacitor.pad_width", "焊盘宽度", "pad", _distance(*pad_width),
                       *pad_width, 13, ("pad",)),
-        DimensionSpec("capacitor.pad_gap", "pad_gap", "pad", _distance(*gap),
+        DimensionSpec("capacitor.pad_gap", "焊盘间隙", "pad", _distance(*gap),
                       *gap, -20, ("pad", "bridge")),
-        DimensionSpec("capacitor.pad_pitch", "pad_pitch", "pad", _distance(*pitch),
+        DimensionSpec("capacitor.pad_pitch", "焊盘中心距", "pad", _distance(*pitch),
                       *pitch, 28, ("pad",)),
-        DimensionSpec("capacitor.cap_pitch", "cap_pitch", "layout", _distance(*caps),
+        DimensionSpec("capacitor.cap_pitch", "P/N 中心距", "layout", _distance(*caps),
                       *caps, -38, ("pad", "body", "bridge")),
-        DimensionSpec("capacitor.cap_center_x", "cap_center_x（有效）", "layout", center_x[1][0],
+        DimensionSpec("capacitor.cap_center_x", "电容中心 X（有效）", "layout", center_x[1][0],
                       *center_x, 34, ("pad", "body", "bridge")),
-        DimensionSpec("capacitor.pad_rotation", "pad_rotation", "pad", rotation,
+        DimensionSpec("capacitor.pad_rotation", "焊盘旋转", "pad", rotation,
                       _point_tuple(cap_p), _point_tuple(pad_out_center), -26, ("pad", "body", "bridge"), True),
     ]
     if bridge is not None:
         bridge_length = (_point_tuple(bridge.points[0]), _point_tuple(bridge.points[1]))
         bridge_width = (_point_tuple(bridge.points[1]), _point_tuple(bridge.points[2]))
         result[-1:-1] = [
-            DimensionSpec("capacitor.bridge_width", "bridge_width", "bridge", _distance(*bridge_width),
+            DimensionSpec("capacitor.bridge_width", "桥接宽度", "bridge", _distance(*bridge_width),
                           *bridge_width, -12, ("bridge",)),
-            DimensionSpec("capacitor.bridge_length", "bridge_length", "bridge", _distance(*bridge_length),
+            DimensionSpec("capacitor.bridge_length", "桥接长度", "bridge", _distance(*bridge_length),
                           *bridge_length, 12, ("bridge",)),
         ]
     return result
@@ -262,6 +262,7 @@ class ScrollableFrame(ttk.Frame):
         self.canvas.bind("<Configure>", self._schedule_layout)
         self.canvas.bind("<MouseWheel>", self._wheel)
         self.content.bind("<MouseWheel>", self._wheel)
+        attach_mousewheel(self, self.canvas, self.content)
 
     def _schedule_layout(self, _event: Optional[tk.Event] = None) -> None:
         """Coalesce content/viewport changes into one stable geometry update."""
@@ -293,8 +294,11 @@ class ScrollableFrame(ttk.Frame):
         """Request a layout pass after font or child-request changes."""
         self._schedule_layout()
 
-    def _wheel(self, event: tk.Event) -> None:
-        self.canvas.yview_scroll(int(-event.delta / 120), "units")
+    def _wheel(self, event: tk.Event) -> str:
+        steps = mousewheel_steps(event)
+        if steps:
+            self.canvas.yview_scroll(steps, "units")
+        return "break"
 
     def scroll_to_widget(self, widget: tk.Widget) -> None:
         """Reveal a descendant parameter widget without assuming fixed row sizes."""

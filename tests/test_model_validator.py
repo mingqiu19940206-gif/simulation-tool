@@ -141,13 +141,13 @@ class ValidateGuiTests(unittest.TestCase):
             self.app.destroy()
 
     def test_validate_results_page_replaces_legacy_log_and_runs_quick_check(self) -> None:
-        self.assertIn("Validate结果", self.app.tabs)
+        self.assertIn("检查结果", self.app.tabs)
         self.assertNotIn("日志与检查", self.app.tabs)
         self.assertTrue(self.app.validate_model(show_dialog=False))
         report = self.app.validate_workbench.report
         self.assertIsNotNone(report)
         self.assertEqual(report.mode, "本地快速预检")
-        self.assertEqual(self.app.notebook.select(), str(self.app.tabs["Validate结果"]))
+        self.assertEqual(self.app.notebook.select(), str(self.app.tabs["检查结果"]))
 
     def test_parameter_change_marks_previous_result_stale(self) -> None:
         self.assertTrue(self.app.validate_model(show_dialog=False))

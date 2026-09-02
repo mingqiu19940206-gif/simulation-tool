@@ -216,8 +216,8 @@ class ViaNativeOptimetricsTests(unittest.TestCase):
             "enabled": True, "start": 0.56, "stop": 0.64, "step": 0.04,
         }
         plan = inspect_sweep_plan(cfg)
-        self.assertTrue(any("scenario.type" in message for level, message in plan.issues
-                            if level == "error"), plan.issues)
+        self.assertTrue(any("仿真场景" in message and "差分 VIA 换层" in message
+                            for level, message in plan.issues if level == "error"), plan.issues)
 
 
 if __name__ == "__main__":

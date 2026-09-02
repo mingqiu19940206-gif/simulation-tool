@@ -12,6 +12,7 @@ from typing import Any, List, Mapping, Sequence, Tuple
 import antipad_editor_core as _core
 from antipad_editor_core import *  # noqa: F401,F403 - 保持既有公开接口
 from geometry_v1 import polygons_overlap
+from gui_layout import CanvasLabelPlacer, canvas_viewport, ellipsize, font_linespace, raise_canvas_labels
 
 
 PointTuple = Tuple[float, float]
@@ -259,9 +260,24 @@ class AntipadPreview(_core.AntipadPreview):
                 x1, y1 = xy(*first)
                 x2, y2 = xy(*second)
                 canvas.create_line(x1, y1, x2, y2, arrow="both", fill="#ea580c", width=2)
-                canvas.create_text((x1 + x2) / 2.0, min(y1, y2) - 14,
-                                   text=f"E={format_length(expansion, self.unit)} {self.unit}", fill="#c2410c",
-                                   tags=("dimension-label",))
+                placer = CanvasLabelPlacer(canvas, width, height)
+                if self.show_signal.get():
+                    for shape in self.geometry.pad_shapes.values():
+                        xs = [xy(point.x, point.y)[0] for point in shape.points]
+                        ys = [xy(point.x, point.y)[1] for point in shape.points]
+                        if xs and ys:
+                            placer.reserve((min(xs), min(ys), max(xs), max(ys)))
+                placer.place(
+                    f"E={format_length(expansion, self.unit)} {self.unit}",
+                    (((x1 + x2) / 2.0, min(y1, y2) - 16),
+                     ((x1 + x2) / 2.0, min(y1, y2) - 32),
+                     (max(x1, x2) + 24, min(y1, y2) - 16),
+                     (min(x1, x2) - 24, min(y1, y2) - 16)),
+                    fill="#c2410c", background="#fff7ed", outline="#fdba74",
+                    tags=("dimension-label",),
+                    leader=((x1 + x2) / 2.0, (y1 + y2) / 2.0),
+                    leader_color="#ea580c",
+                )
         if tools:
             connected = connected_window_count(tools)
             detail = f"工具体 {len(tools)} · 实际连通开窗 {connected}"
@@ -275,6 +291,7 @@ class AntipadPreview(_core.AntipadPreview):
             canvas.create_text(width - 12, height - 10, anchor="se", text=detail,
                                fill="#9a3412" if connected < len(tools) else "#334155",
                                font=detail_font, tags=("hud-label",))
+        raise_canvas_labels(canvas)
 
 
 _original_analyze_antipad = _core.analyze_antipad

@@ -97,6 +97,15 @@ def _length_text(config: Mapping[str, Any], mm_value: float) -> str:
     return f"{format_length(float(mm_value), unit)} {unit}"
 
 
+def _short_hash(value: object) -> str:
+    """Keep hashes readable when the summary pane wraps to column width."""
+
+    text = str(value or "未生成")
+    if text in {"未生成", "—", ""}:
+        return text
+    return text if len(text) <= 12 else text[:12] + "…"
+
+
 class VTKTkRenderFrame(tk.Frame):
     """Embed VTK's native Win32 OpenGL child window in a Tk frame.
 
@@ -282,8 +291,8 @@ def _apply_validation_states(objects: Sequence[SceneObject], validation: Optiona
             if obj.key == "open_boundary" and "airbox" in keys:
                 matches.append(issue)
         if stale:
-            obj.status = "Validate结果已过期"
-            obj.validate_result = "已过期，需重新运行 Validate"
+            obj.status = "检查结果已过期"
+            obj.validate_result = "已过期，需重新运行模型检查"
             continue
         levels = {str(getattr(issue, "level", "")) for issue in matches}
         hfss_matches = [issue for issue in matches if getattr(issue, "source", "local") == "hfss"]
@@ -655,7 +664,7 @@ def build_model_scene(config: Mapping[str, Any], geometry: Any,
                 issues.append(SceneIssue(
                     level, message, keys,
                     str(getattr(report_item, "parameter_path", "")),
-                    str(getattr(report_item, "suggestion", "")) or "运行Validate模型检查并修正对应输入。",
+                    str(getattr(report_item, "suggestion", "")) or "运行模型检查并修正对应输入。",
                 ))
         else:
             for level, messages in (("error", getattr(validation, "errors", ())),
@@ -663,7 +672,7 @@ def build_model_scene(config: Mapping[str, Any], geometry: Any,
                 for message in messages:
                     if message not in known:
                         issues.append(SceneIssue(level, message, _object_keys_for_message(message, objects),
-                                                 suggestion="运行Validate模型检查并修正对应输入。"))
+                                                 suggestion="运行模型检查并修正对应输入。"))
     if config["simulation"].get("enabled") and config["simulation"].get("create_differential_ports") and len(geometry.ports) != 4:
         issues.append(SceneIssue("error", "端口位置数据不完整，期望四个终端端面。",
                                  tuple(item.key for item in objects if item.category == "Port"),
@@ -944,7 +953,7 @@ def build_via_transition_scene(config: Mapping[str, Any], geometry: Any,
             issues.append(SceneIssue(
                 level, message, keys,
                 str(getattr(report_item, "parameter_path", "")),
-                str(getattr(report_item, "suggestion", "")) or "运行Validate模型检查并修正对应输入。",
+                    str(getattr(report_item, "suggestion", "")) or "运行模型检查并修正对应输入。",
             ))
 
     b = geometry.plane_bounds
@@ -1406,7 +1415,7 @@ class ModelPreviewWorkbench(ttk.Frame):
         ttk.Button(summary_actions[0], text="空气盒", command=lambda: self.navigate("simulation.airbox_margin")).pack(side="left", padx=2)
         ttk.Button(summary_actions[0], text="Setup", command=lambda: self.navigate("simulation.setup_name")).pack(side="left", padx=2)
         ttk.Button(summary_actions[1], text="Sweep", command=lambda: self.navigate("simulation.sweep_name")).pack(side="left")
-        ttk.Button(summary_actions[1], text="运行 Validate", command=self._run_validate).pack(side="left", padx=2)
+        ttk.Button(summary_actions[1], text="运行模型检查", command=self._run_validate).pack(side="left", padx=2)
         ttk.Button(summary_box, text="前往仿真与扫描", command=lambda: self.navigate("simulation.enabled")).pack(fill="x", pady=(4, 0))
 
         detail_box = ttk.LabelFrame(right, text="选中对象", padding=6)
@@ -1428,7 +1437,7 @@ class ModelPreviewWorkbench(ttk.Frame):
         ttk.Button(port_actions[0], text="正视 Port", command=self.port_front_view).pack(side="left")
         ttk.Button(port_actions[0], text="聚焦 Port", command=self.focus_port).pack(side="left", padx=4)
         ttk.Button(port_actions[1], text="仅看端口关系", command=self.show_port_relationship).pack(side="left")
-        ttk.Button(port_actions[1], text="查看 Validate", command=self._show_validate_results).pack(side="left", padx=4)
+        ttk.Button(port_actions[1], text="查看检查结果", command=self._show_validate_results).pack(side="left", padx=4)
 
         measure_box = ttk.LabelFrame(right, text="两点测距", padding=6)
         measure_box.pack(fill="x", pady=5)
@@ -1450,8 +1459,8 @@ class ModelPreviewWorkbench(ttk.Frame):
         legend.pack(fill="x")
         legend_text = ("P信号—红  N信号—蓝  铜/焊盘—铜金\n"
                        "介质—浅蓝透明  参考平面—灰绿透明\n"
-                       "反焊盘/避空—橙色轮廓  VIA桶—铜色\n"
-                       "Port—紫  空气盒—浅蓝线框  开放边界—青\n"
+                       "反焊盘/避空—橙色轮廓  VIA筒壁—铜色\n"
+                       "端口—紫  空气盒—浅蓝线框  开放边界—青\n"
                        "◇=本地预估（不代表HFSS正确）  ●=HFSS实际验证  橙=警告  红=失败")
         ttk.Label(legend, text=legend_text, justify="left", wraplength=320).pack(fill="x")
 
@@ -2442,27 +2451,27 @@ class ModelPreviewWorkbench(ttk.Frame):
                         if obj.category == "Port" and obj.status != "未启用"]
         port_verification = ("HFSS已创建并验证" if active_ports and
                              all(obj.status == "HFSS已验证" for obj in active_ports)
-                             else "本地PortGeometry一致，但尚未经过HFSS实际验证")
+                             else "本地端口几何一致，但尚未经过 HFSS 实际验证")
         outputs = sim.get("report_outputs", {})
         selected_outputs = ", ".join(name for name, value in outputs.items() if value) or "无"
         source = "HFSS实际工程" if any(obj.data_source == "HFSS实际工程" for obj in self.objects.values()) else "本地统一几何计算"
         lines = [
             f"仿真：{'启用' if enabled else '关闭'}",
-            f"generation_id：{str((self.current_snapshot or {}).get('generation_id', '未生成'))}",
-            f"config_hash：{str((self.current_snapshot or {}).get('config_hash', '未生成'))}",
-            f"geometry_hash：{str((self.current_snapshot or {}).get('geometry_hash', '未生成'))}",
-            f"Solution Type：{config.get('project', {}).get('solution_type', '—')}",
-            f"Port：{port_state}", f"Port验证：{port_verification}", f"空气盒：{air_state}",
+            f"生成编号：{str((self.current_snapshot or {}).get('generation_id', '未生成'))}",
+            f"配置哈希：{_short_hash((self.current_snapshot or {}).get('config_hash', '未生成'))}",
+            f"几何哈希：{_short_hash((self.current_snapshot or {}).get('geometry_hash', '未生成'))}",
+            f"解类型：{config.get('project', {}).get('solution_type', '—')}",
+            f"端口：{port_state}", f"端口验证：{port_verification}", f"空气盒：{air_state}",
             f"空气盒边距：{self._shown_length(float(sim.get('airbox_margin', 0.0)))}",
             f"开放边界：{sim.get('open_boundary', '—') if enabled and sim.get('create_airbox') else '依赖空气盒'}",
             f"Setup：{(str(sim.get('setup_name', '—')) + ' · ' + format_number(float(sim.get('adaptive_frequency_ghz', 0.0)), 6) + ' GHz') if enabled else '未创建'}",
             f"最大迭代 / Delta S：{sim.get('max_passes', '—')} / {sim.get('max_delta_s', '—')}",
-            f"Sweep：{(str(sim.get('sweep_name', '—')) + ' · ' + str(sim.get('sweep_type', '—'))) if enabled else '未创建'}",
+            f"扫描：{(str(sim.get('sweep_name', '—')) + ' · ' + str(sim.get('sweep_type', '—'))) if enabled else '未创建'}",
             f"频率：{format_number(float(sim.get('start_frequency_ghz', 0.0)), 6)} … "
             f"{format_number(float(sim.get('stop_frequency_ghz', 0.0)), 6)} GHz · 步长 "
             f"{format_number(float(sim.get('step_frequency_ghz', 0.0)), 6)} GHz",
             f"报告输出：{selected_outputs if sim.get('generate_reports') else '关闭'}",
-            f"Validate：{self._validation_summary()}", f"当前数据来源：{source}",
+            f"检查：{self._validation_summary()}", f"当前数据来源：{source}",
         ]
         self.summary_var.set("\n".join(lines))
 
@@ -2490,7 +2499,7 @@ class ModelPreviewWorkbench(ttk.Frame):
                 prefix = "🔒" if item.key in self.locked else ("☑" if self.visibility.get(item.key, item.default_visible) else "☐")
                 suffix = f"  [{item.layer}]" if item.layer else ""
                 state_icon = {"HFSS已验证": "●", "有警告": "▲", "创建失败": "✕",
-                              "Validate结果已过期": "◷"}.get(item.status, "◇")
+                              "检查结果已过期": "◷"}.get(item.status, "◇")
                 self.tree.insert(parent, "end", iid=f"obj:{item.key}",
                                  text=f"{prefix} {state_icon} {item.name}{suffix} · {item.status}")
             if not children:
@@ -2618,7 +2627,7 @@ class ModelPreviewWorkbench(ttk.Frame):
         menu.add_command(label="单独显示", command=self.isolate_selected)
         menu.add_command(label="聚焦", command=self.focus_selected)
         menu.add_separator(); menu.add_command(label="前往参数", command=self.goto_parameter)
-        menu.add_command(label="查看 Validate 结果", command=lambda: self.navigate(""))
+        menu.add_command(label="查看检查结果", command=lambda: self.navigate(""))
         menu.tk_popup(event.x_root, event.y_root)
 
     def isolate_selected(self) -> None:
@@ -3112,8 +3121,8 @@ class ModelPreviewWorkbench(ttk.Frame):
         self.status_var.set(f"仅显示 {port.name}、信号导体、{port.details.get('参考层', 'Reference')} 与必要介质")
 
     def _show_validate_results(self) -> None:
-        if hasattr(self.app, "tabs") and hasattr(self.app, "notebook") and "Validate结果" in self.app.tabs:
-            self.app.notebook.select(self.app.tabs["Validate结果"])
+        if hasattr(self.app, "tabs") and hasattr(self.app, "notebook") and "检查结果" in self.app.tabs:
+            self.app.notebook.select(self.app.tabs["检查结果"])
         else:
             self._run_validate()
 
@@ -3262,7 +3271,7 @@ class ModelPreviewWorkbench(ttk.Frame):
                 self.opacity_overrides[key] = item.opacity if key in relevant else min(item.opacity, .08)
             self._apply_appearance()
         self.set_view(issue.view)
-        self.detail_var.set(f"{issue.message}\n\n建议：{issue.suggestion}\n参数：{issue.path or '运行Validate模型检查'}")
+        self.detail_var.set(f"{issue.message}\n\n建议：{issue.suggestion}\n参数：{issue.path or '运行模型检查'}")
 
     def _goto_issue(self) -> None:
         selected = self.issue_tree.selection()

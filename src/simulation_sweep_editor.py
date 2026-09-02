@@ -13,7 +13,7 @@ from tkinter import messagebox, ttk
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from config_manager import DEFAULT_DISPLAY_UNIT, convert_length, format_length, format_number
-from gui_layout import canvas_viewport, font_linespace
+from gui_layout import WrappingButtonBar, attach_mousewheel, canvas_viewport, font_linespace
 from hfss_script_generator import ScriptGenerationError
 from simulation_sweep_semantics import (
     FREQUENCY_PRESETS,
@@ -55,15 +55,14 @@ class ScrollColumn(ttk.Frame):
         super().__init__(master)
         self.canvas = tk.Canvas(self, highlightthickness=0, background="#f7f8fa")
         bar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.content = ttk.Frame(self.canvas, padding=(3, 3))
+        self.content = ttk.Frame(self.canvas, padding=(8, 10))
         self.window = self.canvas.create_window((0, 0), window=self.content, anchor="nw")
         self.canvas.configure(yscrollcommand=bar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         bar.pack(side="right", fill="y")
         self.content.bind("<Configure>", lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(self.window, width=e.width))
-        for widget in (self.canvas, self.content):
-            widget.bind("<MouseWheel>", lambda e: self.canvas.yview_scroll(int(-e.delta / 120), "units"))
+        attach_mousewheel(self, self.canvas, self.content)
 
 
 class FrequencyAxis(tk.Canvas):
@@ -149,16 +148,19 @@ class AirboxDiagram(tk.Canvas):
         width, height = viewport
         outer = min(35, max(8, width*.09))
         inner = min(105, max(outer+18, width*.27))
-        top, bottom = 18, max(35, height-17)
+        top, bottom = 28, max(35, height-17)
         mid_top, mid_bottom = top + (bottom-top)*.38, top + (bottom-top)*.66
         self.create_rectangle(outer, top, width - outer, bottom, fill="#e0f2fe", outline="#0284c7", dash=(5, 3))
         self.create_rectangle(inner, mid_top, width - inner, mid_bottom, fill="#d1fae5", outline="#047857")
         self.create_text(width / 2, (mid_top+mid_bottom)/2, text="PCB / 铜结构", font="ViaCanvasFont",
                          tags=("object-label",))
         self.create_line(outer+5, top+16, inner-3, mid_top, arrow="both", fill="#7c3aed")
-        self.create_text((outer+inner)/2, top+font_linespace(self, "ViaSmallFont")/2,
-                         text=f"margin {format_length(self._margin, self._unit)} {self._unit}",
-                         fill="#7c3aed", font="ViaSmallFont", tags=("dimension-label",))
+        label_y = max(10, top - 2)
+        self.create_text(
+            width / 2, label_y, anchor="s",
+            text=f"空气盒边距 {format_length(self._margin, self._unit)} {self._unit}",
+            fill="#7c3aed", font="ViaSmallFont", tags=("dimension-label",),
+        )
 
 
 class SimulationSweepWorkbench(ttk.Frame):
@@ -187,7 +189,7 @@ class SimulationSweepWorkbench(ttk.Frame):
     def _build(self) -> None:
         flow = ttk.Frame(self, padding=(4, 2))
         flow.pack(fill="x")
-        for index, text in enumerate(("1  配置仿真", "2  设计参数扫描", "3  创建参数扫描与执行")):
+        for index, text in enumerate(("1  配置仿真", "2  设计参数扫描", "3  创建参数扫描、运行与汇总")):
             ttk.Label(flow, text=text, font="ViaCardTitleFont", foreground="#1d4ed8").grid(
                 row=0, column=index * 2, sticky="ew", padx=8)
             flow.columnconfigure(index * 2, weight=1)
@@ -200,7 +202,7 @@ class SimulationSweepWorkbench(ttk.Frame):
         self.execution_page = ttk.Frame(self.steps)
         self.steps.add(self.plan_page, text="1 仿真方案与频率扫描")
         self.steps.add(self.design_page, text="2 设计参数扫描")
-        self.steps.add(self.execution_page, text="3 创建参数扫描、运行与汇总")
+        self.steps.add(self.execution_page, text="3  创建参数扫描、运行与汇总")
         self._build_simulation_plan()
         self._build_design_sweep()
         self._build_execution()
@@ -235,7 +237,7 @@ class SimulationSweepWorkbench(ttk.Frame):
         self.airbox_margin = self.app._add(air, 1, "空气盒边距", "simulation.airbox_margin", length=True)
         self.open_boundary = self.app._add(air, 2, "开放边界", "simulation.open_boundary",
                                            values=("Radiation", "PML"), display_values=BOUNDARY_LABELS)
-        self.airbox_hint = ttk.Label(air, text="空气盒在模型包围盒六个方向各扩展 margin；开放边界施加在空气区域外表面。",
+        self.airbox_hint = ttk.Label(air, text="空气盒在模型包围盒六个方向各扩展边距；开放边界施加在空气区域外表面。",
                                      foreground="#475569", wraplength=680)
         self.airbox_hint.grid(row=3, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 1))
         self.airbox_diagram = AirboxDiagram(air)
@@ -398,14 +400,15 @@ class SimulationSweepWorkbench(ttk.Frame):
         root.pack(fill="both", expand=True)
         actions = ttk.LabelFrame(root, text="完整工作流", padding=(8, 6))
         actions.pack(fill="x")
-        for text, command in (
-            ("全量预检", self.preflight_cases), ("预览Variations", self.preview_cases),
+        bar = WrappingButtonBar(actions, (
+            ("全量预检", self.preflight_cases), ("预览变量", self.preview_cases),
             ("创建参数扫描", self.generate_cases), ("运行扫描", self.run_cases),
             ("暂停运行", self.toggle_pause), ("失败重试", self.retry_failed),
             ("汇总结果", self.summarize_results),
-            ("回填所选Variation", self.apply_selected_variation),
-        ):
-            ttk.Button(actions, text=text, command=command).pack(side="left", padx=3)
+            ("回填所选变量", self.apply_selected_variation),
+        ))
+        bar.pack(side="left", fill="x", expand=True)
+        self.execution_buttons = list(bar.buttons)
         self.execution_status_var = tk.StringVar(value="尚未创建参数扫描。")
         ttk.Label(actions, textvariable=self.execution_status_var, foreground="#0f766e").pack(side="right", padx=6)
         self.output_var = tk.StringVar(value="输出目录将在预检后显示。")
@@ -810,7 +813,14 @@ class SimulationSweepWorkbench(ttk.Frame):
             return
         manifest = json.loads(self._generated.manifest_path.read_text(encoding="utf-8"))
         if manifest.get("execution_ready") is False:
-            messagebox.showwarning("Topology sweep not executable", manifest.get("execution_blocked_reason", "Topology variants require same-project multi-Design generation."), parent=self.app)
+            messagebox.showwarning(
+                "拓扑扫描无法执行",
+                manifest.get(
+                    "execution_blocked_reason",
+                    "拓扑变量需要在同一工程中生成多个 Design，当前生成器尚未实现。",
+                ),
+                parent=self.app,
+            )
             return
         self._paused = False
         native = manifest.get("backend") == "native_optimetrics"
@@ -907,7 +917,7 @@ class SimulationSweepWorkbench(ttk.Frame):
         variation = getattr(self, "_variation_by_iid", {}).get(iid)
         if not variation:
             messagebox.showinfo(
-                "回填Variation", "请先预览 Variations，并在表格中选择一行。",
+                "回填变量", "请先预览变量，并在表格中选择一行。",
                 parent=self.app,
             )
             return
@@ -917,7 +927,7 @@ class SimulationSweepWorkbench(ttk.Frame):
                 apply_sweep_value(updated, path, value)
             self.app._load_to_widgets(updated)
             self.execution_status_var.set(
-                "已回填所选 Variation；这只应用真实参数，不会伪造 S 参数、TDR 或评分。"
+                "已回填所选变量；这只应用真实参数，不会伪造 S 参数、TDR 或评分。"
             )
         except Exception as exc:
-            messagebox.showerror("回填Variation失败", str(exc), parent=self.app)
+            messagebox.showerror("回填变量失败", str(exc), parent=self.app)
