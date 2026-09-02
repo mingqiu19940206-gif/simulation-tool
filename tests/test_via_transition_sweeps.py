@@ -103,6 +103,16 @@ class ViaTransitionSweepsTests(unittest.TestCase):
         self.assertAlmostEqual(crossings["L11"], 0.107442, places=9)
         self.assertNotIn("L12", crossings)
 
+        swapped = copy.deepcopy(self.config)
+        swapped["via_transition"].update(
+            {"entry_layer": "L12", "exit_layer": "L14"})
+        swapped_crossings = {
+            layer: residual
+            for residual, layer in _residual_stub_crossings(swapped)
+        }
+        self.assertEqual(swapped_crossings, crossings)
+        self.assertAlmostEqual(swapped_crossings["L11"], 0.107442, places=9)
+
         self.config["sweeps"]["via_transition.backdrill.residual_stub"] = {
             "enabled": True, "start": 0.1, "stop": 1.4, "step": 1.3,
         }

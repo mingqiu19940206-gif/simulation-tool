@@ -309,6 +309,8 @@ class ViaTransitionBackdrillTests(unittest.TestCase):
         issues = validate_via_transition(cfg, geometry)
         self.assertFalse(any(item[0] == "VIA-TRN-046" for item in issues), issues)
         self.assertFalse([item for item in issues if item[1] == "error"], issues)
+        l1 = self._layer(geometry, "L1")
+        l10 = self._layer(geometry, "L10")
         for via in geometry.signal_vias:
             self.assertTrue(via.backdrilled)
             self.assertEqual(via.backdrill_from_side, "bottom")
@@ -318,6 +320,19 @@ class ViaTransitionBackdrillTests(unittest.TestCase):
             self.assertTrue(via.bottom_stub_present)
             self.assertEqual(via.per_layer_states["L1"], "exit_connected")
             self.assertEqual(via.per_layer_states["L10"], "entry_connected")
+            # Bottom analogue of test_11: inner cavity / barrel end is L10.z_bottom − residual.
+            expected_endpoint = l10.z_bottom - via.target_residual_stub
+            self.assertAlmostEqual(via.backdrill_z_top, expected_endpoint, places=12)
+            self.assertAlmostEqual(via.effective_barrel_z_bottom, expected_endpoint, places=12)
+            self.assertAlmostEqual(via.actual_residual_stub,
+                                   via.target_residual_stub, places=12)
+            residual = via.target_residual_stub
+            for wrong in (l1.z_bottom - residual, l1.z_bottom + residual,
+                          l1.z_top - residual, l1.z_top + residual):
+                self.assertNotAlmostEqual(via.backdrill_z_top, wrong, places=6)
+                self.assertNotAlmostEqual(via.effective_barrel_z_bottom, wrong, places=6)
+            self.assertGreaterEqual(via.effective_barrel_z_top, l1.z_top - 1e-12)
+            self.assertLessEqual(via.effective_barrel_z_bottom, l10.z_bottom + 1e-12)
 
     def test_19_l14_to_l3_uses_stackup_index_not_layer_name_order(self) -> None:
         # 层名排序会把 L14 放在 L3 之前（"L14" < "L3"），但叠层 Z/index 中 L3 在上、L14 在下。
@@ -380,6 +395,8 @@ class ViaTransitionBackdrillTests(unittest.TestCase):
             any("不存在底部残桩" in error for error in bottom_geometry.errors),
             bottom_geometry.errors)
         self.assertTrue(all(not via.backdrilled for via in bottom_geometry.signal_vias))
+        self.assertTrue(all(via.backdrill_z_bottom == 0.0 and via.backdrill_z_top == 0.0
+                            for via in bottom_geometry.signal_vias))
         bottom_issues = validate_via_transition(bottom_cfg, bottom_geometry)
         self.assertTrue(any(item[0] == "VIA-TRN-048" for item in bottom_issues), bottom_issues)
         self.assertFalse(any(item[0] == "VIA-TRN-046" for item in bottom_issues), bottom_issues)
