@@ -999,6 +999,34 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                 pass
         # Plane/model-boundary margins are consumed by both geometry engines.
         self._set_group_state(("plane.",), enabled=True)
+        self._update_generate_and_run_button()
+
+    def _apply_main_toolbar_layout(self) -> None:
+        super()._apply_main_toolbar_layout()
+        self._update_generate_and_run_button()
+
+    def _update_generate_and_run_button(self) -> None:
+        """On VIA, the run button must not look like an HFSS solve action."""
+        buttons = getattr(self, "main_toolbar_buttons", ())
+        is_via = self._scenario_is_via()
+        compact = False
+        try:
+            compact = int(self.winfo_width() or 0) < 1320
+        except tk.TclError:
+            compact = False
+        for button, full_text, compact_text in buttons:
+            if full_text != "生成并运行":
+                continue
+            if is_via:
+                button.configure(
+                    text="离线脚本" if compact else "导出离线脚本",
+                    state="disabled",
+                )
+            else:
+                button.configure(
+                    text=compact_text if compact else full_text,
+                    state="normal",
+                )
 
     def _refresh_via_layer_selectors(self, config: Mapping[str, Any]) -> None:
         super()._refresh_via_layer_selectors(config)
@@ -1088,8 +1116,8 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             entry_c = self._via_side_center_mm("entry_trace")
             exit_c = self._via_side_center_mm("exit_trace")
             fanout_active = (
-                not math.isclose(signal_pitch, entry_c, abs_tol=1e-9)
-                or not math.isclose(signal_pitch, exit_c, abs_tol=1e-9)
+                not self._via_fanout_lengths_equal(signal_pitch, entry_c)
+                or not self._via_fanout_lengths_equal(signal_pitch, exit_c)
             )
         except (KeyError, TypeError, ValueError, tk.TclError):
             fanout_active = True

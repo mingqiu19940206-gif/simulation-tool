@@ -1445,6 +1445,22 @@ class SurfaceCapAntipadApp(tk.Tk):
             return width + self._length_var_mm(gap_path)
         return self._length_var_mm("via_transition.pair_pitch")
 
+    def _via_fanout_lengths_equal(self, left_mm: float, right_mm: float) -> bool:
+        """UI-only: treat hole pitch and trace center as equal at display rounding.
+
+        0.8 mm shows as 31.5 mil; reading that widget back is 0.8001 mm.
+        Half of the 2-decimal quantum (0.005 display-unit) collapses default
+        fanout without changing stored mm geometry.
+        """
+        if math.isclose(left_mm, right_mm, abs_tol=1e-12):
+            return True
+        unit = str(getattr(self, "display_unit", "mm") or "mm")
+        try:
+            half_quantum_mm = convert_length(0.005, unit, "mm")
+        except Exception:
+            half_quantum_mm = 0.005 * MM_PER_MIL
+        return math.isclose(left_mm, right_mm, abs_tol=max(half_quantum_mm, 1e-12))
+
     def _sync_via_derived_centers(self) -> None:
         for side, path in (
             ("entry_trace", "via_transition.entry_trace.center_to_center"),
@@ -1570,8 +1586,8 @@ class SurfaceCapAntipadApp(tk.Tk):
             entry_c = self._via_side_center_mm("entry_trace")
             exit_c = self._via_side_center_mm("exit_trace")
             fanout_active = (
-                not math.isclose(svp, entry_c, abs_tol=1e-12)
-                or not math.isclose(svp, exit_c, abs_tol=1e-12)
+                not self._via_fanout_lengths_equal(svp, entry_c)
+                or not self._via_fanout_lengths_equal(svp, exit_c)
             )
         except (TypeError, ValueError, tk.TclError, KeyError):
             fanout_active = True

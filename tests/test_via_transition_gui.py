@@ -709,6 +709,36 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.assertLess(slaves.index(trace_group), slaves.index(self.app.via_fanout_group))
         self._restore_default_via_gaps()
 
+    def test_27b_mil_roundtrip_still_collapses_default_fanout(self) -> None:
+        self._enter_via_scenario()
+        original = self.app.display_unit
+        try:
+            if original != "mil":
+                self.app.unit_var.set("mil")
+                self.app._unit_changed()
+            self._restore_default_via_gaps()
+            for path in (
+                "via_transition.signal_via_pitch",
+                "via_transition.entry_trace.width",
+                "via_transition.entry_trace.gap",
+                "via_transition.exit_trace.width",
+                "via_transition.exit_trace.gap",
+            ):
+                self.app._length_mm_cache.pop(path, None)
+                self.app._length_display_snapshot.pop(path, None)
+            self.app._sync_via_fields()
+            self.app.update_idletasks()
+            self.assertFalse(bool(self.app.via_fanout_group.winfo_manager()))
+            self.assertTrue(bool(self.app.via_fanout_collapsed_hint.winfo_manager()))
+            self.assertTrue(self.app._via_fanout_lengths_equal(0.8, 0.8001))
+            self.assertTrue(self.app._via_fanout_lengths_equal(0.8, 31.5 * 0.0254))
+            self.assertFalse(self.app._via_fanout_lengths_equal(0.8, 0.6))
+        finally:
+            if self.app.unit_var.get() != original:
+                self.app.unit_var.set(original)
+                self.app._unit_changed()
+            self._restore_default_via_gaps()
+
     def test_28_center_widgets_are_readonly_gray_with_width_plus_gap_copy(self) -> None:
         self._enter_via_scenario()
         self.app.update_idletasks()
@@ -866,6 +896,13 @@ class ViaTransitionGuiTests(unittest.TestCase):
 
     def test_33_via_generate_and_run_is_offline_only(self) -> None:
         self._enter_via_scenario()
+        self.app.update_idletasks()
+        run_button = next(
+            button for button, full, _compact in self.app.main_toolbar_buttons
+            if full == "生成并运行"
+        )
+        self.assertEqual(str(run_button.cget("state")), "disabled")
+        self.assertIn("离线脚本", str(run_button.cget("text")))
         with patch("main_gui.messagebox.showinfo") as info, patch.object(
             self.app, "_generate"
         ) as generate:
@@ -874,6 +911,11 @@ class ViaTransitionGuiTests(unittest.TestCase):
         generate.assert_not_called()
         self.assertIn("离线", self.app.status.get())
         self.assertIn("未启动 HFSS", self.app.status.get())
+        self.app.variables["scenario.type"].set("surface_capacitor")
+        self.app.update_idletasks()
+        self.assertEqual(str(run_button.cget("state")), "normal")
+        self.assertEqual(str(run_button.cget("text")), "生成并运行")
+        self._enter_via_scenario()
 
     def test_34_cross_section_right_edge_is_not_clipped(self) -> None:
         self._enter_via_scenario()
