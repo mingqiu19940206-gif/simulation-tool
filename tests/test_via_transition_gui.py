@@ -72,6 +72,10 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.assertEqual(vt["fanout"]["style"], "deg45")
         self.assertEqual(vt["fanout"]["direction"], "auto")
         self.assertGreaterEqual(vt["fanout"]["straight_length"], 0.0)
+        self.assertIn("背钻侧最近的功能连接层铜边界",
+                      self.app.backdrill_hint_label.cget("text"))
+        self.assertIn("entry/exit 仅表示信号方向",
+                      self.app.backdrill_hint_label.cget("text"))
 
     def test_03_via_editor_feedback_populates(self) -> None:
         from config_manager import ConfigManager

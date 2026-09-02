@@ -5,7 +5,8 @@ import math
 from typing import Any, List, Mapping, Optional, Tuple
 
 from config_manager import format_length
-from via_transition_geometry import ViaTransitionGeometryResult
+from via_transition_geometry import (ViaTransitionGeometryResult,
+                                     derive_functional_barrel_span)
 from via_antipad import (DIRECTION_MODES, SHAPES, SIZE_MODES, TOPOLOGIES,
                          canonical_antipad, contains_circle,
                          minimum_merged_circle_diameter)
@@ -77,8 +78,10 @@ def validate_via_transition(
     residual_stub = float(backdrill.get("residual_stub", 0.0))
     drill_for_bd = float(vt.get("padstack", {}).get("drill_diameter", 0.0))
 
-    top_stub = bool(entry) and bool(drill_start) and entry != drill_start
-    bottom_stub = bool(exit_layer) and bool(drill_end) and exit_layer != drill_end
+    functional_span = derive_functional_barrel_span(
+        names, entry, exit_layer, drill_start, drill_end)
+    top_stub = bool(functional_span and functional_span.top_stub)
+    bottom_stub = bool(functional_span and functional_span.bottom_stub)
 
     if residual_stub < 0:
         issues.append(("VIA-TRN-043", "error",
@@ -93,23 +96,23 @@ def validate_via_transition(
             issues.append(("VIA-TRN-045", "error",
                            "backdrill.drill_diameter 必须大于原始 drill_diameter。",
                            "via_transition.backdrill.drill_diameter", "增大背钻孔径。"))
-        if from_side == "auto" and top_stub and bottom_stub:
+        if functional_span is not None and from_side == "auto" and top_stub and bottom_stub:
             issues.append(("VIA-TRN-046", "error",
                            "backdrill.from_side=auto 无法唯一推导方向：两侧都有残桩。",
                            "via_transition.backdrill.from_side", "显式指定 top 或 bottom。"))
-        elif from_side == "top" and not top_stub:
+        elif functional_span is not None and from_side == "top" and not top_stub:
             issues.append(("VIA-TRN-047", "error",
                            "backdrill.from_side=top 但不存在顶部残桩。",
-                           "via_transition.backdrill.from_side", "检查 entry_layer/drill_start_layer。"))
-        elif from_side == "bottom" and not bottom_stub:
+                           "via_transition.backdrill.from_side", "检查上方功能连接层与机械钻孔顶部。"))
+        elif functional_span is not None and from_side == "bottom" and not bottom_stub:
             issues.append(("VIA-TRN-048", "error",
                            "backdrill.from_side=bottom 但不存在底部残桩。",
-                           "via_transition.backdrill.from_side", "检查 exit_layer/drill_end_layer。"))
-        elif not top_stub and not bottom_stub:
+                           "via_transition.backdrill.from_side", "检查下方功能连接层与机械钻孔底部。"))
+        elif functional_span is not None and not top_stub and not bottom_stub:
             issues.append(("VIA-TRN-049", "error",
                            "backdrill.enabled=true 但不存在残桩（外层到外层贯通孔无需背钻）。",
                            "via_transition.backdrill.enabled", "外层到外层贯通孔应禁用背钻。"))
-    elif top_stub or bottom_stub:
+    elif functional_span is not None and (top_stub or bottom_stub):
         issues.append(("VIA-TRN-050", "error",
                        "存在未背钻残桩：内层退出必须启用 backdrill。",
                        "via_transition.backdrill.enabled", "启用 backdrill 或改为外层到外层贯通孔。"))

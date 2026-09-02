@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from config_manager import format_length
 from geometry_v1 import calculate_stackup_z_positions
+from via_transition_geometry import derive_functional_barrel_span
 
 # 规格 §11.1：拓扑不变的数值轴（可进入原生 Optimetrics）。
 VIA_SAFE_SWEEP_PATHS: Tuple[str, ...] = (
@@ -200,8 +201,12 @@ def _residual_stub_crossings(config: Mapping[str, Any]) -> List[Tuple[float, str
     if entry not in names or exit_layer not in names or drill_start not in names or drill_end not in names:
         return []
     by_name = {layer.name: layer for layer in stackup}
-    top_stub = entry != drill_start
-    bottom_stub = exit_layer != drill_end
+    functional_span = derive_functional_barrel_span(
+        names, entry, exit_layer, drill_start, drill_end)
+    if functional_span is None:
+        return []
+    top_stub = functional_span.top_stub
+    bottom_stub = functional_span.bottom_stub
     side = str(backdrill.get("from_side", "auto"))
     if side == "auto":
         if top_stub and bottom_stub:
@@ -210,14 +215,14 @@ def _residual_stub_crossings(config: Mapping[str, Any]) -> List[Tuple[float, str
     copper = [layer for layer in stackup if layer.layer_type in {"signal", "plane"}]
     crossings: List[Tuple[float, str]] = []
     if side == "bottom":
-        conn = by_name[exit_layer].z_bottom
+        conn = by_name[functional_span.lower_functional_layer].z_bottom
         for layer in copper:
-            if names.index(layer.name) > names.index(exit_layer) and names.index(layer.name) <= names.index(drill_end):
+            if functional_span.lower_index < layer.index <= functional_span.drill_end_index:
                 crossings.append((conn - layer.z_top, layer.name))
     elif side == "top":
-        conn = by_name[entry].z_top
+        conn = by_name[functional_span.upper_functional_layer].z_top
         for layer in copper:
-            if names.index(layer.name) < names.index(entry) and names.index(layer.name) >= names.index(drill_start):
+            if functional_span.drill_start_index <= layer.index < functional_span.upper_index:
                 crossings.append((layer.z_bottom - conn, layer.name))
     return sorted(crossings)
 
