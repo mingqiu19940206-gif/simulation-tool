@@ -587,8 +587,11 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.app.variables["scenario.type"].set("via_transition")
         self.app.update_idletasks()
         exit_before = str(self.app.variables["via_transition.exit_trace.center_to_center"].get())
-        self.app.variables["via_transition.entry_trace.gap"].set(
-            format_length(0.5, self.app.display_unit))
+        path = "via_transition.entry_trace.gap"
+        display = format_length(0.5, self.app.display_unit)
+        self.app._length_mm_cache[path] = 0.5
+        self.app._length_display_snapshot[path] = display
+        self.app.variables[path].set(display)
         self.app._sync_via_fields()
         self.app.update_idletasks()
         self.assertEqual(

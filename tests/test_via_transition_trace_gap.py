@@ -88,6 +88,7 @@ class ViaTransitionTraceGapTests(unittest.TestCase):
         raw["via_transition"]["entry_trace"].pop("gap", None)
         raw["via_transition"]["exit_trace"].pop("gap", None)
         raw["via_transition"].pop("signal_via_pitch", None)
+        raw["via_transition"]["return_vias"]["enabled"] = False
 
         loaded, corrections = normalize_config(raw)
         vt = loaded["via_transition"]
