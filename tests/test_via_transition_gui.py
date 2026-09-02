@@ -434,6 +434,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
             "via_transition.backdrill.residual_stub": ("group", "backdrill"),
             "via_transition.return_vias.pad_diameter": ("group", "return"),
             "via_transition.padstack.antipad.diameter": ("drawer", "stackup"),
+            "via_transition.padstack.antipad_diameter": ("group", "signal"),
             "via_transition.pair_pitch": ("group", "path"),
             "via_transition.signal_via_pitch": ("group", "path"),
             "via_transition.padstack.drill_diameter": ("group", "signal"),
@@ -571,6 +572,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.assertEqual([path for path in paths if path not in self.app.variables], [])
 
     def test_26_dirty_offline_hfss_gate(self) -> None:
+        self.app._load_to_widgets(self.app.manager.default())
         self.app.variables["scenario.type"].set("via_transition")
         self.app.update_idletasks()
         self.app._mark_preview_dirty()

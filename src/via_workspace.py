@@ -74,8 +74,6 @@ def navigation_target(path: str) -> Tuple[str, str]:
         return "validate", "overlay"
     if any(path.startswith(prefix) for prefix in _DRAWER_PREFIXES):
         return "drawer", "stackup"
-    if path.startswith("via_transition.padstack.antipad"):
-        return "drawer", "stackup"
     if any(path.startswith(prefix) for prefix in _SHEET_PREFIXES):
         return "sheet", "sweep"
     if path.startswith("project.") or path.startswith("trace."):

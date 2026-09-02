@@ -564,14 +564,16 @@ class GuiLayoutRegressionTests(unittest.TestCase):
         self.app.geometry("1120x720+0+0")
         self.app.set_responsive_font_tier("ultra")
         self._show_page("GND VIA")
-        self.app.gnd_via_workbench.panes.sashpos(0, 545)
+        gnd_panes = self.app.gnd_via_workbench.panes
+        gnd_panes.sashpos(0, max(280, min(545, int(gnd_panes.winfo_width() * 0.52))))
         self._settle()
         self._assert_via_layout()
         self._assert_toolbar_children_fit(self.app.gnd_via_workbench.preview_toolbar, "GND VIA toolbar")
 
         self._show_page("反焊盘与叠层")
         workbench = self.app.antipad_workbench
-        workbench.lower_panes.sashpos(0, 690)
+        workbench.lower_panes.sashpos(
+            0, max(360, min(690, int(workbench.lower_panes.winfo_width() * 0.62))))
         self._settle()
         self._assert_antipad_layout()
         cross = workbench.cross_section.canvas
@@ -596,14 +598,17 @@ class GuiLayoutRegressionTests(unittest.TestCase):
         self.assertIn(self.app.config["stackup"][28]["name"], footer)
 
         self._show_page("电容与模型")
-        self.app.capacitor_panes.sashpos(0, 700)
+        cap_panes = self.app.capacitor_panes
+        cap_panes.sashpos(0, max(360, min(700, int(cap_panes.winfo_width() * 0.64))))
         self._settle()
         self._assert_capacitor_layout()
         self._assert_toolbar_children_fit(self.app.cap_dimension_toolbar, "capacitor dimension toolbar")
 
         self._show_page("模型预览")
-        self.app.model_preview_workbench.panes.sashpos(0, 225)
-        self.app.model_preview_workbench.panes.sashpos(1, 785)
+        preview_panes = self.app.model_preview_workbench.panes
+        preview_width = max(1, preview_panes.winfo_width())
+        preview_panes.sashpos(0, max(155, min(225, int(preview_width * 0.17))))
+        preview_panes.sashpos(1, max(400, min(preview_width - 200, int(preview_width * 0.73))))
         self._settle()
         self.app.model_preview_workbench.fit_model()
         self._assert_model_layout()

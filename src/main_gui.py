@@ -359,7 +359,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self.config_name_var = tk.StringVar(value=self._config_source_name)
 
         self.shell = _legacy.ttk.Frame(self)
-        self.shell.pack(fill="both", expand=True, padx=6, pady=(0, 2))
+        self.shell.pack(fill="both", expand=True, padx=4, pady=(0, 2))
         self.shell.columnconfigure(1, weight=1)
         self.shell.rowconfigure(0, weight=1)
 
@@ -414,11 +414,11 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self._show_scenario_workspace()
 
     def _build_left_rail(self, parent: tk.Widget) -> None:
-        rail_column = _legacy.ttk.Frame(parent, padding=(4, 6))
+        rail_column = _legacy.ttk.Frame(parent, padding=(2, 6))
         self.left_rail_column = rail_column
         rail_column.grid(row=0, column=0, sticky="nsew")
         self.shell.rowconfigure(0, weight=1)
-        self.shell.columnconfigure(0, minsize=200)
+        self.shell.columnconfigure(0, minsize=176)
 
         rail = _legacy.ttk.LabelFrame(rail_column, text="场景", padding=8)
         rail.pack(fill="x")
@@ -434,7 +434,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
 
         _legacy.ttk.Label(rail, text="当前配置", foreground="#64748b").pack(anchor="w", pady=(10, 0))
         _legacy.ttk.Label(
-            rail, textvariable=self.config_name_var, wraplength=180
+            rail, textvariable=self.config_name_var, wraplength=160
         ).pack(anchor="w")
 
         drawer_box = _legacy.ttk.LabelFrame(rail_column, text="叠层 / 反焊盘", padding=8)
@@ -446,7 +446,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self.stackup_drawer_button.pack(fill="x")
         _legacy.ttk.Label(
             drawer_box, text="反焊盘与叠层的唯一编辑入口",
-            foreground="#64748b", wraplength=180,
+            foreground="#64748b", wraplength=160,
         ).pack(anchor="w", pady=(4, 0))
 
     def _build_persistent_preview(self, parent: tk.Widget) -> None:
@@ -457,8 +457,8 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self.preview_top_host = _legacy.ttk.Frame(parent)
         self.preview_iso_host = _legacy.ttk.Frame(parent)
         self.preview_section_host = _legacy.ttk.Frame(parent)
+        self.preview_top_host.grid(row=1, column=0, sticky="nsew")
         for host in (self.preview_top_host, self.preview_iso_host, self.preview_section_host):
-            host.grid(row=1, column=0, sticky="nsew")
             host.rowconfigure(0, weight=1)
             host.columnconfigure(0, weight=1)
 
@@ -578,6 +578,46 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self._update_rail_scenario_styles()
         self._update_stackup_drawer_summary()
         self._update_footer_notes()
+        self._ensure_workspace_host(visible=True)
+        self._ensure_preview_pane(visible=is_via)
+
+    def _pane_has(self, child: tk.Widget) -> bool:
+        panes = getattr(self, "workspace_panes", None)
+        if panes is None:
+            return False
+        try:
+            return str(child) in {str(item) for item in panes.panes()}
+        except tk.TclError:
+            return False
+
+    def _ensure_workspace_host(self, *, visible: bool) -> None:
+        panes = getattr(self, "workspace_panes", None)
+        host = getattr(self, "workspace_host", None)
+        if panes is None or host is None:
+            return
+        present = self._pane_has(host)
+        try:
+            if visible and not present:
+                panes.insert(0, host, weight=3)
+            elif not visible and present:
+                panes.forget(host)
+        except tk.TclError:
+            pass
+
+    def _ensure_preview_pane(self, *, visible: bool) -> None:
+        """VIA keeps the persistent preview; capacitor/GND get a full-width notebook."""
+        panes = getattr(self, "workspace_panes", None)
+        host = getattr(self, "preview_host", None)
+        if panes is None or host is None:
+            return
+        present = self._pane_has(host)
+        try:
+            if visible and not present:
+                panes.add(host, weight=4)
+            elif not visible and present:
+                panes.forget(host)
+        except tk.TclError:
+            pass
 
     def _update_rail_scenario_styles(self) -> None:
         current = "via_transition" if self._scenario_is_via() else "surface_capacitor"
@@ -644,8 +684,10 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         target = mapping.get(name, self.preview_top_host)
         for host in mapping.values():
             if host is target:
-                host.tkraise()
-            # Keep all hosts gridded so tests can still redraw unmapped canvases.
+                if not host.winfo_manager():
+                    host.grid(row=1, column=0, sticky="nsew")
+            elif host.winfo_manager():
+                host.grid_remove()
         if hasattr(self, "preview_view_bar"):
             self.preview_view_bar.active = name
             self.preview_view_bar._sync()
@@ -713,6 +755,8 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             return
         if name in {"模型预览", "等轴"}:
             self.close_stackup_drawer()
+            self._ensure_workspace_host(visible=False)
+            self._ensure_preview_pane(visible=True)
             self.set_preview_view("等轴")
             return
         if name in {"仿真与扫描", "创建参数扫描"}:
@@ -1341,6 +1385,8 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             nested.trace_add("write", sync_from_nested)
 
     def _schedule_refresh(self) -> None:
+        if getattr(self, "_destroying", False) or getattr(self, "_refreshing", False):
+            return
         if not self._ui_sync:
             self._mark_preview_dirty()
         super()._schedule_refresh()
@@ -1402,6 +1448,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             return
         self._apply_scenario_linkage()
         if self._scenario_is_via():
+            self.select_via_group("path")
             self._sync_via_fields()
             self.status.set(
                 "已切换到“差分 VIA 换层”场景：请在中部五组编辑换层路径、信号孔、背钻、回流孔和进出走线。"
@@ -1459,8 +1506,48 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             if isinstance(combo, _legacy.ttk.Combobox):
                 combo.configure(values=values)
 
+    def _length_mm_from_widget(self, path: str) -> float | None:
+        """Read a length field as mm, preferring the unrounded cache."""
+        variable = self.variables.get(path)
+        if variable is None:
+            return None
+        text = str(variable.get()).strip()
+        if text == self._length_display_snapshot.get(path) and path in self._length_mm_cache:
+            return float(self._length_mm_cache[path])
+        try:
+            return convert_length(float(text), self.display_unit, "mm")
+        except (TypeError, ValueError, tk.TclError):
+            return None
+
+    def _commit_finished_hole_from_drill_plating(self, drill_path: str, plating_path: str,
+                                                 finished_path: str) -> None:
+        drill_mm = self._length_mm_from_widget(drill_path)
+        plating_mm = self._length_mm_from_widget(plating_path)
+        if drill_mm is None or plating_mm is None:
+            return
+        finished_mm = drill_mm - 2.0 * plating_mm
+        finished_display = format_length(finished_mm, self.display_unit)
+        was = self._ui_sync
+        self._ui_sync = True
+        try:
+            self._length_mm_cache[finished_path] = finished_mm
+            self._length_display_snapshot[finished_path] = finished_display
+            self.variables[finished_path].set(finished_display)
+        finally:
+            self._ui_sync = was
+
     def _sync_via_fields(self) -> None:
         super()._sync_via_fields()
+        self._commit_finished_hole_from_drill_plating(
+            "via_transition.padstack.drill_diameter",
+            "via_transition.padstack.plating_thickness",
+            "via_transition.padstack.finished_hole_diameter",
+        )
+        self._commit_finished_hole_from_drill_plating(
+            "via_transition.return_vias.drill_diameter",
+            "via_transition.return_vias.plating_thickness",
+            "via_transition.return_vias.finished_hole_diameter",
+        )
         return_enabled = bool(
             self.variables["via_transition.return_vias.enabled"].get())
         pattern = self._backend_value("via_transition.return_vias.pattern")
@@ -2004,82 +2091,94 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         ``capacitor_centers`` 等电容场景属性；不能喂给 surface_capacitor
         专用工作台，否则会抛 ``AttributeError`` 并连累 3D 模型预览。
         """
-        super().refresh_visuals()
+        if getattr(self, "_destroying", False) or getattr(self, "_refreshing", False):
+            return
+        self._refreshing = True
         try:
-            config, validation = self.manager.validate(
-                self._collect(), check_output_directory=False
-            )
-            # Commit the provenance-aware follow result back to the editable
-            # model before any workbench reads ``app.config``.  Numeric text
-            # fields remain owned by their Tk variables; only the structured
-            # stackup and automatic-layer state are synchronized here.
-            self.config["stackup"] = copy.deepcopy(config["stackup"])
-            self.config["antipad"]["follow_mount_side"] = bool(
-                config["antipad"].get("follow_mount_side")
-            )
-            self.config["antipad"]["auto_follow_layer"] = str(
-                config["antipad"].get("auto_follow_layer", "")
-            )
-            geometry = GeometryCalculator(config).calculate()
-            for error in geometry.errors:
-                validation.add_error(error)
-            for warning in geometry.warnings:
-                validation.add_warning(warning)
-            snapshot = make_generation_snapshot(config, geometry)
-            self._preview_snapshot = snapshot
-            is_via = scenario_type(config) == VIA_TRANSITION
-            if is_via:
-                self.config["via_transition"]["padstack"]["antipad"] = copy.deepcopy(
-                    config["via_transition"]["padstack"]["antipad"]
+            super().refresh_visuals()
+            try:
+                config, validation = self.manager.validate(
+                    self._collect(), check_output_directory=False
                 )
-                self.config["via_transition"]["padstack"]["antipad_diameter"] = float(
-                    config["via_transition"]["padstack"]["antipad_diameter"]
+                # Commit the provenance-aware follow result back to the editable
+                # model before any workbench reads ``app.config``.  Numeric text
+                # fields remain owned by their Tk variables; only the structured
+                # stackup and automatic-layer state are synchronized here.
+                self.config["stackup"] = copy.deepcopy(config["stackup"])
+                self.config["antipad"]["follow_mount_side"] = bool(
+                    config["antipad"].get("follow_mount_side")
                 )
-                self.config["via_transition"]["padstack"]["antipad_per_layer"] = copy.deepcopy(
-                    config["via_transition"]["padstack"]["antipad_per_layer"]
+                self.config["antipad"]["auto_follow_layer"] = str(
+                    config["antipad"].get("auto_follow_layer", "")
                 )
-                self.antipad_workbench.show_via_transition(config, geometry, validation)
-                vias = list(getattr(geometry, "signal_vias", []))
-                if vias and hasattr(self, "backdrill_actual_stub_var"):
-                    self.backdrill_actual_stub_var.set(
-                        f"{format_length(float(vias[0].actual_residual_stub), self.display_unit)} "
-                        f"{self.display_unit}"
+                geometry = GeometryCalculator(config).calculate()
+                for error in geometry.errors:
+                    validation.add_error(error)
+                for warning in geometry.warnings:
+                    validation.add_warning(warning)
+                snapshot = make_generation_snapshot(config, geometry)
+                self._preview_snapshot = snapshot
+                is_via = scenario_type(config) == VIA_TRANSITION
+                if is_via:
+                    self.config["via_transition"]["padstack"]["antipad"] = copy.deepcopy(
+                        config["via_transition"]["padstack"]["antipad"]
                     )
-            else:
-                self.antipad_workbench.show(config, geometry, validation)
-                self.gnd_via_workbench.show(config, geometry, validation)
-            # The simulation/frequency page is shared by both scenarios, but its
-            # sweep controls are gated separately by scenario linkage.
-            self.simulation_sweep_workbench.show(config, geometry, validation)
-            preview_validation = getattr(self, "validate_report", None)
-            if preview_validation is not None and preview_validation.config_revision != config_revision(config):
-                preview_validation = copy.deepcopy(preview_validation)
-                preview_validation.stale = True
-            effective_validation = preview_validation or validation
-            self._preview_validation = effective_validation
-            # Live refresh never promotes a generation snapshot. Dirty until Validate.
-            validated = getattr(self, "_validated_snapshot", None)
-            if (validated is None
-                    or str(validated.get("config_hash", "")) != str(snapshot.get("config_hash", ""))):
+                    self.config["via_transition"]["padstack"]["antipad_diameter"] = float(
+                        config["via_transition"]["padstack"]["antipad_diameter"]
+                    )
+                    self.config["via_transition"]["padstack"]["antipad_per_layer"] = copy.deepcopy(
+                        config["via_transition"]["padstack"]["antipad_per_layer"]
+                    )
+                    self.antipad_workbench.show_via_transition(config, geometry, validation)
+                    vias = list(getattr(geometry, "signal_vias", []))
+                    if vias and hasattr(self, "backdrill_actual_stub_var"):
+                        self.backdrill_actual_stub_var.set(
+                            f"{format_length(float(vias[0].actual_residual_stub), self.display_unit)} "
+                            f"{self.display_unit}"
+                        )
+                else:
+                    self.antipad_workbench.show(config, geometry, validation)
+                    self.gnd_via_workbench.show(config, geometry, validation)
+                # The simulation/frequency page is shared by both scenarios, but its
+                # sweep controls are gated separately by scenario linkage.
+                self.simulation_sweep_workbench.show(config, geometry, validation)
+                preview_validation = getattr(self, "validate_report", None)
+                if preview_validation is not None and preview_validation.config_revision != config_revision(config):
+                    preview_validation = copy.deepcopy(preview_validation)
+                    preview_validation.stale = True
+                effective_validation = preview_validation or validation
+                self._preview_validation = effective_validation
+                # Live refresh never promotes a generation snapshot. Dirty until Validate.
+                validated = getattr(self, "_validated_snapshot", None)
+                if (validated is None
+                        or str(validated.get("config_hash", "")) != str(snapshot.get("config_hash", ""))):
+                    self._mark_preview_dirty()
+                self.model_preview_workbench.show(config, geometry, effective_validation, snapshot)
+            except Exception as exc:
                 self._mark_preview_dirty()
-            self.model_preview_workbench.show(config, geometry, effective_validation, snapshot)
-        except Exception as exc:
-            self._mark_preview_dirty()
-            self.model_preview_workbench.show_error(str(exc))
-            self.simulation_sweep_workbench.show_error(str(exc))
-            if self._scenario_is_via():
-                self.antipad_workbench.show_via_error(str(exc))
-            else:
-                self.antipad_workbench.show_error(str(exc))
-                self.gnd_via_workbench.show_error(str(exc))
+                self.model_preview_workbench.show_error(str(exc))
+                self.simulation_sweep_workbench.show_error(str(exc))
+                if self._scenario_is_via():
+                    self.antipad_workbench.show_via_error(str(exc))
+                else:
+                    self.antipad_workbench.show_error(str(exc))
+                    self.gnd_via_workbench.show_error(str(exc))
+        finally:
+            self._refreshing = False
 
     def destroy(self) -> None:
-        if hasattr(self, "sweep_sheet"):
+        self._destroying = True
+        try:
+            self.withdraw()
+        except tk.TclError:
+            pass
+        sheet = getattr(self, "sweep_sheet", None)
+        if sheet is not None:
             try:
-                self.sweep_sheet.destroy()
+                sheet.withdraw()
+                sheet.destroy()
             except tk.TclError:
                 pass
-        self._destroying = True
         hfss_job = getattr(self, "_hfss_poll_job", None)
         if hfss_job:
             try:
@@ -2114,6 +2213,26 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                     pass
         except tk.TclError:
             pass
+        for canvas in (getattr(self, "via_top_canvas", None), getattr(self, "via_cross_canvas", None)):
+            if canvas is None:
+                continue
+            try:
+                canvas.bind("<Configure>", "")
+            except tk.TclError:
+                pass
+        for widget in (
+            getattr(self, "model_preview_workbench", None),
+            getattr(self, "drawer_host", None),
+            getattr(self, "via_workspace", None),
+            getattr(self, "notebook", None),
+            getattr(self, "shell", None),
+        ):
+            if widget is None:
+                continue
+            try:
+                widget.destroy()
+            except tk.TclError:
+                pass
         try:
             super().destroy()
         except tk.TclError:

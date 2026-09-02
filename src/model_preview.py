@@ -3112,6 +3112,10 @@ class ModelPreviewWorkbench(ttk.Frame):
         self.status_var.set(f"仅显示 {port.name}、信号导体、{port.details.get('参考层', 'Reference')} 与必要介质")
 
     def _show_validate_results(self) -> None:
+        overlay = getattr(self.app, "_show_validate_overlay", None)
+        if callable(overlay):
+            overlay()
+            return
         if hasattr(self.app, "tabs") and hasattr(self.app, "notebook") and "Validate结果" in self.app.tabs:
             self.app.notebook.select(self.app.tabs["Validate结果"])
         else:
