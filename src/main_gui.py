@@ -1116,8 +1116,8 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             entry_c = self._via_side_center_mm("entry_trace")
             exit_c = self._via_side_center_mm("exit_trace")
             fanout_active = (
-                not self._via_fanout_lengths_equal(signal_pitch, entry_c)
-                or not self._via_fanout_lengths_equal(signal_pitch, exit_c)
+                not math.isclose(signal_pitch, entry_c, abs_tol=1e-9)
+                or not math.isclose(signal_pitch, exit_c, abs_tol=1e-9)
             )
         except (KeyError, TypeError, ValueError, tk.TclError):
             fanout_active = True
