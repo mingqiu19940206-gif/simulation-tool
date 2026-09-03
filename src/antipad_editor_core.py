@@ -64,7 +64,7 @@ VIA_LAYER_STATE_LABELS = {
 }
 VIA_PARAMETER_HELP = {
     "topology": "决定一个参考层上生成几个 Signal VIA 开窗：独立开窗以 P、N 各自孔心为中心；合并开窗以 P/N 中点为中心。",
-    "shape": "决定实际减铜轮廓。独立开窗时 P、N 各生成一个圆形，请填写直径。",
+    "shape": "决定实际减铜轮廓。具体形状与开窗数量由当前拓扑和形状选择决定。",
     "direction_mode": "仅合并开窗使用。自动模式沿 P→N 中心连线定向；手动模式才采用旋转角输入。",
     "size_mode": "仅合并开窗使用。自动适配按孔距、有效孔径和净距计算尺寸；“＋用户增量”再叠加增量；完全手动才采用直径或长/宽输入。",
     "diameter": "圆形开窗的端到端直径。独立开窗时 P、N 各一个圆，请填写该直径。",
@@ -72,7 +72,7 @@ VIA_PARAMETER_HELP = {
     "width": "非圆形轮廓沿局部 Y 轴的端到端总宽度。",
     "corner_radius": "圆角矩形四个角的半径，范围为 0 到 min(长度, 宽度)/2。",
     "rotation_deg": "局部 X 轴相对全局 +X 的逆时针角度。",
-    "clearance": "钻孔/背钻铜边最小净距。独立开窗或完全手动时只做制造预检，不增大开窗尺寸。",
+    "clearance": "钻孔/背钻铜边最小净距。是否增大开窗由当前拓扑和尺寸控制决定。",
     "end_clearance": "自动适配时，沿 P/N 轴两端超出孔包络的净距。",
     "side_clearance": "自动适配时，垂直 P/N 轴方向超出孔包络的净距。",
     "length_increment": "在自动适配所得长度上额外增加的总量；仅“自动适配＋用户增量”生效。",
@@ -188,8 +188,8 @@ def via_field_hint_sentences(
         reasons.append("旋转角由 atan2(Ny-Py, Nx-Px) 派生，因此只读。")
     if states["auto_size"]:
         reasons.append("长度/宽度由真实孔距、逐层有效孔径和净距派生；原手动值不参与轮廓。")
-    if not states["increment_enabled"]:
-        reasons.append("尺寸增量仅在“自动适配＋用户增量”模式启用。")
+    if states["increment_enabled"]:
+        reasons.append("尺寸增量在“自动适配＋用户增量”模式叠加到自动适配结果。")
     return tuple(reasons)
 
 
@@ -237,9 +237,14 @@ def via_parameter_help_text(
                 "钻孔/背钻铜边最小净距。"
                 "合并自动适配用端部/侧向净距增大开窗；本项是制造预检，不单独撑大开窗。"
             )
+        if merged:
+            return (
+                "钻孔/背钻铜边最小净距。"
+                "完全手动时只做制造预检，不增大开窗尺寸。"
+            )
         return (
             "钻孔/背钻铜边最小净距。"
-            "独立开窗或完全手动时只做制造预检，不增大开窗尺寸。"
+            "独立开窗时只做制造预检，不增大开窗尺寸。"
         )
     if key == "rotation_deg":
         if merged and direction_mode == "auto_pn":

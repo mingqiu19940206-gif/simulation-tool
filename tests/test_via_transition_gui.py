@@ -1200,6 +1200,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.assertIn("制造预检", clearance_help)
         self.assertIn("不增大开窗", clearance_help)
         self.assertNotIn("端部/侧向", clearance_help)
+        self.assertNotIn("完全手动", clearance_help)
         self.assertIn(
             "铜边",
             self.app.field_labels["via_transition.padstack.antipad.clearance"].cget("text"),
@@ -1275,10 +1276,17 @@ class ViaTransitionGuiTests(unittest.TestCase):
                 self.app.widgets["via_transition.padstack.antipad.length"].winfo_manager(),
                 "")
             hint = workbench.via_field_hint.get()
-            self.assertIn("尺寸增量仅在", hint)
+            self.assertIn("孔距", hint)
+            self.assertNotIn("用户增量", hint)
             self.assertNotIn("方向/自动尺寸仅作用于", hint)
             workbench._show_via_help("clearance")
             self.assertIn("端部/侧向净距增大开窗", workbench.via_help_var.get())
+            self.app.variables["via_transition.padstack.antipad.size_mode"].set(
+                "自动适配＋用户增量")
+            workbench._update_via_field_states()
+            self.app.update_idletasks()
+            increment_hint = workbench.via_field_hint.get()
+            self.assertIn("用户增量", increment_hint)
         finally:
             self._restore_independent_circle_antipad()
 
