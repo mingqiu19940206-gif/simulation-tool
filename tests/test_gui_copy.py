@@ -161,6 +161,39 @@ class WraplengthHelperTests(unittest.TestCase):
         )
         self.assertGreater(overlap, 0)
 
+    def test_scroll_to_widget_keeps_target_inside_viewport(self) -> None:
+        self.root.geometry("360x220")
+        self.root.deiconify()
+        scroller = ScrollableFrame(self.root, fill_viewport=True)
+        scroller.pack(fill="both", expand=True)
+        scroller.canvas.configure(width=280, height=120)
+        fields = []
+        for index in range(24):
+            row = ttk.Frame(scroller.content)
+            row.pack(fill="x", padx=4, pady=6)
+            label = ttk.Label(row, text=f"字段 {index}")
+            label.grid(row=0, column=0, sticky="w")
+            entry = ttk.Entry(row)
+            entry.insert(0, str(index))
+            entry.grid(row=0, column=1, sticky="ew")
+            fields.append((label, entry))
+        self.root.update()
+        self.root.update_idletasks()
+        scroller._sync_layout()
+        self.root.update_idletasks()
+        self.assertGreater(
+            scroller.content.winfo_reqheight(), scroller.canvas.winfo_height() + 40)
+        target_label, target = fields[8]
+        scroller.scroll_to_widget(target)
+        self.root.update_idletasks()
+        view_top = scroller.canvas.winfo_rooty()
+        view_bottom = view_top + scroller.canvas.winfo_height()
+        for item in (target, target_label):
+            top = item.winfo_rooty()
+            bottom = top + item.winfo_height()
+            self.assertGreaterEqual(top, view_top - 1, item)
+            self.assertLessEqual(bottom, view_bottom + 1, item)
+
 
 class MainWindowCopyTests(unittest.TestCase):
     def setUp(self) -> None:

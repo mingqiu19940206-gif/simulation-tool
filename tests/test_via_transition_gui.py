@@ -78,6 +78,31 @@ class ViaTransitionGuiTests(unittest.TestCase):
             if canvas.type(item) == "text"
         ]
 
+    def _assert_in_scroller_viewport(self, widget, scroller, *extra) -> None:
+        """The widget (and optional label/formula) must sit inside the canvas."""
+        self.app.update_idletasks()
+        canvas = scroller.canvas
+        view_top = canvas.winfo_rooty()
+        view_bottom = view_top + max(1, canvas.winfo_height())
+        view_left = canvas.canvasy(0)
+        view_right = canvas.canvasy(canvas.winfo_height())
+        self.assertGreater(canvas.winfo_height(), 8, "scroller viewport not realized")
+        for item in (widget, *extra):
+            if item is None:
+                continue
+            self.assertTrue(item.winfo_ismapped(), item)
+            top = item.winfo_rooty()
+            bottom = top + max(1, item.winfo_height())
+            content_y = top - scroller.content.winfo_rooty()
+            self.assertGreaterEqual(
+                top, view_top - 1,
+                f"{item} top {top} is above viewport {view_top} (canvas y {content_y}, "
+                f"yview={list(canvas.yview())}, canvasy={view_left}:{view_right})")
+            self.assertLessEqual(
+                bottom, view_bottom + 1,
+                f"{item} bottom {bottom} is below viewport {view_bottom} "
+                f"(canvas y {content_y}, yview={list(canvas.yview())})")
+
     def _click_dimension_label(self, canvas, path: str, prefix: str) -> None:
         items = [
             item for item in canvas.find_withtag(f"dimension:{path}")
@@ -922,6 +947,9 @@ class ViaTransitionGuiTests(unittest.TestCase):
                 path,
             )
             self.assertIn(path, self.app.status.get())
+            scroller = self.app.via_parameter_scrollers["route"]
+            self._assert_in_scroller_viewport(
+                widget, scroller, self.app.field_labels.get(path))
 
     def test_32b_preview_center_to_signal_label_click_focuses_clearance(self) -> None:
         self._enter_via_scenario()
@@ -932,6 +960,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.app.variables["via_transition.return_vias.count"].set("2")
         self.app._sync_via_fields()
         self._realize_desktop_layout()
+        self.app.geometry("1400x720+0+0")
         self.app.notebook.select(self.app.tabs["VIA 换层"])
         self.app.refresh_visuals()
         self.app.update()
@@ -948,6 +977,10 @@ class ViaTransitionGuiTests(unittest.TestCase):
             path,
         )
         self.assertIn(path, self.app.status.get())
+        scroller = self.app.via_parameter_scrollers["return"]
+        label = self.app.field_labels.get(path)
+        formula = self.app.formula_labels.get(path)
+        self._assert_in_scroller_viewport(widget, scroller, label, formula)
 
     def test_33_via_generate_and_run_is_offline_only(self) -> None:
         self._enter_via_scenario()
@@ -990,6 +1023,72 @@ class ViaTransitionGuiTests(unittest.TestCase):
                 label = canvas.itemcget(item, "text") if canvas.type(item) == "text" else canvas.type(item)
                 overflow.append((label, bbox, width))
         self.assertEqual(overflow, [])
+
+    def test_35_four_corner_and_custom_y_offset_are_editable(self) -> None:
+        self._enter_via_scenario()
+        self._realize_desktop_layout()
+        self.app.notebook.select(self.app.tabs["VIA 换层"])
+        self.app.via_parameter_notebook.select(self.app.via_parameter_tabs["return"])
+        self.app.update()
+        pattern_labels = self.app.enum_labels.get("via_transition.return_vias.pattern", {})
+        path = "via_transition.return_vias.offset_y"
+        widget = self.app.widgets[path]
+        formula = self.app.formula_labels[path]
+        cts = self.app.widgets["via_transition.return_vias.center_to_signal"]
+
+        self.app.variables["via_transition.return_vias.pattern"].set(
+            pattern_labels.get("side_pair", "两侧成对"))
+        self.app.variables["via_transition.return_vias.count"].set("2")
+        self.app._sync_via_fields()
+        self.app.update()
+        self.assertEqual(str(widget.cget("state")), "readonly")
+        self.assertTrue(formula.winfo_ismapped())
+        self.assertIn("孔间距/2 + 相对信号孔中心距", str(formula.cget("text")))
+        self.assertTrue(cts.winfo_ismapped())
+        self.assertTrue(str(widget.bind("<Key>")))
+
+        self.app.variables["via_transition.return_vias.pattern"].set(
+            pattern_labels.get("four_corner", "四角"))
+        self.app._sync_via_fields()
+        self.app.update()
+        self.assertEqual(str(self.app.variables["via_transition.return_vias.count"].get()), "4")
+        self.assertEqual(str(widget.cget("state")), "normal")
+        self.assertTrue(widget.winfo_ismapped())
+        self.assertFalse(formula.winfo_ismapped())
+        self.assertNotIn("孔间距/2", str(formula.cget("text")))
+        self.assertFalse(cts.winfo_ismapped())
+        self.assertFalse(str(widget.bind("<Key>")))
+
+        new_mm = 1.25
+        display = format_length(new_mm, self.app.display_unit)
+        widget.delete(0, "end")
+        widget.insert(0, display)
+        self.app.update_idletasks()
+        self.assertEqual(str(self.app.variables[path].get()), display)
+        collected = self.app._collect()
+        self.assertEqual(collected["via_transition"]["return_vias"]["pattern"], "four_corner")
+        self.assertAlmostEqual(
+            collected["via_transition"]["return_vias"]["offset_y"], new_mm, places=6)
+
+        self.app.variables["via_transition.return_vias.pattern"].set(
+            pattern_labels.get("custom", "自定义"))
+        self.app._sync_via_fields()
+        self.app.update()
+        self.assertEqual(str(widget.cget("state")), "normal")
+        self.assertFalse(formula.winfo_ismapped())
+        self.assertFalse(cts.winfo_ismapped())
+        self.assertFalse(str(widget.bind("<Key>")))
+
+        self.app.variables["via_transition.return_vias.pattern"].set(
+            pattern_labels.get("side_pair", "两侧成对"))
+        self.app.variables["via_transition.return_vias.count"].set("2")
+        self.app._sync_via_fields()
+        self.app.update()
+        self.assertEqual(str(widget.cget("state")), "readonly")
+        self.assertTrue(formula.winfo_ismapped())
+        self.assertIn("孔间距/2 + 相对信号孔中心距", str(formula.cget("text")))
+        self.assertTrue(cts.winfo_ismapped())
+        self.assertTrue(str(widget.bind("<Key>")))
 
 
 if __name__ == "__main__":

@@ -864,6 +864,10 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
     def _reveal_via_parameter(self, path: str, widget: tk.Widget) -> None:
         page = self._via_parameter_tab_by_path.get(path, self.via_parameter_tabs["route"])
         self.via_parameter_notebook.select(page)
+        try:
+            self.update_idletasks()
+        except tk.TclError:
+            pass
         section = next((key for key, candidate in self.via_parameter_tabs.items()
                         if candidate is page), "route")
         scroller = self.via_parameter_scrollers[section]
@@ -1139,6 +1143,9 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                 if not return_enabled else
                 "成品孔径自动计算；实心筒壁仅用于趋势近似。"
             ))
+        # Row show/hide re-grids the Y-offset formula; restore derived vs
+        # editable after the layout-field visibility pass.
+        self._sync_return_via_offset_y()
 
         nfp_keep = self._backend_value(
             "via_transition.padstack.nonfunctional_pad_mode") == "keep"

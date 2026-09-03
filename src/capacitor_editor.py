@@ -415,14 +415,101 @@ class ScrollableFrame(ttk.Frame):
             self.canvas.yview_scroll(steps, "units")
         return "break"
 
+    def _scrollregion_height(self) -> float:
+        """Height of the canvas scrollregion, matching what ``yview_moveto`` uses."""
+        region = str(self.canvas.cget("scrollregion") or "").split()
+        if len(region) == 4:
+            return max(1.0, float(region[3]) - float(region[1]))
+        try:
+            bbox = self.canvas.bbox(self._window)
+        except tk.TclError:
+            bbox = None
+        if bbox:
+            return max(1.0, float(bbox[3] - bbox[1]))
+        try:
+            return float(max(1, self.content.winfo_reqheight()))
+        except tk.TclError:
+            return 1.0
+
+    def _row_y_in_content(self, widget: tk.Widget) -> Tuple[int, int]:
+        """Return ``(top, bottom)`` of the widget's grid row relative to content.
+
+        Includes the label and formula on the same row so click-to-focus does
+        not park the entry at the top while clipping the field name above it.
+        """
+        try:
+            top = int(widget.winfo_rooty())
+            bottom = top + max(1, int(widget.winfo_height()))
+        except tk.TclError:
+            return 0, 1
+        parent = getattr(widget, "master", None)
+        try:
+            info = widget.grid_info() or {}
+        except tk.TclError:
+            info = {}
+        if info and parent is not None:
+            try:
+                row = int(float(info.get("row", 0)))
+                for sibling in parent.grid_slaves(row=row):
+                    try:
+                        if not sibling.winfo_ismapped():
+                            continue
+                        sibling_top = int(sibling.winfo_rooty())
+                        sibling_bottom = sibling_top + max(1, int(sibling.winfo_height()))
+                    except tk.TclError:
+                        continue
+                    top = min(top, sibling_top)
+                    bottom = max(bottom, sibling_bottom)
+            except tk.TclError:
+                pass
+        try:
+            origin = int(self.content.winfo_rooty())
+        except tk.TclError:
+            origin = 0
+        return top - origin, bottom - origin
+
     def scroll_to_widget(self, widget: tk.Widget) -> None:
-        """Reveal a descendant parameter widget without assuming fixed row sizes."""
-        self.update_idletasks()
-        content_height = max(1, self.occupied_content_bottom())
-        viewport_height = max(1, self.canvas.winfo_height())
-        movable = max(1, content_height - viewport_height)
-        target_y = widget.winfo_rooty() - self.content.winfo_rooty()
-        self.canvas.yview_moveto(max(0.0, min(1.0, (target_y - 24) / movable)))
+        """Place a descendant (and its grid row) inside the visible canvas.
+
+        ``yview_moveto`` takes a fraction of the *scrollregion* height, not of
+        the movable range ``content - viewport``. Dividing by the movable range
+        over-scrolls and can leave the focused field above the viewport.
+        """
+        try:
+            self.update_idletasks()
+        except tk.TclError:
+            return
+        try:
+            if not widget.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        # Layout may still be queued from a just-selected notebook tab.
+        if self._layout_job is not None:
+            try:
+                self.after_cancel(self._layout_job)
+            except tk.TclError:
+                pass
+            self._layout_job = None
+        self._sync_layout()
+        try:
+            self.update_idletasks()
+        except tk.TclError:
+            return
+
+        viewport_height = max(1, int(self.canvas.winfo_height()))
+        content_height = self._scrollregion_height()
+        row_top, row_bottom = self._row_y_in_content(widget)
+        padding = 8
+        # Prefer the row near the top; never scroll so far the row sits above
+        # the canvas, and never past the last valid top position.
+        desired_top = float(row_top - padding)
+        max_top = max(0.0, content_height - float(viewport_height))
+        desired_top = max(0.0, min(desired_top, max_top))
+        # If the row is taller than the viewport, keep the top visible.
+        if row_bottom - row_top > viewport_height:
+            desired_top = max(0.0, min(float(row_top), max_top))
+        self.canvas.yview_moveto(desired_top / content_height)
 
     def destroy(self) -> None:
         if self._layout_job is not None:
