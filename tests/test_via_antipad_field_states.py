@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from antipad_editor_core import (
+    VIA_PARAMETER_HELP,
     via_antipad_field_states,
     via_field_hint_sentences,
     via_parameter_help_text,
@@ -96,7 +97,8 @@ class ViaAntipadFieldStateTests(unittest.TestCase):
         self.assertTrue(states["enabled"]["size_mode"])
         hint = " ".join(via_field_hint_sentences(
             "merged_pair", "circle", "auto_pn", "auto_fit"))
-        self.assertIn("尺寸增量仅在", hint)
+        self.assertIn("孔距", hint)
+        self.assertNotIn("用户增量", hint)
         self.assertNotIn("方向/自动尺寸仅作用于", hint)
 
         increment = via_antipad_field_states(
@@ -104,7 +106,7 @@ class ViaAntipadFieldStateTests(unittest.TestCase):
         self.assertTrue(increment["visible"]["length_increment"])
         increment_hint = " ".join(via_field_hint_sentences(
             "merged_pair", "capsule", "auto_pn", "auto_plus_increment"))
-        self.assertNotIn("尺寸增量仅在", increment_hint)
+        self.assertIn("用户增量", increment_hint)
 
     def test_circle_help_does_not_mention_other_shapes(self) -> None:
         text = via_parameter_help_text(
@@ -123,10 +125,36 @@ class ViaAntipadFieldStateTests(unittest.TestCase):
         self.assertIn("制造预检", clearance)
         self.assertIn("不增大开窗", clearance)
         self.assertNotIn("端部", clearance)
+        self.assertNotIn("完全手动", clearance)
         merged = via_parameter_help_text(
             "clearance", topology="merged_pair", shape="capsule",
             size_mode="auto_fit")
         self.assertIn("端部/侧向净距增大开窗", merged)
+        self.assertNotIn("完全手动", merged)
+        merged_manual = via_parameter_help_text(
+            "clearance", topology="merged_pair", shape="circle",
+            size_mode="manual")
+        self.assertIn("完全手动", merged_manual)
+        self.assertNotIn("独立开窗", merged_manual)
+
+    def test_help_copy_omits_modes_that_are_not_selected(self) -> None:
+        independent_clearance = via_parameter_help_text(
+            "clearance", topology="independent", shape="circle",
+            size_mode="auto_fit")
+        self.assertNotIn("完全手动", independent_clearance)
+        self.assertIn("独立开窗", independent_clearance)
+        autofit_hint = " ".join(via_field_hint_sentences(
+            "merged_pair", "circle", "auto_pn", "auto_fit"))
+        self.assertIn("孔距", autofit_hint)
+        self.assertNotIn("用户增量", autofit_hint)
+        increment_hint = " ".join(via_field_hint_sentences(
+            "merged_pair", "circle", "auto_pn", "auto_plus_increment"))
+        self.assertIn("用户增量", increment_hint)
+        circle_help = via_parameter_help_text(
+            "shape", topology="independent", shape="circle")
+        self.assertIn("圆形", circle_help)
+        self.assertNotEqual(VIA_PARAMETER_HELP["shape"], circle_help)
+        self.assertNotIn("各生成一个圆形", VIA_PARAMETER_HELP["shape"])
 
     def test_d_independent_circle_contours_are_bit_identical(self) -> None:
         cfg = copy.deepcopy(ConfigManager(ROOT).default())
