@@ -481,14 +481,15 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self.via_fanout_group = frame
         add("route", frame, 0, "㉒ 扇出方式", "via_transition.fanout.style",
             values=("deg45", "arc"), display_values={"deg45": "45° 折线", "arc": "圆弧"},
-            formula="两侧走线中心距均等于孔间距时，扇出三项自动停用。")
+            formula="两侧走线中心距均等于孔间距时，扇出参数自动停用。")
         add("route", frame, 1, "㉓ 扇出方向", "via_transition.fanout.direction",
             values=("auto", "expand", "contract"),
             display_values={"auto": "自动", "expand": "向外", "contract": "向内"})
-        add("route", frame, 2, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
+        add("route", frame, 2, "㉓ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
+        self._set_via_parameter_row_visible("via_transition.fanout.direction", False)
         self.via_fanout_collapsed_hint = _legacy.ttk.Label(
             fanout_parent,
-            text="两侧走线中心距均等于孔间距时，扇出三项自动停用。",
+            text="两侧走线中心距均等于孔间距时，扇出参数自动停用。",
             foreground="#64748b", wraplength=430, justify="left",
         )
         self.via_fanout_hint = self.via_fanout_collapsed_hint
@@ -858,10 +859,10 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                     hint.pack(**hint_kwargs)
         for path in (
             "via_transition.fanout.style",
-            "via_transition.fanout.direction",
             "via_transition.fanout.straight_length",
         ):
             self._set_via_parameter_row_visible(path, visible)
+        self._set_via_parameter_row_visible("via_transition.fanout.direction", False)
 
     def _reveal_via_parameter(self, path: str, widget: tk.Widget) -> None:
         page = self._via_parameter_tab_by_path.get(path, self.via_parameter_tabs["route"])

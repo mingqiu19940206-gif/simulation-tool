@@ -584,6 +584,12 @@ class ViaTransitionGuiTests(unittest.TestCase):
                         packed.index(str(workbench.layer_box)))
         self.assertEqual(workbench.via_layer_widgets["diameter"].winfo_manager(), "grid")
         self.assertEqual(workbench.via_layer_widgets["clearance"].winfo_manager(), "grid")
+        self.assertEqual(workbench.via_layer_precheck_label.winfo_manager(), "grid")
+        self.assertEqual(str(workbench.via_layer_precheck_label.cget("text")), "制造预检")
+        self.assertGreater(
+            int(float(workbench.via_layer_widgets["clearance"].grid_info()["row"])),
+            int(float(workbench.via_layer_widgets["diameter"].grid_info()["row"])),
+        )
         self.assertEqual(workbench.via_layer_widgets["length"].winfo_manager(), "")
         self.assertEqual(workbench.via_layer_widgets["end_clearance"].winfo_manager(), "")
 
@@ -798,6 +804,10 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.assertTrue(bool(self.app.via_fanout_group.winfo_manager()))
         self.assertFalse(bool(self.app.via_fanout_collapsed_hint.winfo_manager()))
         self.assertLess(slaves.index(trace_group), slaves.index(self.app.via_fanout_group))
+        self.assertEqual(
+            self.app.widgets["via_transition.fanout.direction"].winfo_manager(), "")
+        self.assertTrue(self._via_row_mapped("via_transition.fanout.style"))
+        self.assertTrue(self._via_row_mapped("via_transition.fanout.straight_length"))
         self._restore_default_via_gaps()
 
     def test_28_center_widgets_are_readonly_gray_with_width_plus_gap_copy(self) -> None:
@@ -1164,7 +1174,20 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.assertTrue(self._via_row_mapped("via_transition.padstack.antipad.topology"))
         self.assertTrue(self._via_row_mapped("via_transition.padstack.antipad.shape"))
         self.assertTrue(self._via_row_mapped("via_transition.padstack.antipad.diameter"))
-        self.assertTrue(self._via_row_mapped("via_transition.padstack.antipad.clearance"))
+        self.assertIs(
+            self.app.widgets["via_transition.padstack.antipad.clearance"].master,
+            workbench.via_precheck_box,
+        )
+        self.assertIs(
+            self.app.widgets["via_transition.padstack.antipad.diameter"].master,
+            workbench.via_box,
+        )
+        self.assertEqual(str(workbench.via_precheck_box.cget("text")), "制造预检")
+        self.assertTrue(bool(workbench.via_precheck_box.winfo_manager()))
+        self.assertEqual(
+            self.app.widgets["via_transition.padstack.antipad.clearance"].winfo_manager(),
+            "grid",
+        )
         for path in (
             "via_transition.padstack.antipad.direction_mode",
             "via_transition.padstack.antipad.size_mode",
@@ -1207,6 +1230,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
         )
         collected = self.app._collect()["via_transition"]["padstack"]["antipad"]
         self.assertIn("clearance", collected)
+        self.assertAlmostEqual(float(collected["clearance"]), 0.1)
         self.assertEqual(collected["size_mode"], "auto_fit")
         self.assertEqual(collected["topology"], "independent")
 
@@ -1269,6 +1293,14 @@ class ViaTransitionGuiTests(unittest.TestCase):
                 "via_transition.padstack.antipad.end_clearance"))
             self.assertTrue(self._via_row_mapped(
                 "via_transition.padstack.antipad.side_clearance"))
+            self.assertIs(
+                self.app.widgets["via_transition.padstack.antipad.clearance"].master,
+                workbench.via_precheck_box,
+            )
+            self.assertIs(
+                self.app.widgets["via_transition.padstack.antipad.end_clearance"].master,
+                workbench.via_box,
+            )
             self.assertEqual(
                 self.app.widgets["via_transition.padstack.antipad.diameter"].winfo_manager(),
                 "")
