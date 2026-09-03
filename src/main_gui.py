@@ -541,7 +541,8 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             row=5, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 0))
         bind_wraplength(self.backdrill_hint_label, source=frame)
 
-        frame = group("return", "回流地孔（Return VIA）· 布局与层连接")
+        self.return_layout_group = group("return", "回流地孔（Return VIA）· 布局与层连接")
+        frame = self.return_layout_group
         add("return", frame, 0, "启用回流地孔", "via_transition.return_vias.enabled", boolean=True)
         add("return", frame, 1, "布局模式", "via_transition.return_vias.pattern",
             values=("side_pair", "four_corner", "custom"),
@@ -615,7 +616,8 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         snapshot_row(frame, 11, "via_transition.return_vias.custom_coordinates")
         remember("return", "via_transition.return_vias.custom_coordinates", self.return_coordinate_editor)
 
-        frame = group("return", "回流地孔（Return VIA）· 孔结构")
+        self.return_structure_group = group("return", "回流地孔（Return VIA）· 孔结构")
+        frame = self.return_structure_group
         add("return", frame, 0, "钻孔直径", "via_transition.return_vias.drill_diameter", length=True)
         add("return", frame, 1, "成品孔直径",
             "via_transition.return_vias.finished_hole_diameter", length=True,
@@ -871,12 +873,20 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         section = next((key for key, candidate in self.via_parameter_tabs.items()
                         if candidate is page), "route")
         scroller = self.via_parameter_scrollers[section]
-        scroller.scroll_to_widget(widget)
         try:
             widget.focus_force()
             if isinstance(widget, (_legacy.ttk.Entry, tk.Entry)):
                 widget.selection_range(0, "end")
                 widget.icursor("end")
+        except tk.TclError:
+            pass
+        scroller.scroll_to_widget(widget)
+
+        def _keep_in_view() -> None:
+            scroller.scroll_to_widget(widget)
+
+        try:
+            self.after_idle(_keep_in_view)
         except tk.TclError:
             pass
 

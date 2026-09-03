@@ -84,8 +84,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
         canvas = scroller.canvas
         view_top = canvas.winfo_rooty()
         view_bottom = view_top + max(1, canvas.winfo_height())
-        view_left = canvas.canvasy(0)
-        view_right = canvas.canvasy(canvas.winfo_height())
+        frac_top, frac_bottom = canvas.yview()
         self.assertGreater(canvas.winfo_height(), 8, "scroller viewport not realized")
         for item in (widget, *extra):
             if item is None:
@@ -93,15 +92,48 @@ class ViaTransitionGuiTests(unittest.TestCase):
             self.assertTrue(item.winfo_ismapped(), item)
             top = item.winfo_rooty()
             bottom = top + max(1, item.winfo_height())
-            content_y = top - scroller.content.winfo_rooty()
+            content_y = 0
+            owner = item
+            while owner is not None and owner is not scroller.content:
+                content_y += int(owner.winfo_y())
+                owner = getattr(owner, "master", None)
             self.assertGreaterEqual(
                 top, view_top - 1,
-                f"{item} top {top} is above viewport {view_top} (canvas y {content_y}, "
-                f"yview={list(canvas.yview())}, canvasy={view_left}:{view_right})")
+                f"{item} top {top} is above viewport {view_top} (content y {content_y}, "
+                f"yview={list(canvas.yview())})")
             self.assertLessEqual(
                 bottom, view_bottom + 1,
                 f"{item} bottom {bottom} is below viewport {view_bottom} "
-                f"(canvas y {content_y}, yview={list(canvas.yview())})")
+                f"(content y {content_y}, yview={list(canvas.yview())})")
+            region = str(canvas.cget("scrollregion") or "").split()
+            region_h = max(1.0, float(region[3]) - float(region[1])) if len(region) == 4 else 1.0
+            vis_top = float(frac_top) * region_h
+            vis_bottom = float(frac_bottom) * region_h
+            self.assertGreaterEqual(
+                content_y, vis_top - 2,
+                f"{item} content y {content_y} is above visible {vis_top}:{vis_bottom}")
+            self.assertLessEqual(
+                content_y + max(1, item.winfo_height()), vis_bottom + 2,
+                f"{item} content bottom is below visible {vis_top}:{vis_bottom}")
+
+    def _assert_not_scrolled_into_return_structure(self, target) -> None:
+        """Clearance click must not park X 向节距 / 孔结构 at the top of the pane."""
+        scroller = self.app.via_parameter_scrollers["return"]
+        canvas = scroller.canvas
+        structure = self.app.return_structure_group
+        pitch_x = self.app.widgets["via_transition.return_vias.pitch_x"]
+        self.app.update_idletasks()
+        view_top = canvas.winfo_rooty()
+        self.assertGreaterEqual(target.winfo_rooty(), view_top - 1)
+        self.assertGreater(
+            structure.winfo_rooty(), target.winfo_rooty(),
+            "孔结构 rose above the clearance row")
+        self.assertGreater(
+            pitch_x.winfo_rooty(), view_top + 16,
+            "viewport starts at X 向节距; clearance row was scrolled above the pane")
+        self.assertGreater(
+            structure.winfo_rooty(), view_top + 24,
+            "viewport starts inside 孔结构 instead of the clearance row")
 
     def _click_dimension_label(self, canvas, path: str, prefix: str) -> None:
         items = [
@@ -981,6 +1013,14 @@ class ViaTransitionGuiTests(unittest.TestCase):
         label = self.app.field_labels.get(path)
         formula = self.app.formula_labels.get(path)
         self._assert_in_scroller_viewport(widget, scroller, label, formula)
+        self._assert_not_scrolled_into_return_structure(widget)
+
+        scroller.canvas.yview_moveto(1.0)
+        self.app.update_idletasks()
+        self._click_dimension_label(canvas, path, "相对信号孔中心距")
+        self.assertIs(self.app.focus_get(), widget, path)
+        self._assert_in_scroller_viewport(widget, scroller, label, formula)
+        self._assert_not_scrolled_into_return_structure(widget)
 
     def test_33_via_generate_and_run_is_offline_only(self) -> None:
         self._enter_via_scenario()

@@ -183,7 +183,24 @@ class WraplengthHelperTests(unittest.TestCase):
         self.root.update_idletasks()
         self.assertGreater(
             scroller.content.winfo_reqheight(), scroller.canvas.winfo_height() + 40)
+        first_label, first = fields[0]
+        before = tuple(scroller.canvas.yview())
+        scroller.scroll_to_widget(first)
+        self.root.update_idletasks()
+        after = tuple(scroller.canvas.yview())
+        self.assertAlmostEqual(after[0], before[0], places=3)
+        view_top = scroller.canvas.winfo_rooty()
+        view_bottom = view_top + scroller.canvas.winfo_height()
+        for item in (first, first_label):
+            top = item.winfo_rooty()
+            bottom = top + item.winfo_height()
+            self.assertGreaterEqual(top, view_top - 1, item)
+            self.assertLessEqual(bottom, view_bottom + 1, item)
+
+        scroller.canvas.yview_moveto(1.0)
+        self.root.update_idletasks()
         target_label, target = fields[8]
+        later_label, later = fields[20]
         scroller.scroll_to_widget(target)
         self.root.update_idletasks()
         view_top = scroller.canvas.winfo_rooty()
@@ -193,6 +210,8 @@ class WraplengthHelperTests(unittest.TestCase):
             bottom = top + item.winfo_height()
             self.assertGreaterEqual(top, view_top - 1, item)
             self.assertLessEqual(bottom, view_bottom + 1, item)
+        self.assertGreater(later.winfo_rooty(), target.winfo_rooty())
+        self.assertGreater(later.winfo_rooty(), view_top + 8)
 
 
 class MainWindowCopyTests(unittest.TestCase):
