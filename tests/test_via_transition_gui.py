@@ -1132,6 +1132,156 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.assertTrue(cts.winfo_ismapped())
         self.assertTrue(str(widget.bind("<Key>")))
 
+    def _via_row_mapped(self, path: str) -> bool:
+        return self.app.widgets[path].winfo_manager() == "grid"
+
+    def _restore_independent_circle_antipad(self) -> None:
+        cfg = self.app._collect()
+        cfg["scenario"]["type"] = "via_transition"
+        anti = cfg["via_transition"]["padstack"]["antipad"]
+        anti.update({
+            "topology": "independent",
+            "shape": "circle",
+            "direction_mode": "auto_pn",
+            "size_mode": "auto_fit",
+            "per_layer": {},
+        })
+        self.app._load_to_widgets(cfg)
+        self.app.antipad_workbench._update_via_field_states()
+        self.app.refresh_visuals()
+        self.app.update_idletasks()
+
+    def test_36_independent_circle_hides_merged_rows_and_stale_hints(self) -> None:
+        self.app.variables["scenario.type"].set("via_transition")
+        self.app.refresh_visuals()
+        workbench = self.app.antipad_workbench
+        workbench.set_scenario_editable(False)
+        self._restore_independent_circle_antipad()
+        workbench._update_via_field_states()
+        workbench._sync_layer_panel()
+        self.app.update_idletasks()
+
+        self.assertTrue(self._via_row_mapped("via_transition.padstack.antipad.topology"))
+        self.assertTrue(self._via_row_mapped("via_transition.padstack.antipad.shape"))
+        self.assertTrue(self._via_row_mapped("via_transition.padstack.antipad.diameter"))
+        self.assertTrue(self._via_row_mapped("via_transition.padstack.antipad.clearance"))
+        for path in (
+            "via_transition.padstack.antipad.direction_mode",
+            "via_transition.padstack.antipad.size_mode",
+            "via_transition.padstack.antipad.length",
+            "via_transition.padstack.antipad.width",
+            "via_transition.padstack.antipad.corner_radius",
+            "via_transition.padstack.antipad.rotation_deg",
+            "via_transition.padstack.antipad.end_clearance",
+            "via_transition.padstack.antipad.side_clearance",
+            "via_transition.padstack.antipad.length_increment",
+            "via_transition.padstack.antipad.width_increment",
+        ):
+            self.assertEqual(self.app.widgets[path].winfo_manager(), "", path)
+            self.assertEqual(self.app.field_labels[path].winfo_manager(), "", path)
+        hint = workbench.via_field_hint.get()
+        self.assertEqual(hint, "")
+        self.assertNotIn("方向/自动尺寸", hint)
+        self.assertNotIn("尺寸增量", hint)
+        self.assertEqual(workbench.via_field_hint_label.winfo_manager(), "")
+        self.assertEqual(workbench.via_layer_direction.winfo_manager(), "")
+        self.assertEqual(workbench.via_layer_size_mode.winfo_manager(), "")
+        self.assertEqual(workbench.via_layer_enum_labels["direction_mode"].winfo_manager(), "")
+        self.assertEqual(workbench.via_layer_enum_labels["size_mode"].winfo_manager(), "")
+
+        workbench._show_via_help("shape")
+        shape_help = workbench.via_help_var.get()
+        self.assertIn("圆形", shape_help)
+        self.assertIn("直径", shape_help)
+        self.assertNotIn("其余形状", shape_help)
+        self.assertNotIn("局部 X", shape_help)
+        workbench._show_via_help("clearance")
+        clearance_help = workbench.via_help_var.get()
+        self.assertIn("制造预检", clearance_help)
+        self.assertIn("不增大开窗", clearance_help)
+        self.assertNotIn("端部/侧向", clearance_help)
+        self.assertIn(
+            "铜边",
+            self.app.field_labels["via_transition.padstack.antipad.clearance"].cget("text"),
+        )
+        collected = self.app._collect()["via_transition"]["padstack"]["antipad"]
+        self.assertIn("clearance", collected)
+        self.assertEqual(collected["size_mode"], "auto_fit")
+        self.assertEqual(collected["topology"], "independent")
+
+    def test_37_independent_ellipse_shows_length_width_keeps_merged_rows_hidden(self) -> None:
+        self.app.variables["scenario.type"].set("via_transition")
+        self.app.refresh_visuals()
+        workbench = self.app.antipad_workbench
+        workbench.set_scenario_editable(False)
+        self.app.variables["via_transition.padstack.antipad.topology"].set("P/N 独立开窗")
+        self.app.variables["via_transition.padstack.antipad.shape"].set("椭圆形")
+        workbench._update_via_field_states()
+        workbench._sync_layer_panel()
+        self.app.update_idletasks()
+        try:
+            self.assertTrue(self._via_row_mapped("via_transition.padstack.antipad.length"))
+            self.assertTrue(self._via_row_mapped("via_transition.padstack.antipad.width"))
+            self.assertEqual(
+                self.app.widgets["via_transition.padstack.antipad.direction_mode"].winfo_manager(),
+                "")
+            self.assertEqual(
+                self.app.widgets["via_transition.padstack.antipad.size_mode"].winfo_manager(),
+                "")
+            self.assertEqual(workbench.via_layer_direction.winfo_manager(), "")
+            self.assertEqual(workbench.via_layer_size_mode.winfo_manager(), "")
+            self.assertEqual(str(workbench.via_length.cget("state")), "normal")
+            self.assertEqual(str(workbench.via_width.cget("state")), "normal")
+        finally:
+            self._restore_independent_circle_antipad()
+
+    def test_38_merged_shows_direction_size_control_and_autofit_hides_manual_sizes(self) -> None:
+        self.app.variables["scenario.type"].set("via_transition")
+        cfg = self.app._collect()
+        cfg["scenario"]["type"] = "via_transition"
+        anti = cfg["via_transition"]["padstack"]["antipad"]
+        anti.update({
+            "topology": "merged_pair",
+            "shape": "circle",
+            "direction_mode": "auto_pn",
+            "size_mode": "auto_fit",
+            "per_layer": {},
+        })
+        self.app._load_to_widgets(cfg)
+        self.app.refresh_visuals()
+        workbench = self.app.antipad_workbench
+        workbench.set_scenario_editable(False)
+        workbench.select_layer_by_name("L2")
+        workbench._update_via_field_states()
+        workbench._sync_layer_panel()
+        self.app.update_idletasks()
+        try:
+            self.assertEqual(
+                str(workbench.via_direction.cget("state")), "readonly")
+            self.assertEqual(
+                str(workbench.via_size_mode.cget("state")), "readonly")
+            self.assertTrue(self._via_row_mapped(
+                "via_transition.padstack.antipad.direction_mode"))
+            self.assertTrue(self._via_row_mapped(
+                "via_transition.padstack.antipad.size_mode"))
+            self.assertTrue(self._via_row_mapped(
+                "via_transition.padstack.antipad.end_clearance"))
+            self.assertTrue(self._via_row_mapped(
+                "via_transition.padstack.antipad.side_clearance"))
+            self.assertEqual(
+                self.app.widgets["via_transition.padstack.antipad.diameter"].winfo_manager(),
+                "")
+            self.assertEqual(
+                self.app.widgets["via_transition.padstack.antipad.length"].winfo_manager(),
+                "")
+            hint = workbench.via_field_hint.get()
+            self.assertIn("尺寸增量仅在", hint)
+            self.assertNotIn("方向/自动尺寸仅作用于", hint)
+            workbench._show_via_help("clearance")
+            self.assertIn("端部/侧向净距增大开窗", workbench.via_help_var.get())
+        finally:
+            self._restore_independent_circle_antipad()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

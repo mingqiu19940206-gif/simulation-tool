@@ -64,15 +64,15 @@ VIA_LAYER_STATE_LABELS = {
 }
 VIA_PARAMETER_HELP = {
     "topology": "决定一个参考层上生成几个 Signal VIA 开窗：独立开窗以 P、N 各自孔心为中心；合并开窗以 P/N 中点为中心。",
-    "shape": "决定实际减铜轮廓。圆形使用直径；其余形状使用局部 X 方向端到端长度和局部 Y 方向总宽度。",
+    "shape": "决定实际减铜轮廓。独立开窗时 P、N 各生成一个圆形，请填写直径。",
     "direction_mode": "仅合并开窗使用。自动模式沿 P→N 中心连线定向；手动模式才采用旋转角输入。",
     "size_mode": "仅合并开窗使用。自动适配按孔距、有效孔径和净距计算尺寸；“＋用户增量”再叠加增量；完全手动才采用直径或长/宽输入。",
-    "diameter": "圆形开窗的端到端直径。自动适配时由孔包络和净距派生，输入框只读。",
-    "length": "非圆形轮廓沿局部 X 轴的端到端总长度，不是相对焊盘的单边外扩。自动适配时显示图中有效值。",
-    "width": "非圆形轮廓沿局部 Y 轴的端到端总宽度。自动适配时显示图中有效值。",
+    "diameter": "圆形开窗的端到端直径。独立开窗时 P、N 各一个圆，请填写该直径。",
+    "length": "非圆形轮廓沿局部 X 轴的端到端总长度，不是相对焊盘的单边外扩。",
+    "width": "非圆形轮廓沿局部 Y 轴的端到端总宽度。",
     "corner_radius": "圆角矩形四个角的半径，范围为 0 到 min(长度, 宽度)/2。",
-    "rotation_deg": "局部 X 轴相对全局 +X 的逆时针角度。自动沿 P/N 轴时由孔位计算，手工输入不参与几何。",
-    "clearance": "轮廓到钻孔/背钻实际包络必须保留的最小铜边净距，也是手动尺寸的制造预检阈值。",
+    "rotation_deg": "局部 X 轴相对全局 +X 的逆时针角度。",
+    "clearance": "钻孔/背钻铜边最小净距。独立开窗或完全手动时只做制造预检，不增大开窗尺寸。",
     "end_clearance": "自动适配时，沿 P/N 轴两端超出孔包络的净距。",
     "side_clearance": "自动适配时，垂直 P/N 轴方向超出孔包络的净距。",
     "length_increment": "在自动适配所得长度上额外增加的总量；仅“自动适配＋用户增量”生效。",
@@ -86,7 +86,7 @@ VIA_PARAMETER_TITLES = {
     "direction_mode": "合并开窗方向", "size_mode": "开窗尺寸控制",
     "diameter": "直径", "length": "端到端总长度", "width": "总宽度",
     "corner_radius": "圆角半径", "rotation_deg": "逆时针旋转角",
-    "clearance": "最小反焊盘净距", "end_clearance": "端部净距",
+    "clearance": "最小铜边净距（钻孔/背钻）", "end_clearance": "端部净距",
     "side_clearance": "侧向净距", "length_increment": "自动适配长度增量",
     "width_increment": "自动适配宽度增量", "return_diameter": "Return VIA 避空直径",
     "layer_source": "本层尺寸来源", "layer_enabled": "本层是否生成反焊盘",
@@ -115,6 +115,137 @@ MODE_DETAILS = {
     "merged_per_capacitor": ("2 个", "轴对齐包围盒", "移除中等", "每颗电容形成连续开窗"),
     "merged_all": ("1 个", "轴对齐包围盒", "移除最多", "需要重点检查参考平面连续性"),
 }
+
+# Global VIA antipad rows that hide/show with topology/shape/size mode.
+# Help sits on row 4 between size_mode and diameter.
+VIA_GLOBAL_FIELD_ROWS = {
+    "direction_mode": 2, "size_mode": 3,
+    "diameter": 5, "length": 6, "width": 7,
+    "corner_radius": 8, "rotation_deg": 9,
+    "end_clearance": 11, "side_clearance": 12,
+    "length_increment": 13, "width_increment": 14,
+}
+_VIA_AUTO_SIZE_MODES = frozenset({"auto_fit", "auto_plus_increment"})
+
+
+def via_antipad_field_states(
+    topology: str,
+    shape: str,
+    direction_mode: str,
+    size_mode: str,
+) -> Dict[str, Any]:
+    """Visibility/enablement for Signal VIA antipad fields.
+
+    Independent openings are always manual (``manual_size = size_mode==manual
+    or not merged``). JSON may still store ``size_mode=auto_fit``; the UI must
+    not present direction/size-control as if they were in effect.
+    Layer aliases reuse this helper so they cannot drift from the global box.
+    """
+    merged = topology == "merged_pair"
+    manual_size = size_mode == "manual" or not merged
+    auto_size = merged and size_mode in _VIA_AUTO_SIZE_MODES
+    increment_enabled = merged and size_mode == "auto_plus_increment"
+    visible = {
+        "topology": True,
+        "shape": True,
+        "direction_mode": merged,
+        "size_mode": merged,
+        "diameter": shape == "circle" and manual_size,
+        "length": shape != "circle" and manual_size,
+        "width": shape != "circle" and manual_size,
+        "corner_radius": shape == "rounded_rectangle",
+        "rotation_deg": shape != "circle",
+        "clearance": True,
+        "end_clearance": auto_size,
+        "side_clearance": auto_size,
+        "length_increment": increment_enabled,
+        "width_increment": increment_enabled,
+    }
+    enabled = dict(visible)
+    enabled["rotation_deg"] = shape != "circle" and (not merged or direction_mode == "manual")
+    return {
+        "merged": merged,
+        "manual_size": manual_size,
+        "auto_size": auto_size,
+        "increment_enabled": increment_enabled,
+        "visible": visible,
+        "enabled": enabled,
+    }
+
+
+def via_field_hint_sentences(
+    topology: str,
+    shape: str,
+    direction_mode: str,
+    size_mode: str,
+) -> Tuple[str, ...]:
+    """Grey footer: only reasons that apply to the currently visible mode."""
+    states = via_antipad_field_states(topology, shape, direction_mode, size_mode)
+    if not states["merged"]:
+        return ()
+    reasons: List[str] = []
+    if direction_mode == "auto_pn" and shape != "circle":
+        reasons.append("旋转角由 atan2(Ny-Py, Nx-Px) 派生，因此只读。")
+    if states["auto_size"]:
+        reasons.append("长度/宽度由真实孔距、逐层有效孔径和净距派生；原手动值不参与轮廓。")
+    if not states["increment_enabled"]:
+        reasons.append("尺寸增量仅在“自动适配＋用户增量”模式启用。")
+    return tuple(reasons)
+
+
+def via_parameter_help_text(
+    key: str,
+    *,
+    topology: str = "independent",
+    shape: str = "circle",
+    direction_mode: str = "auto_pn",
+    size_mode: str = "manual",
+) -> str:
+    """Blue help: only the focused field in the current topology/shape."""
+    states = via_antipad_field_states(topology, shape, direction_mode, size_mode)
+    merged = states["merged"]
+    auto_size = states["auto_size"]
+    if key == "shape":
+        if shape == "circle":
+            if merged:
+                return "决定实际减铜轮廓。合并开窗时 P/N 共用一个圆形，直径为端到端尺寸。"
+            return "决定实际减铜轮廓。独立开窗时 P、N 各生成一个圆形，请填写直径。"
+        shape_name = VIA_SHAPE_LABELS.get(shape, shape)
+        if merged:
+            return f"决定实际减铜轮廓。{shape_name}使用局部 X 方向端到端长度和局部 Y 方向总宽度。"
+        return (
+            f"决定实际减铜轮廓。独立开窗时 P、N 各生成一个{shape_name}，"
+            "使用局部 X 方向端到端长度和局部 Y 方向总宽度。"
+        )
+    if key == "diameter":
+        if merged and auto_size:
+            return "圆形开窗的端到端直径。自动适配时由孔包络和净距派生，输入框只读。"
+        if merged:
+            return "圆形开窗的端到端直径。合并开窗时 P/N 共用一个圆。"
+        return "圆形开窗的端到端直径。独立开窗时 P、N 各一个圆，请填写该直径。"
+    if key == "length":
+        if auto_size:
+            return "非圆形轮廓沿局部 X 轴的端到端总长度，不是相对焊盘的单边外扩。自动适配时显示图中有效值。"
+        return "非圆形轮廓沿局部 X 轴的端到端总长度，不是相对焊盘的单边外扩。"
+    if key == "width":
+        if auto_size:
+            return "非圆形轮廓沿局部 Y 轴的端到端总宽度。自动适配时显示图中有效值。"
+        return "非圆形轮廓沿局部 Y 轴的端到端总宽度。"
+    if key == "clearance":
+        if auto_size:
+            return (
+                "钻孔/背钻铜边最小净距。"
+                "合并自动适配用端部/侧向净距增大开窗；本项是制造预检，不单独撑大开窗。"
+            )
+        return (
+            "钻孔/背钻铜边最小净距。"
+            "独立开窗或完全手动时只做制造预检，不增大开窗尺寸。"
+        )
+    if key == "rotation_deg":
+        if merged and direction_mode == "auto_pn":
+            return "局部 X 轴相对全局 +X 的逆时针角度。自动沿 P/N 轴时由孔位计算，手工输入不参与几何。"
+        return "局部 X 轴相对全局 +X 的逆时针角度。"
+    return VIA_PARAMETER_HELP.get(key, "该参数会进入当前层的有效反焊盘配置。")
 
 
 def effective_expansion(layer: Mapping[str, Any], global_expansion: float) -> Optional[float]:
@@ -1796,7 +1927,7 @@ class AntipadWorkbench:
             self.via_box, 9, "逆时针旋转角（派生/输入）", "via_transition.padstack.antipad.rotation_deg",
             numeric=True, unit="°")
         self.via_clearance = self.app._add(
-            self.via_box, 10, "最小反焊盘净距", "via_transition.padstack.antipad.clearance", length=True)
+            self.via_box, 10, "最小铜边净距（钻孔/背钻）", "via_transition.padstack.antipad.clearance", length=True)
         self.via_end_clearance = self.app._add(
             self.via_box, 11, "端部净距", "via_transition.padstack.antipad.end_clearance", length=True)
         self.via_side_clearance = self.app._add(
@@ -1810,8 +1941,16 @@ class AntipadWorkbench:
         self.via_direction.bind("<<ComboboxSelected>>", lambda _event: self._update_via_field_states())
         self.via_size_mode.bind("<<ComboboxSelected>>", lambda _event: self._update_via_field_states())
         self.via_field_hint = tk.StringVar(value="")
-        ttk.Label(self.via_box, textvariable=self.via_field_hint, foreground="#475569",
-                  wraplength=430, justify="left").grid(row=15, column=0, columnspan=3, sticky="w", pady=3)
+        self.via_field_hint_label = ttk.Label(
+            self.via_box, textvariable=self.via_field_hint, foreground="#475569",
+            wraplength=430, justify="left")
+        self.via_field_hint_label.grid(row=15, column=0, columnspan=3, sticky="w", pady=3)
+        self._via_box_row_slaves: Dict[int, List[tk.Widget]] = {
+            row: list(self.via_box.grid_slaves(row=row))
+            for row in VIA_GLOBAL_FIELD_ROWS.values()
+        }
+        self._via_help_key = "topology"
+        self._via_help_scope = "全局设置"
         help_box = ttk.LabelFrame(self.via_box, text="参数说明 · 聚焦输入框后同步到参考图", padding=5)
         help_box.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(3, 5))
         self.via_help_var = tk.StringVar(value=VIA_PARAMETER_HELP["topology"])
@@ -1931,6 +2070,7 @@ class AntipadWorkbench:
         self.via_layer_size_mode = ttk.Combobox(
             self.layer_box, textvariable=self.via_layer_size_mode_var,
             values=tuple(VIA_SIZE_MODE_LABELS.values()), state="readonly", width=24)
+        self.via_layer_enum_labels: Dict[str, tk.Widget] = {}
         for row, (text, widget, key) in enumerate((
             ("本层拓扑", self.via_layer_topology, "topology"),
             ("本层形状", self.via_layer_shape, "shape"),
@@ -1945,6 +2085,7 @@ class AntipadWorkbench:
                 lambda _event, field=key: self._layer_control_changed(field),
             )
             self._bind_via_help(widget, key, scope="本层覆盖")
+            self.via_layer_enum_labels[key] = label
             self.via_layer_only_widgets.extend((label, widget))
         self.via_layer_vars = {key: tk.StringVar() for key in
                                ("diameter", "length", "width", "corner_radius", "rotation_deg", "clearance",
@@ -1954,7 +2095,7 @@ class AntipadWorkbench:
         for row, (key, label) in enumerate((
             ("diameter", "本层直径"), ("length", "本层长度"), ("width", "本层宽度"),
             ("corner_radius", "本层圆角"), ("rotation_deg", "本层角度 °"),
-            ("clearance", "本层最小净距"), ("end_clearance", "本层端部净距"),
+            ("clearance", "本层最小铜边净距"), ("end_clearance", "本层端部净距"),
             ("side_clearance", "本层侧向净距"), ("length_increment", "本层长度增量"),
             ("width_increment", "本层宽度增量")), 9):
             field_label = ttk.Label(self.layer_box, text=label)
@@ -2167,8 +2308,31 @@ class AntipadWorkbench:
     def _via_backend_label(value: str, labels: Mapping[str, str]) -> str:
         return next((backend for backend, display in labels.items() if display == value), value)
 
+    def _via_help_context(self, scope: str) -> Dict[str, str]:
+        """Read topology/shape from the same pane the focused widget belongs to."""
+        if scope.startswith("本层") and hasattr(self, "via_layer_topology_var"):
+            return {
+                "topology": self._via_backend_label(
+                    self.via_layer_topology_var.get(), VIA_TOPOLOGY_LABELS),
+                "shape": self._via_backend_label(
+                    self.via_layer_shape_var.get(), VIA_SHAPE_LABELS),
+                "direction_mode": self._via_backend_label(
+                    self.via_layer_direction_var.get(), VIA_DIRECTION_LABELS),
+                "size_mode": self._via_backend_label(
+                    self.via_layer_size_mode_var.get(), VIA_SIZE_MODE_LABELS),
+            }
+        return {
+            "topology": self.app._backend_value("via_transition.padstack.antipad.topology"),
+            "shape": self.app._backend_value("via_transition.padstack.antipad.shape"),
+            "direction_mode": self.app._backend_value(
+                "via_transition.padstack.antipad.direction_mode"),
+            "size_mode": self.app._backend_value("via_transition.padstack.antipad.size_mode"),
+        }
+
     def _show_via_help(self, key: str, scope: str = "全局设置") -> None:
-        explanation = VIA_PARAMETER_HELP.get(key, "该参数会进入当前层的有效反焊盘配置。")
+        self._via_help_key = key
+        self._via_help_scope = scope
+        explanation = via_parameter_help_text(key, **self._via_help_context(scope))
         self.via_help_var.set(f"{scope}｜{explanation}")
         if scope.startswith("本层") and hasattr(self, "layer_help_var"):
             self.layer_help_var.set("提示：" + explanation)
@@ -2267,6 +2431,23 @@ class AntipadWorkbench:
         except tk.TclError:
             pass
 
+    def _apply_via_layer_enum_visibility(self, states: Mapping[str, Any]) -> None:
+        """Show/hide current-layer direction/size-control aliases with the same helper."""
+        if not hasattr(self, "via_layer_enum_labels"):
+            return
+        for key, widget in (
+            ("direction_mode", self.via_layer_direction),
+            ("size_mode", self.via_layer_size_mode),
+        ):
+            row_visible = bool(states["visible"][key])
+            (widget.grid if row_visible else widget.grid_remove)()
+            (self.via_layer_enum_labels[key].grid if row_visible
+             else self.via_layer_enum_labels[key].grid_remove)()
+
+    def _set_via_box_row_visible(self, row: int, visible: bool) -> None:
+        for slave in self._via_box_row_slaves.get(row, ()):
+            (slave.grid if visible else slave.grid_remove)()
+
     def _update_via_field_states(self) -> None:
         if not self._via_mode:
             return
@@ -2274,49 +2455,43 @@ class AntipadWorkbench:
         topology = self.app._backend_value("via_transition.padstack.antipad.topology")
         direction = self.app._backend_value("via_transition.padstack.antipad.direction_mode")
         size_mode = self.app._backend_value("via_transition.padstack.antipad.size_mode")
-        merged = topology == "merged_pair"
-        manual_size = size_mode == "manual" or not merged
-        enabled = {
-            "diameter": shape == "circle" and manual_size,
-            "length": shape != "circle" and manual_size,
-            "width": shape != "circle" and manual_size,
-            "corner": shape == "rounded_rectangle",
-            "rotation": shape != "circle" and (not merged or direction == "manual"),
+        states = via_antipad_field_states(topology, shape, direction, size_mode)
+        visible = states["visible"]
+        enabled = states["enabled"]
+        auto_size = states["auto_size"]
+        widgets = {
+            "diameter": self.via_diameter, "length": self.via_length,
+            "width": self.via_width, "corner_radius": self.via_corner,
+            "rotation_deg": self.via_rotation,
+            "direction_mode": self.via_direction, "size_mode": self.via_size_mode,
+            "end_clearance": self.via_end_clearance, "side_clearance": self.via_side_clearance,
+            "length_increment": self.via_length_increment,
+            "width_increment": self.via_width_increment,
         }
-        for key, widget in (("diameter", self.via_diameter), ("length", self.via_length),
-                            ("width", self.via_width), ("corner", self.via_corner),
-                            ("rotation", self.via_rotation)):
-            widget.configure(state="normal" if enabled[key] else "disabled")
-        self.via_direction.configure(state="readonly" if merged else "disabled")
-        self.via_size_mode.configure(state="readonly" if merged else "disabled")
-        auto_size = merged and size_mode in {"auto_fit", "auto_plus_increment"}
-        for widget in (self.via_end_clearance, self.via_side_clearance):
-            widget.configure(state="normal" if auto_size else "disabled")
-        increment_enabled = merged and size_mode == "auto_plus_increment"
-        for widget in (self.via_length_increment, self.via_width_increment):
-            widget.configure(state="normal" if increment_enabled else "disabled")
-        # Shape-inapplicable fields are hidden, not left as grey stale numbers.
-        for row, applicable in (
-            (5, shape == "circle" and manual_size),
-            (6, shape != "circle" and manual_size),
-            (7, shape != "circle" and manual_size),
-            (8, shape == "rounded_rectangle"),
-            (9, shape != "circle"),
-            (11, auto_size), (12, auto_size),
-            (13, increment_enabled), (14, increment_enabled),
-        ):
-            for slave in self.via_box.grid_slaves(row=row):
-                (slave.grid if applicable else slave.grid_remove)()
-        reasons = []
-        if not merged:
-            reasons.append("方向/自动尺寸仅作用于 P/N 合并开窗，独立开窗不受影响。")
-        elif direction == "auto_pn":
-            reasons.append("旋转角由 atan2(Ny-Py, Nx-Px) 派生，因此只读。")
-        if auto_size:
-            reasons.append("长度/宽度由真实孔距、逐层有效孔径和净距派生；原手动值不参与轮廓。")
-        if size_mode != "auto_plus_increment":
-            reasons.append("尺寸增量仅在“自动适配＋用户增量”模式启用。")
-        self.via_field_hint.set(" ".join(reasons))
+        for key, widget in widgets.items():
+            if key in {"direction_mode", "size_mode"}:
+                widget.configure(state="readonly" if enabled[key] else "disabled")
+            else:
+                widget.configure(state="normal" if enabled[key] else "disabled")
+        for key, row in VIA_GLOBAL_FIELD_ROWS.items():
+            self._set_via_box_row_visible(row, visible[key])
+        if getattr(self, "layer_source_var", None) is not None and self.layer_source_var.get() == "override":
+            layer_states = via_antipad_field_states(
+                self._via_backend_label(self.via_layer_topology_var.get(), VIA_TOPOLOGY_LABELS),
+                self._via_backend_label(self.via_layer_shape_var.get(), VIA_SHAPE_LABELS),
+                self._via_backend_label(self.via_layer_direction_var.get(), VIA_DIRECTION_LABELS),
+                self._via_backend_label(self.via_layer_size_mode_var.get(), VIA_SIZE_MODE_LABELS),
+            )
+        else:
+            layer_states = states
+        self._apply_via_layer_enum_visibility(layer_states)
+        hint = " ".join(via_field_hint_sentences(topology, shape, direction, size_mode))
+        self.via_field_hint.set(hint)
+        (self.via_field_hint_label.grid if hint else self.via_field_hint_label.grid_remove)()
+        if self._via_help_key:
+            explanation = via_parameter_help_text(
+                self._via_help_key, **self._via_help_context(self._via_help_scope))
+            self.via_help_var.set(f"{self._via_help_scope}｜{explanation}")
         blocked = [item for item in getattr(self.validation, "items", [])
                    if getattr(item, "rule_id", "") in {"VIA-TRN-090", "VIA-TRN-092"}]
         if blocked:
@@ -2324,7 +2499,7 @@ class AntipadWorkbench:
             self.via_scan_status_label.configure(foreground="#b42318")
         elif auto_size:
             axes = "端部净距 / 侧向净距"
-            if size_mode == "auto_plus_increment":
+            if states["increment_enabled"]:
                 axes += " / 长度增量 / 宽度增量"
             self.via_scan_status.set(f"原生 Optimetrics 轴：{axes}；每个 Variation 都执行真实轮廓包含性预检。")
             self.via_scan_status_label.configure(foreground="#0f766e")
@@ -2347,17 +2522,19 @@ class AntipadWorkbench:
             return
         try:
             anti = self.app._collect()["via_transition"]["padstack"]["antipad"]
+            topology = str(anti.get("topology", "independent"))
             size_mode = str(anti.get("size_mode", "manual"))
             direction_mode = str(anti.get("direction_mode", "auto_pn"))
-            if size_mode in {"auto_fit", "auto_plus_increment"}:
+            states = via_antipad_field_states(topology, shape, direction_mode, size_mode)
+            if states["auto_size"]:
                 fields = ["end_clearance", "side_clearance"]
-                if size_mode == "auto_plus_increment":
+                if states["increment_enabled"]:
                     fields += ["length_increment", "width_increment"]
             else:
                 fields = ["diameter"] if shape == "circle" else ["length", "width"]
-            if shape == "rounded_rectangle" and size_mode == "manual":
+            if shape == "rounded_rectangle" and states["manual_size"]:
                 fields.append("corner_radius")
-            if shape != "circle" and direction_mode == "manual":
+            if states["enabled"]["rotation_deg"]:
                 fields.append("rotation_deg")
             for field in fields:
                 value = float(anti[field])
@@ -2515,6 +2692,7 @@ class AntipadWorkbench:
             shape = str(effective.get("shape", "circle"))
             direction_mode = str(effective.get("direction_mode", "auto_pn"))
             size_mode = str(effective.get("size_mode", "manual"))
+            states = via_antipad_field_states(topology, shape, direction_mode, size_mode)
             self.via_layer_topology_var.set(VIA_TOPOLOGY_LABELS.get(topology, topology))
             self.via_layer_shape_var.set(VIA_SHAPE_LABELS.get(shape, shape))
             self.via_layer_direction_var.set(VIA_DIRECTION_LABELS.get(direction_mode, direction_mode))
@@ -2558,29 +2736,18 @@ class AntipadWorkbench:
             override_enabled = eligible and source == "per_layer"
             self.via_layer_topology.configure(state="readonly" if override_enabled else "disabled")
             self.via_layer_shape.configure(state="readonly" if override_enabled else "disabled")
-            merged = topology == "merged_pair"
+            merged = states["merged"]
             self.via_layer_direction.configure(
                 state="readonly" if override_enabled and merged else "disabled"
             )
             self.via_layer_size_mode.configure(
                 state="readonly" if override_enabled and merged else "disabled"
             )
-            manual_size = not merged or size_mode == "manual"
-            auto_size = merged and size_mode in {"auto_fit", "auto_plus_increment"}
-            applicable = {
-                "diameter": shape == "circle" and manual_size,
-                "length": shape != "circle" and manual_size,
-                "width": shape != "circle" and manual_size,
-                "corner_radius": shape == "rounded_rectangle",
-                "rotation_deg": shape != "circle" and (not merged or direction_mode == "manual"),
-                "clearance": True,
-                "end_clearance": auto_size,
-                "side_clearance": auto_size,
-                "length_increment": merged and size_mode == "auto_plus_increment",
-                "width_increment": merged and size_mode == "auto_plus_increment",
-            }
+            self._apply_via_layer_enum_visibility(states)
+            applicable = states["visible"]
+            enabled = states["enabled"]
             for key, widget in self.via_layer_widgets.items():
-                widget.configure(state="normal" if override_enabled and applicable[key] else "disabled")
+                widget.configure(state="normal" if override_enabled and enabled[key] else "disabled")
                 visible = bool(applicable[key])
                 (widget.grid if visible else widget.grid_remove)()
                 label_widget = self.via_layer_field_labels[key]
