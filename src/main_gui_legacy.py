@@ -18,7 +18,7 @@ from config_manager import (
     MM_PER_MIL, PACKAGE_PRESETS,
     SUPPORTED_AEDT_VERSIONS, apply_package_preset,
     convert_length, derive_capacitor_values, format_length, format_number,
-    format_validation_report, via_trace_center_pitch,
+    format_validation_report, is_side_pair_count2, via_trace_center_pitch,
 )
 from build_info import about_message
 from capacitor_editor import (
@@ -1470,19 +1470,58 @@ class SurfaceCapAntipadApp(tk.Tk):
             finally:
                 self._ui_sync = previous
 
+    def _return_via_offset_y_is_derived(self) -> bool:
+        """Y 向偏移 is derived only for default 两侧成对 with count=2."""
+        try:
+            rv = {
+                "pattern": self._backend_value("via_transition.return_vias.pattern"),
+                "count": int(float(self.variables["via_transition.return_vias.count"].get())),
+            }
+        except (TypeError, ValueError, tk.TclError, KeyError):
+            return False
+        return is_side_pair_count2(rv)
+
+    def _configure_return_offset_y_widget(self, derived: bool) -> None:
+        """Restore the pre-#12 editable Y Entry unless side_pair count=2."""
+        path = "via_transition.return_vias.offset_y"
+        widget = self.widgets.get(path)
+        formula = "= 孔间距/2 + 相对信号孔中心距" if derived else ""
+        label = self.formula_labels.get(path)
+        if isinstance(widget, tk.Entry):
+            widget.unbind("<Key>")
+            if derived:
+                widget.configure(
+                    state="readonly",
+                    readonlybackground="#eef2f7",
+                    insertwidth=0,
+                    takefocus=0,
+                )
+                widget.bind("<Key>", lambda event: "break")
+            else:
+                widget.configure(state="normal", insertwidth=1, takefocus=1)
+        elif isinstance(widget, ttk.Entry):
+            widget.configure(
+                state="readonly" if derived else "normal",
+                style="Derived.TEntry" if derived else "TEntry",
+            )
+        if label is not None:
+            label.configure(text=formula)
+            try:
+                if derived:
+                    label.grid()
+                else:
+                    label.grid_remove()
+            except tk.TclError:
+                pass
+
     def _sync_return_via_offset_y(self) -> None:
-        """Y 向偏移 = 孔间距/2 + 相对信号孔中心距（side_pair count=2）。"""
+        """Y 向偏移 = 孔间距/2 + 相对信号孔中心距（side_pair count=2 only）。"""
         path = "via_transition.return_vias.offset_y"
         if path not in self.variables:
             return
-        formula = "= 孔间距/2 + 相对信号孔中心距"
-        self._set_derived_state(path, True, formula)
-        try:
-            pattern = self._backend_value("via_transition.return_vias.pattern")
-            count = int(float(self.variables["via_transition.return_vias.count"].get()))
-        except (TypeError, ValueError, tk.TclError, KeyError):
-            return
-        if pattern != "side_pair" or count != 2:
+        derived = self._return_via_offset_y_is_derived()
+        self._configure_return_offset_y_widget(derived)
+        if not derived:
             return
         cts_path = "via_transition.return_vias.center_to_signal"
         if cts_path not in self.variables:
