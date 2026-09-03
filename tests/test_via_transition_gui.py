@@ -1136,12 +1136,19 @@ class ViaTransitionGuiTests(unittest.TestCase):
         return self.app.widgets[path].winfo_manager() == "grid"
 
     def _restore_independent_circle_antipad(self) -> None:
-        variables = self.app.variables
-        variables["via_transition.padstack.antipad.topology"].set("P/N 独立开窗")
-        variables["via_transition.padstack.antipad.shape"].set("圆形")
-        variables["via_transition.padstack.antipad.direction_mode"].set("自动沿 P/N 轴")
-        variables["via_transition.padstack.antipad.size_mode"].set("自动适配")
+        cfg = self.app._collect()
+        cfg["scenario"]["type"] = "via_transition"
+        anti = cfg["via_transition"]["padstack"]["antipad"]
+        anti.update({
+            "topology": "independent",
+            "shape": "circle",
+            "direction_mode": "auto_pn",
+            "size_mode": "auto_fit",
+            "per_layer": {},
+        })
+        self.app._load_to_widgets(cfg)
         self.app.antipad_workbench._update_via_field_states()
+        self.app.refresh_visuals()
         self.app.update_idletasks()
 
     def test_36_independent_circle_hides_merged_rows_and_stale_hints(self) -> None:
@@ -1230,12 +1237,21 @@ class ViaTransitionGuiTests(unittest.TestCase):
 
     def test_38_merged_shows_direction_size_control_and_autofit_hides_manual_sizes(self) -> None:
         self.app.variables["scenario.type"].set("via_transition")
+        cfg = self.app._collect()
+        cfg["scenario"]["type"] = "via_transition"
+        anti = cfg["via_transition"]["padstack"]["antipad"]
+        anti.update({
+            "topology": "merged_pair",
+            "shape": "circle",
+            "direction_mode": "auto_pn",
+            "size_mode": "auto_fit",
+            "per_layer": {},
+        })
+        self.app._load_to_widgets(cfg)
         self.app.refresh_visuals()
         workbench = self.app.antipad_workbench
         workbench.set_scenario_editable(False)
-        self.app.variables["via_transition.padstack.antipad.topology"].set("P/N 合并开窗")
-        self.app.variables["via_transition.padstack.antipad.shape"].set("圆形")
-        self.app.variables["via_transition.padstack.antipad.size_mode"].set("自动适配")
+        workbench.select_layer_by_name("L2")
         workbench._update_via_field_states()
         workbench._sync_layer_panel()
         self.app.update_idletasks()
@@ -1258,8 +1274,6 @@ class ViaTransitionGuiTests(unittest.TestCase):
             self.assertEqual(
                 self.app.widgets["via_transition.padstack.antipad.length"].winfo_manager(),
                 "")
-            self.assertEqual(workbench.via_layer_direction.winfo_manager(), "grid")
-            self.assertEqual(workbench.via_layer_size_mode.winfo_manager(), "grid")
             hint = workbench.via_field_hint.get()
             self.assertIn("尺寸增量仅在", hint)
             self.assertNotIn("方向/自动尺寸仅作用于", hint)

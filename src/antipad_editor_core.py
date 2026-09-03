@@ -2431,6 +2431,19 @@ class AntipadWorkbench:
         except tk.TclError:
             pass
 
+    def _apply_via_layer_enum_visibility(self, states: Mapping[str, Any]) -> None:
+        """Show/hide current-layer direction/size-control aliases with the same helper."""
+        if not hasattr(self, "via_layer_enum_labels"):
+            return
+        for key, widget in (
+            ("direction_mode", self.via_layer_direction),
+            ("size_mode", self.via_layer_size_mode),
+        ):
+            row_visible = bool(states["visible"][key])
+            (widget.grid if row_visible else widget.grid_remove)()
+            (self.via_layer_enum_labels[key].grid if row_visible
+             else self.via_layer_enum_labels[key].grid_remove)()
+
     def _set_via_box_row_visible(self, row: int, visible: bool) -> None:
         for slave in self._via_box_row_slaves.get(row, ()):
             (slave.grid if visible else slave.grid_remove)()
@@ -2462,6 +2475,16 @@ class AntipadWorkbench:
                 widget.configure(state="normal" if enabled[key] else "disabled")
         for key, row in VIA_GLOBAL_FIELD_ROWS.items():
             self._set_via_box_row_visible(row, visible[key])
+        if getattr(self, "layer_source_var", None) is not None and self.layer_source_var.get() == "override":
+            layer_states = via_antipad_field_states(
+                self._via_backend_label(self.via_layer_topology_var.get(), VIA_TOPOLOGY_LABELS),
+                self._via_backend_label(self.via_layer_shape_var.get(), VIA_SHAPE_LABELS),
+                self._via_backend_label(self.via_layer_direction_var.get(), VIA_DIRECTION_LABELS),
+                self._via_backend_label(self.via_layer_size_mode_var.get(), VIA_SIZE_MODE_LABELS),
+            )
+        else:
+            layer_states = states
+        self._apply_via_layer_enum_visibility(layer_states)
         hint = " ".join(via_field_hint_sentences(topology, shape, direction, size_mode))
         self.via_field_hint.set(hint)
         (self.via_field_hint_label.grid if hint else self.via_field_hint_label.grid_remove)()
@@ -2720,12 +2743,7 @@ class AntipadWorkbench:
             self.via_layer_size_mode.configure(
                 state="readonly" if override_enabled and merged else "disabled"
             )
-            for key in ("direction_mode", "size_mode"):
-                row_visible = bool(states["visible"][key])
-                widget = self.via_layer_direction if key == "direction_mode" else self.via_layer_size_mode
-                (widget.grid if row_visible else widget.grid_remove)()
-                (self.via_layer_enum_labels[key].grid if row_visible
-                 else self.via_layer_enum_labels[key].grid_remove)()
+            self._apply_via_layer_enum_visibility(states)
             applicable = states["visible"]
             enabled = states["enabled"]
             for key, widget in self.via_layer_widgets.items():
