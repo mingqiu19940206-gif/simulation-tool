@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from antipad_editor_core import (
     VIA_PARAMETER_HELP,
+    VIA_SIZE_CLUSTER_KEYS,
     via_antipad_field_states,
     via_field_hint_sentences,
     via_parameter_help_text,
@@ -63,8 +64,11 @@ class ViaAntipadFieldStateTests(unittest.TestCase):
         self.assertFalse(states["auto_size"])
         self.assertEqual(
             _visible_keys(states),
-            {"topology", "shape", "diameter", "clearance"},
+            {"topology", "shape", "diameter"},
         )
+        self.assertNotIn("clearance", VIA_SIZE_CLUSTER_KEYS)
+        self.assertFalse(states["visible"]["clearance"])
+        self.assertTrue(states["enabled"]["clearance"])
         hint = " ".join(via_field_hint_sentences(
             "independent", "circle", "auto_pn", "auto_fit"))
         self.assertEqual(hint, "")
@@ -81,6 +85,7 @@ class ViaAntipadFieldStateTests(unittest.TestCase):
         self.assertNotIn("direction_mode", visible)
         self.assertNotIn("size_mode", visible)
         self.assertNotIn("end_clearance", visible)
+        self.assertNotIn("clearance", visible)
         self.assertTrue(states["manual_size"])
 
     def test_c_merged_auto_fit_shows_direction_size_and_end_side(self) -> None:
@@ -91,6 +96,7 @@ class ViaAntipadFieldStateTests(unittest.TestCase):
         self.assertIn("size_mode", visible)
         self.assertIn("end_clearance", visible)
         self.assertIn("side_clearance", visible)
+        self.assertNotIn("clearance", visible)
         self.assertNotIn("diameter", visible)
         self.assertNotIn("length", visible)
         self.assertTrue(states["enabled"]["direction_mode"])
@@ -192,7 +198,20 @@ class ViaAntipadFieldStateTests(unittest.TestCase):
         anti = ConfigManager(ROOT).default()["via_transition"]["padstack"]["antipad"]
         self.assertEqual(anti["size_mode"], "auto_fit")
         self.assertIn("clearance", anti)
+        self.assertAlmostEqual(float(anti["clearance"]), 0.1)
         self.assertNotIn("min_copper_clearance", anti)
+
+    def test_merged_manual_and_autofit_keep_clearance_out_of_size_cluster(self) -> None:
+        manual = via_antipad_field_states(
+            "merged_pair", "circle", "auto_pn", "manual")
+        self.assertTrue(manual["manual_size"])
+        self.assertFalse(manual["visible"]["clearance"])
+        self.assertTrue(manual["enabled"]["clearance"])
+        auto = via_antipad_field_states(
+            "merged_pair", "circle", "auto_pn", "auto_fit")
+        self.assertTrue(auto["visible"]["end_clearance"])
+        self.assertTrue(auto["visible"]["side_clearance"])
+        self.assertFalse(auto["visible"]["clearance"])
 
 
 if __name__ == "__main__":

@@ -176,11 +176,22 @@ class CapacitorEditorGuiTests(unittest.TestCase):
         self.assertEqual(str(self.app.widgets["capacitor.bridge_length"].cget("state")), "normal")
 
     def test_preset_application_and_modified_feedback(self) -> None:
-        self._set_enum("capacitor.package", "0201")
+        self.assertEqual(self.app._backend_value("capacitor.package"), "0402")
+        self.app.package_preset_var.set(ENUM_LABELS["capacitor.package"]["0201"])
         before = self.app.variables["capacitor.body_length"].get()
+        before_pad = self.app.variables["capacitor.pad_length"].get()
         self.app._package_changed()
+        self.assertEqual(self.app._backend_value("capacitor.package"), "0402")
+        self.assertEqual(self.app._collect()["capacitor"]["package"], "0402")
         self.assertEqual(self.app.variables["capacitor.body_length"].get(), before)
+        self.assertEqual(self.app.variables["capacitor.pad_length"].get(), before_pad)
+        self.assertEqual(
+            self.app.package_state_var.get(),
+            "封装名已选 0201，焊盘/本体仍是 0402，点应用才进仿真",
+        )
         self.app._apply_selected_preset()
+        self.assertEqual(self.app._backend_value("capacitor.package"), "0201")
+        self.assertEqual(self.app._collect()["capacitor"]["package"], "0201")
         self.assertEqual(
             self.app.variables["capacitor.body_length"].get(),
             format_length(0.6, self.app.display_unit),
@@ -284,6 +295,8 @@ class CapacitorEditorGuiTests(unittest.TestCase):
         self.assertGreater(canvas._zoom, original_zoom)
         canvas.reset_view()
         self.assertEqual(canvas._zoom, 1.0)
+        self.app.cap_dimension_categories["body"].set(False)
+        self.app._update_capacitor_dimension_filters()
         body_overlays_before = [
             item for item, path in canvas._dimension_paths.items()
             if path == "capacitor.body_length" and "dimension-value" not in canvas.gettags(item)
@@ -306,6 +319,74 @@ class CapacitorEditorGuiTests(unittest.TestCase):
         self.app.update_idletasks()
         self.assertEqual(self.app.notebook.select(), str(self.app.tabs["电容与模型"]))
         self.assertIn("capacitor.pad_gap", self.app.status.get())
+
+    @staticmethod
+    def _ancestors(widget: tk.Misc) -> list[tk.Misc]:
+        chain: list[tk.Misc] = []
+        owner: tk.Misc | None = widget
+        while owner is not None:
+            chain.append(owner)
+            owner = getattr(owner, "master", None)
+        return chain
+
+    def test_non_geometry_switches_are_off_the_main_path(self) -> None:
+        self.app.notebook.select(self.app.tabs["电容与模型"])
+        self.app.update_idletasks()
+        self.assertEqual(self.app.widgets["capacitor.symmetric_about_y"].winfo_manager(), "")
+        self.assertEqual(self.app.widgets["trace.transition_direction"].winfo_manager(), "")
+        outline = self.app.widgets["capacitor.show_body_outline_in_preview"]
+        create_body = self.app.widgets["capacitor.create_body_in_hfss"]
+        self.assertEqual(str(outline.cget("text")), "本体")
+        self.assertIs(
+            outline, self.app.widgets["capacitor.show_body_outline_in_preview"])
+        self.assertNotIn(self.app.cap_hfss_box, self._ancestors(outline))
+        self.assertIn(self.app.cap_dimension_toolbar, self._ancestors(outline))
+        self.assertIn(self.app.cap_hfss_box, self._ancestors(create_body))
+        self.assertEqual(self.app.cap_hfss_outline_label.winfo_manager(), "")
+        self.assertEqual(self.app.cap_hfss_outline_checkbox.winfo_manager(), "")
+        self.assertIn(self.app.cap_hfss_box, self._ancestors(self.app.cap_hfss_outline_label))
+        hfss_mapped_texts = []
+        hfss_hidden_texts = []
+        for child in self.app.cap_hfss_box.winfo_children():
+            try:
+                text = str(child.cget("text"))
+            except tk.TclError:
+                continue
+            if not text:
+                continue
+            (hfss_mapped_texts if child.winfo_manager() else hfss_hidden_texts).append(text)
+        self.assertIn("预览中显示本体轮廓", hfss_hidden_texts)
+        self.assertNotIn("预览中显示本体轮廓", hfss_mapped_texts)
+        self.assertIn("在 HFSS 中创建电容本体", hfss_mapped_texts)
+        visible_body = []
+        def walk(widget: tk.Misc) -> None:
+            for child in widget.winfo_children():
+                try:
+                    if str(child.cget("text")) == "本体" and child.winfo_manager():
+                        visible_body.append(child)
+                except tk.TclError:
+                    pass
+                walk(child)
+        walk(self.app)
+        self.assertEqual(len(visible_body), 1)
+        self.assertIs(visible_body[0], outline)
+        collected = self.app._collect()
+        self.assertIn("symmetric_about_y", collected["capacitor"])
+        self.assertIn("transition_direction", collected["trace"])
+        self.assertIn("show_body_outline_in_preview", collected["capacitor"])
+        self.assertIn("create_body_in_hfss", collected["capacitor"])
+
+    def test_old_json_still_loads_hidden_capacitor_fields(self) -> None:
+        loaded, _ = ConfigManager(ROOT).load(ROOT / "examples" / "v1_legacy.json")
+        self.app._load_to_widgets(loaded)
+        collected = self.app._collect()
+        self.assertTrue(collected["capacitor"]["symmetric_about_y"])
+        self.assertEqual(collected["trace"]["transition_direction"], "auto")
+        self.assertTrue(collected["capacitor"]["show_body_outline_in_preview"])
+        self.assertEqual(collected["capacitor"]["package"], "0402")
+        self.assertEqual(self.app._backend_value("capacitor.package"), "0402")
+        self.assertEqual(
+            self.app._preset_picker_backend(), "0402")
 
 
 if __name__ == "__main__":

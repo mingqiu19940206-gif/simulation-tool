@@ -276,7 +276,7 @@ class MainWindowCopyTests(unittest.TestCase):
         self.assertNotIn("下方", layer)
         self.assertIn("输入/输出", layer)
         self.assertNotIn("entry/exit", layer)
-        self.assertEqual(fanout, "两侧走线中心距均等于孔间距时，扇出三项自动停用。")
+        self.assertEqual(fanout, "两侧走线中心距均等于孔间距时，扇出参数自动停用。")
         self.assertIn("与输入/输出层无关", stub)
         self.assertNotIn("entry/exit", stub)
 
@@ -404,7 +404,7 @@ class MainWindowCopyTests(unittest.TestCase):
         self.assertGreater(wrap, 120)
 
     def test_fanout_formula_matches_one_line_hint(self) -> None:
-        expected = "两侧走线中心距均等于孔间距时，扇出三项自动停用。"
+        expected = "两侧走线中心距均等于孔间距时，扇出参数自动停用。"
         self.assertEqual(str(self.app.via_fanout_hint.cget("text")), expected)
         self.assertEqual(
             str(self.app.formula_labels["via_transition.fanout.style"].cget("text")),

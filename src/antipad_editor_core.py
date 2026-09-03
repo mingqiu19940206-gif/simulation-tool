@@ -118,12 +118,16 @@ MODE_DETAILS = {
 
 # Global VIA antipad rows that hide/show with topology/shape/size mode.
 # Help sits on row 4 between size_mode and diameter.
+# Clearance is not in this map: it lives in the separate 制造预检 group.
 VIA_GLOBAL_FIELD_ROWS = {
     "direction_mode": 2, "size_mode": 3,
     "diameter": 5, "length": 6, "width": 7,
     "corner_radius": 8, "rotation_deg": 9,
     "end_clearance": 11, "side_clearance": 12,
     "length_increment": 13, "width_increment": 14,
+}
+VIA_SIZE_CLUSTER_KEYS = frozenset(VIA_GLOBAL_FIELD_ROWS) - {
+    "direction_mode", "size_mode",
 }
 _VIA_AUTO_SIZE_MODES = frozenset({"auto_fit", "auto_plus_increment"})
 
@@ -139,6 +143,8 @@ def via_antipad_field_states(
     Independent openings are always manual (``manual_size = size_mode==manual
     or not merged``). JSON may still store ``size_mode=auto_fit``; the UI must
     not present direction/size-control as if they were in effect.
+    ``clearance`` is never part of the opening-size cluster (it does not grow
+    the window). The GUI hosts it on a separate 制造预检 row.
     Layer aliases reuse this helper so they cannot drift from the global box.
     """
     merged = topology == "merged_pair"
@@ -155,13 +161,14 @@ def via_antipad_field_states(
         "width": shape != "circle" and manual_size,
         "corner_radius": shape == "rounded_rectangle",
         "rotation_deg": shape != "circle",
-        "clearance": True,
+        "clearance": False,
         "end_clearance": auto_size,
         "side_clearance": auto_size,
         "length_increment": increment_enabled,
         "width_increment": increment_enabled,
     }
     enabled = dict(visible)
+    enabled["clearance"] = True
     enabled["rotation_deg"] = shape != "circle" and (not merged or direction_mode == "manual")
     return {
         "merged": merged,
@@ -1931,8 +1938,6 @@ class AntipadWorkbench:
         self.via_rotation = self.app._add(
             self.via_box, 9, "逆时针旋转角（派生/输入）", "via_transition.padstack.antipad.rotation_deg",
             numeric=True, unit="°")
-        self.via_clearance = self.app._add(
-            self.via_box, 10, "最小铜边净距（钻孔/背钻）", "via_transition.padstack.antipad.clearance", length=True)
         self.via_end_clearance = self.app._add(
             self.via_box, 11, "端部净距", "via_transition.padstack.antipad.end_clearance", length=True)
         self.via_side_clearance = self.app._add(
@@ -1941,6 +1946,12 @@ class AntipadWorkbench:
             self.via_box, 13, "自动适配长度增量", "via_transition.padstack.antipad.length_increment", length=True)
         self.via_width_increment = self.app._add(
             self.via_box, 14, "自动适配宽度增量", "via_transition.padstack.antipad.width_increment", length=True)
+        self.via_precheck_box = ttk.LabelFrame(self.via_box, text="制造预检", padding=5)
+        self.via_precheck_box.grid(row=15, column=0, columnspan=3, sticky="ew", pady=(6, 3))
+        self.via_precheck_box.columnconfigure(1, weight=1)
+        self.via_clearance = self.app._add(
+            self.via_precheck_box, 0, "最小铜边净距（钻孔/背钻）",
+            "via_transition.padstack.antipad.clearance", length=True)
         self.via_shape.bind("<<ComboboxSelected>>", lambda _event: self._update_via_field_states())
         self.via_topology.bind("<<ComboboxSelected>>", lambda _event: self._update_via_field_states())
         self.via_direction.bind("<<ComboboxSelected>>", lambda _event: self._update_via_field_states())
@@ -1949,7 +1960,7 @@ class AntipadWorkbench:
         self.via_field_hint_label = ttk.Label(
             self.via_box, textvariable=self.via_field_hint, foreground="#475569",
             wraplength=430, justify="left")
-        self.via_field_hint_label.grid(row=15, column=0, columnspan=3, sticky="w", pady=3)
+        self.via_field_hint_label.grid(row=16, column=0, columnspan=3, sticky="w", pady=3)
         self._via_box_row_slaves: Dict[int, List[tk.Widget]] = {
             row: list(self.via_box.grid_slaves(row=row))
             for row in VIA_GLOBAL_FIELD_ROWS.values()
@@ -1968,14 +1979,14 @@ class AntipadWorkbench:
         self.via_geometry_status_label = ttk.Label(
             self.via_box, textvariable=self.via_geometry_status, foreground="#334155",
             wraplength=430, justify="left")
-        self.via_geometry_status_label.grid(row=16, column=0, columnspan=3, sticky="ew", pady=(3, 8))
+        self.via_geometry_status_label.grid(row=17, column=0, columnspan=3, sticky="ew", pady=(3, 8))
         self.via_scan_status = tk.StringVar(value="circle 直径可进入原生 Optimetrics；拓扑/形状切换属于拓扑轴。")
         self.via_scan_status_label = ttk.Label(
             self.via_box, textvariable=self.via_scan_status, foreground="#0f766e",
             wraplength=430, justify="left")
-        self.via_scan_status_label.grid(row=17, column=0, columnspan=3, sticky="w", pady=4)
+        self.via_scan_status_label.grid(row=18, column=0, columnspan=3, sticky="w", pady=4)
         actions = ttk.Frame(self.via_box)
-        actions.grid(row=18, column=0, columnspan=3, sticky="w")
+        actions.grid(row=19, column=0, columnspan=3, sticky="w")
         ttk.Button(actions, text="将当前尺寸加入参数扫描", command=self._add_via_antipad_sweep).pack(side="left", padx=(0, 4))
         ttk.Button(actions, text="前往扫描/结果", command=self._open_via_sweep).pack(side="left")
 
@@ -2100,7 +2111,7 @@ class AntipadWorkbench:
         for row, (key, label) in enumerate((
             ("diameter", "本层直径"), ("length", "本层长度"), ("width", "本层宽度"),
             ("corner_radius", "本层圆角"), ("rotation_deg", "本层角度 °"),
-            ("clearance", "本层最小铜边净距"), ("end_clearance", "本层端部净距"),
+            ("end_clearance", "本层端部净距"),
             ("side_clearance", "本层侧向净距"), ("length_increment", "本层长度增量"),
             ("width_increment", "本层宽度增量")), 9):
             field_label = ttk.Label(self.layer_box, text=label)
@@ -2112,29 +2123,43 @@ class AntipadWorkbench:
             self.via_layer_vars[key].trace_add("write", lambda *_: self._layer_value_changed())
             self._bind_via_help(widget, key, scope="本层覆盖")
             self.via_layer_only_widgets.extend((field_label, widget))
+        self.via_layer_precheck_label = ttk.Label(
+            self.layer_box, text="制造预检", font=("TkDefaultFont", 9, "bold"))
+        self.via_layer_precheck_label.grid(row=18, column=0, columnspan=3, sticky="w", pady=(8, 2))
+        self.via_layer_only_widgets.append(self.via_layer_precheck_label)
+        clearance_label = ttk.Label(self.layer_box, text="本层最小铜边净距")
+        clearance_label.grid(row=19, column=0, sticky="w")
+        clearance_widget = ttk.Entry(
+            self.layer_box, textvariable=self.via_layer_vars["clearance"], width=14)
+        clearance_widget.grid(row=19, column=1, sticky="ew", padx=5)
+        self.via_layer_widgets["clearance"] = clearance_widget
+        self.via_layer_field_labels["clearance"] = clearance_label
+        self.via_layer_vars["clearance"].trace_add("write", lambda *_: self._layer_value_changed())
+        self._bind_via_help(clearance_widget, "clearance", scope="本层覆盖")
+        self.via_layer_only_widgets.extend((clearance_label, clearance_widget))
         self.layer_unit_note_var = tk.StringVar(
             value=f"本层长度参数按当前显示单位输入：{DEFAULT_DISPLAY_UNIT}"
         )
         self.layer_unit_note = ttk.Label(
             self.layer_box, textvariable=self.layer_unit_note_var, foreground="#475569",
         )
-        self.layer_unit_note.grid(row=19, column=0, columnspan=3, sticky="w", pady=(3, 0))
+        self.layer_unit_note.grid(row=20, column=0, columnspan=3, sticky="w", pady=(3, 0))
         self.via_layer_only_widgets.append(self.layer_unit_note)
         self.layer_help_var = tk.StringVar(value="提示：" + VIA_PARAMETER_HELP["layer_source"])
         self.layer_help_label = ttk.Label(
             self.layer_box, textvariable=self.layer_help_var, foreground="#1d4ed8",
             wraplength=420, justify="left",
         )
-        self.layer_help_label.grid(row=20, column=0, columnspan=3, sticky="ew", pady=(4, 2))
+        self.layer_help_label.grid(row=21, column=0, columnspan=3, sticky="ew", pady=(4, 2))
         self.via_layer_only_widgets.append(self.layer_help_label)
         self.layer_hint_var = tk.StringVar()
         self.layer_hint_label = ttk.Label(
             self.layer_box, textvariable=self.layer_hint_var, foreground="#b42318",
             wraplength=420, justify="left",
         )
-        self.layer_hint_label.grid(row=21, column=0, columnspan=3, sticky="w")
+        self.layer_hint_label.grid(row=22, column=0, columnspan=3, sticky="w")
         self.layer_navigation = ttk.Frame(self.layer_box)
-        self.layer_navigation.grid(row=22, column=0, columnspan=3, sticky="w", pady=(5, 0))
+        self.layer_navigation.grid(row=23, column=0, columnspan=3, sticky="w", pady=(5, 0))
         ttk.Button(
             self.layer_navigation, text="查看全局默认",
             command=lambda: self._scroll_settings_to(self.via_box),
@@ -2749,9 +2774,16 @@ class AntipadWorkbench:
                 state="readonly" if override_enabled and merged else "disabled"
             )
             self._apply_via_layer_enum_visibility(states)
+            if hasattr(self, "via_layer_precheck_label"):
+                self.via_layer_precheck_label.grid()
             applicable = states["visible"]
             enabled = states["enabled"]
             for key, widget in self.via_layer_widgets.items():
+                if key == "clearance":
+                    widget.configure(state="normal" if override_enabled else "disabled")
+                    widget.grid()
+                    self.via_layer_field_labels[key].grid()
+                    continue
                 widget.configure(state="normal" if override_enabled and enabled[key] else "disabled")
                 visible = bool(applicable[key])
                 (widget.grid if visible else widget.grid_remove)()

@@ -46,8 +46,7 @@ VIA_PARAM_NUMBERS: Dict[str, str] = {
     "via_transition.exit_trace.center_to_center": "①",
     "via_transition.signal_via_pitch": "㉑",
     "via_transition.fanout.style": "㉒",
-    "via_transition.fanout.direction": "㉓",
-    "via_transition.fanout.straight_length": "㉔",
+    "via_transition.fanout.straight_length": "㉓",
     "via_transition.route_axis": "②",
     "via_transition.entry_layer": "③",
     "via_transition.exit_layer": "④",
@@ -334,8 +333,6 @@ class SurfaceCapAntipadApp(tk.Tk):
                 self.enum_labels[path] = dict(display_values)
             widget = ttk.Combobox(parent, textvariable=var, values=labels, state="readonly", width=18)
             widget.grid(row=row, column=1, sticky="ew", padx=4)
-            if path == "capacitor.package":
-                widget.bind("<<ComboboxSelected>>", self._package_changed)
         elif derived:
             # Classic Entry so readonlybackground is honored on Windows native
             # ttk themes, which ignore Derived.TEntry fieldbackground.
@@ -371,6 +368,19 @@ class SurfaceCapAntipadApp(tk.Tk):
             self.integer_paths.add(path)
         var.trace_add("write", lambda *_: self._schedule_refresh())
         return widget
+
+    def _hide_field_row(self, path: str) -> None:
+        """grid_remove every slave on the field's grid row. JSON still round-trips."""
+        widget = self.widgets.get(path)
+        if widget is None:
+            return
+        info = widget.grid_info()
+        if not info:
+            return
+        parent = widget.master
+        row = int(float(info["row"]))
+        for child in parent.grid_slaves(row=row):
+            child.grid_remove()
 
     def _register_hidden_variable(self, path: str) -> None:
         var = tk.StringVar()
@@ -454,6 +464,9 @@ class SurfaceCapAntipadApp(tk.Tk):
     def _set_group_state(self, prefixes: Sequence[str], enabled: bool) -> None:
         for path, widget in self.widgets.items():
             if not path.startswith(prefixes):
+                continue
+            if path == "capacitor.package":
+                self._configure_widget_state(widget, False)
                 continue
             if path in getattr(self, "_derived_display_paths", ()):
                 formula = ""
@@ -573,6 +586,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._add(right, 7, "过渡方向", "trace.transition_direction",
                   values=("auto", "contract", "expand"),
                   display_values={"auto": "自动", "contract": "仅向内收缩", "expand": "仅向外展开"})
+        self._hide_field_row("trace.transition_direction")
         self._add(right, 8, "输入焊盘引线（仅兼容模式）", "trace.pad_lead_in_length", length=True)
         self._add(right, 9, "输出焊盘引线（仅兼容模式）", "trace.pad_lead_out_length", length=True)
         self._add(right, 10, "S 弯过渡长度", "trace.transition_length", length=True)
@@ -633,10 +647,17 @@ class SurfaceCapAntipadApp(tk.Tk):
                            ("layout", "布局"), ("bridge", "桥接")):
             variable = tk.BooleanVar(value=False)
             self.cap_dimension_categories[key] = variable
-            ttk.Checkbutton(
+            checkbox = ttk.Checkbutton(
                 dimension_filters, text=label, variable=variable,
                 command=self._update_capacitor_dimension_filters,
-            ).pack(side="left", padx=(3, 0))
+            )
+            checkbox.pack(side="left", padx=(3, 0))
+            if key == "body":
+                self.variables["capacitor.show_body_outline_in_preview"] = variable
+                self.widgets["capacitor.show_body_outline_in_preview"] = checkbox
+                self.field_labels["capacitor.show_body_outline_in_preview"] = checkbox
+                checkbox.configure(command=self._sync_body_outline_preview)
+                variable.trace_add("write", lambda *_: self._sync_body_outline_preview())
         ttk.Label(dimension_view, text="视图：", foreground="#64748b").pack(side="left")
         ttk.Button(dimension_view, text="+",
                    command=lambda: self.cap_geometry_canvas.zoom_in(), width=3).pack(side="left", padx=(3, 0))
@@ -666,16 +687,27 @@ class SurfaceCapAntipadApp(tk.Tk):
         preset = self._cap_section(parameter_root, "封装预设")
         self._add(preset, 0, "电容安装面（当前）", "capacitor.mount_side",
                   values=("top", "bottom"), display_values=ENUM_LABELS["capacitor.mount_side"])
-        self._add(preset, 1, "封装", "capacitor.package", values=("0201", "0402", "custom"),
+        self._add(preset, 1, "当前封装", "capacitor.package", values=("0201", "0402", "custom"),
                   display_values=ENUM_LABELS["capacitor.package"])
+        self.widgets["capacitor.package"].configure(state="disabled")
+        self.package_preset_var = tk.StringVar()
+        ttk.Label(preset, text="加载预设", justify="left", wraplength=168).grid(
+            row=2, column=0, sticky="nw", padx=4, pady=3)
+        self.package_preset_combo = ttk.Combobox(
+            preset, textvariable=self.package_preset_var,
+            values=tuple(ENUM_LABELS["capacitor.package"].values()),
+            state="readonly", width=18,
+        )
+        self.package_preset_combo.grid(row=2, column=1, sticky="ew", padx=4)
+        self.package_preset_combo.bind("<<ComboboxSelected>>", self._package_changed)
         buttons = ttk.Frame(preset)
-        buttons.grid(row=2, column=0, columnspan=4, sticky="ew", padx=4, pady=3)
+        buttons.grid(row=3, column=0, columnspan=4, sticky="ew", padx=4, pady=3)
         ttk.Button(buttons, text="应用预设", command=self._apply_selected_preset).pack(side="left")
         ttk.Button(buttons, text="恢复当前封装预设", command=self._restore_package_preset).pack(side="left", padx=6)
         self.package_state_var = tk.StringVar(value="")
         ttk.Label(buttons, textvariable=self.package_state_var, foreground="#7c3aed").pack(side="right")
         ttk.Label(preset, text="预设为通用建议值，不代表具体厂商推荐焊盘，请以器件数据手册为准。",
-                  foreground="#9a3412", wraplength=640).grid(row=3, column=0, columnspan=4, sticky="w", padx=4, pady=(3, 1))
+                  foreground="#9a3412", wraplength=640).grid(row=4, column=0, columnspan=4, sticky="w", padx=4, pady=(3, 1))
 
         body = self._cap_section(parameter_root, "电容本体")
         self._add(body, 0, "本体长度", "capacitor.body_length", length=True)
@@ -696,6 +728,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._add(layout, 1, "电容中心 X", "capacitor.cap_center_x", length=True)
         self._add(layout, 2, "中心 X 偏移", "capacitor.cap_center_x_offset", length=True)
         self._add(layout, 3, "关于 Y 轴对称", "capacitor.symmetric_about_y", boolean=True)
+        self._hide_field_row("capacitor.symmetric_about_y")
 
         bridge = self._cap_section(parameter_root, "桥接结构")
         self._add(bridge, 0, "桥接宽度", "capacitor.bridge_width", length=True)
@@ -709,7 +742,18 @@ class SurfaceCapAntipadApp(tk.Tk):
         self.cap_hfss_box = hfss
         hfss.pack_configure(pady=(4, 24))
         self._add(hfss, 0, "在 HFSS 中创建电容本体", "capacitor.create_body_in_hfss", boolean=True)
-        self._add(hfss, 1, "预览中显示本体轮廓", "capacitor.show_body_outline_in_preview", boolean=True)
+        outline_path = "capacitor.show_body_outline_in_preview"
+        toolbar_outline = self.widgets[outline_path]
+        toolbar_var = self.variables[outline_path]
+        self._add(hfss, 1, "预览中显示本体轮廓", outline_path, boolean=True)
+        self.cap_hfss_outline_checkbox = self.widgets[outline_path]
+        self.cap_hfss_outline_label = self.field_labels[outline_path]
+        self.cap_hfss_outline_checkbox.configure(variable=toolbar_var)
+        self._hide_field_row(outline_path)
+        self.variables[outline_path] = toolbar_var
+        self.widgets[outline_path] = toolbar_outline
+        self.field_labels[outline_path] = toolbar_outline
+        self.cap_dimension_categories["body"] = toolbar_var
         spacer = tk.Frame(parameter_root, height=120, background="#f7f8fa")
         spacer.pack_propagate(False)
         spacer.pack(fill="x")
@@ -819,6 +863,11 @@ class SurfaceCapAntipadApp(tk.Tk):
         self.cap_geometry_canvas.set_dimension_filters(
             bool(self.cap_dimensions_visible.get()), categories
         )
+
+    def _sync_body_outline_preview(self, *_args: Any) -> None:
+        self._update_capacitor_dimension_filters()
+        if not getattr(self, "_ui_sync", False):
+            self._schedule_refresh()
 
     def _focus_capacitor_parameter(self, path: str) -> None:
         """Navigate from a plotted/listed dimension to its editor field."""
@@ -931,8 +980,9 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._add(f, 1, "㉓ 扇出方向", "via_transition.fanout.direction",
                   values=("auto", "expand", "contract"),
                   display_values={"auto": "自动", "expand": "向外", "contract": "向内"})
-        self._add(f, 2, "㉔ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
-        ttk.Label(f, text="两侧走线中心距均等于孔间距时，扇出三项自动停用。",
+        self._hide_field_row("via_transition.fanout.direction")
+        self._add(f, 2, "㉓ 耦合直线段长", "via_transition.fanout.straight_length", length=True)
+        ttk.Label(f, text="两侧走线中心距均等于孔间距时，扇出参数自动停用。",
                   foreground="#64748b", wraplength=430, justify="left").grid(
                       row=3, column=0, columnspan=3, sticky="ew", pady=(2, 0))
 
@@ -1196,6 +1246,9 @@ class SurfaceCapAntipadApp(tk.Tk):
                 vars_for[key].set(_display(value))
         self._refresh_via_layer_selectors(self.config)
         self._ui_sync = False
+        self._sync_package_preset_picker()
+        self._update_package_state()
+        self._update_capacitor_dimension_filters()
         self._refresh_stackup()
         self._update_unit_labels()
         self._apply_scenario_linkage()
@@ -1295,18 +1348,40 @@ class SurfaceCapAntipadApp(tk.Tk):
         inverse = {label: backend for backend, label in self.enum_labels.get(path, {}).items()}
         return inverse.get(raw, raw)
 
+    def _preset_picker_backend(self) -> str:
+        if not hasattr(self, "package_preset_var"):
+            return self._backend_value("capacitor.package")
+        raw = str(self.package_preset_var.get())
+        inverse = {label: backend for backend, label in ENUM_LABELS["capacitor.package"].items()}
+        return inverse.get(raw, raw)
+
+    def _sync_package_preset_picker(self) -> None:
+        if not hasattr(self, "package_preset_var"):
+            return
+        current = str(self.variables["capacitor.package"].get())
+        self.package_preset_var.set(current)
+
     def _package_changed(self, _event: Any = None) -> None:
-        package = self._backend_value("capacitor.package")
-        if package in {"0201", "0402"}:
-            self.status.set(f"已选择 {package}；尺寸尚未覆盖，请点击“应用预设”")
+        selected = self._preset_picker_backend()
+        current = self._backend_value("capacitor.package")
+        if selected != current:
+            self.status.set(f"封装名已选 {selected}，焊盘/本体仍是 {current}，点应用才进仿真")
+        elif selected in {"0201", "0402"}:
+            self.status.set(f"已选择 {selected}；尺寸尚未覆盖，请点击“应用预设”")
         else:
             self.status.set("已切换为自定义封装；现有尺寸保持不变")
         self._update_package_state()
-        self._schedule_refresh()
 
     def _apply_selected_preset(self) -> None:
         try:
-            package = self._backend_value("capacitor.package")
+            package = self._preset_picker_backend()
+            if package == "custom":
+                self.variables["capacitor.package"].set(ENUM_LABELS["capacitor.package"]["custom"])
+                self._sync_package_preset_picker()
+                self._update_package_state()
+                self.status.set("已切换为自定义封装；现有尺寸保持不变")
+                self._schedule_refresh()
+                return
             if package not in PACKAGE_PRESETS:
                 self.status.set("自定义封装没有可应用的预设")
                 return
@@ -1318,10 +1393,11 @@ class SurfaceCapAntipadApp(tk.Tk):
             messagebox.showerror("应用预设失败", str(exc), parent=self)
 
     def _restore_package_preset(self) -> None:
-        package = self._backend_value("capacitor.package")
-        if package not in PACKAGE_PRESETS:
+        current = self._backend_value("capacitor.package")
+        if current not in PACKAGE_PRESETS:
             self.status.set("自定义封装没有可恢复的预设")
             return
+        self.package_preset_var.set(ENUM_LABELS["capacitor.package"][current])
         self._apply_selected_preset()
 
     def _browse_touchstone(self) -> None:
@@ -1333,12 +1409,18 @@ class SurfaceCapAntipadApp(tk.Tk):
     def _update_package_state(self) -> None:
         if not hasattr(self, "package_state_var"):
             return
-        package = self._backend_value("capacitor.package")
-        if package not in PACKAGE_PRESETS:
+        current = self._backend_value("capacitor.package")
+        selected = self._preset_picker_backend()
+        if selected != current:
+            self.package_state_var.set(
+                f"封装名已选 {selected}，焊盘/本体仍是 {current}，点应用才进仿真"
+            )
+            return
+        if current not in PACKAGE_PRESETS:
             self.package_state_var.set("自定义")
             return
         modified = False
-        for key, expected in PACKAGE_PRESETS[package].items():
+        for key, expected in PACKAGE_PRESETS[current].items():
             if key == "package_metric":
                 continue
             try:
@@ -1354,8 +1436,8 @@ class SurfaceCapAntipadApp(tk.Tk):
             except (KeyError, TypeError, ValueError):
                 modified = True
                 break
-        metric = PACKAGE_PRESETS[package]["package_metric"]
-        self.package_state_var.set(f"{package}（公制 {metric}）" + (" · 已修改" if modified else ""))
+        metric = PACKAGE_PRESETS[current]["package_metric"]
+        self.package_state_var.set(f"{current}（公制 {metric}）" + (" · 已修改" if modified else ""))
 
     def _set_derived_state(self, path: str, derived: bool, formula: str) -> None:
         widget = self.widgets.get(path)
@@ -1653,7 +1735,7 @@ class SurfaceCapAntipadApp(tk.Tk):
             )
         except (TypeError, ValueError, tk.TclError, KeyError):
             fanout_active = True
-        for path in ("via_transition.fanout.style", "via_transition.fanout.direction",
+        for path in ("via_transition.fanout.style",
                      "via_transition.fanout.straight_length"):
             widget = self.widgets.get(path)
             if widget is None:
@@ -2083,7 +2165,7 @@ class SurfaceCapAntipadApp(tk.Tk):
                          (fold_x, center_y + pitch / 2.0), True, 1))
             straight_len = max(0.0, length - fanout_x)
             dims.append(("via_transition.fanout.straight_length",
-                         f"㉔ 耦合直线 {fmt(straight_len)} {unit}",
+                         f"㉓ 耦合直线 {fmt(straight_len)} {unit}",
                          (fold_x, center_y + pitch / 2.0),
                          (port_x, center_y + pitch / 2.0), False, 2))
 
@@ -2570,11 +2652,8 @@ class SurfaceCapAntipadApp(tk.Tk):
         fanout_legend = vt.get("fanout") if isinstance(vt.get("fanout"), Mapping) else {}
         fanout_style_label = {"deg45": "45° 折线", "arc": "圆弧"}.get(
             str(fanout_legend.get("style", "deg45")), str(fanout_legend.get("style", "deg45")))
-        fanout_direction_label = {"auto": "自动", "expand": "向外", "contract": "向内"}.get(
-            str(fanout_legend.get("direction", "auto")), str(fanout_legend.get("direction", "auto")))
         legend.append(("㉒", "via_transition.fanout.style", f"扇出方式 {fanout_style_label}"))
-        legend.append(("㉓", "via_transition.fanout.direction", f"扇出方向 {fanout_direction_label}"))
-        legend.append(("㉔", "via_transition.fanout.straight_length",
+        legend.append(("㉓", "via_transition.fanout.straight_length",
                        f"耦合直线段长 {fmtv(float(fanout_legend.get('straight_length', 1.0) or 0.0))} {unit}"))
 
         legend_y = y + pad
