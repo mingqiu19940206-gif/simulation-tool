@@ -2201,20 +2201,31 @@ class SurfaceCapAntipadApp(tk.Tk):
                     return text[len("dimension:"):]
             return None
 
-        current = canvas.find_withtag("current")
-        if current:
-            path = path_from_tags(canvas.gettags(current[0]))
-            if path:
-                return path
         try:
             x = float(getattr(event, "x", 0))
             y = float(getattr(event, "y", 0))
         except (TypeError, ValueError):
-            return None
-        for item in reversed(canvas.find_overlapping(x, y, x, y)):
-            path = path_from_tags(canvas.gettags(item))
-            if path:
-                return path
+            x = y = None
+
+        # Prefer the topmost dimension *text* at the click point.  Canvas
+        # ``current`` can still be a previously clicked GAP/width label after
+        # event_generate without a hover, which would steal the new field.
+        if x is not None:
+            other_path: Optional[str] = None
+            for item in reversed(canvas.find_overlapping(x, y, x, y)):
+                path = path_from_tags(canvas.gettags(item))
+                if not path:
+                    continue
+                if canvas.type(item) == "text":
+                    return path
+                if other_path is None:
+                    other_path = path
+            if other_path:
+                return other_path
+
+        current = canvas.find_withtag("current")
+        if current:
+            return path_from_tags(canvas.gettags(current[0]))
         return None
 
     def _navigate_via_parameter(self, path: str) -> None:

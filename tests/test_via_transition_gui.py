@@ -90,6 +90,8 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.assertIsNotNone(bbox)
         x = int((bbox[0] + bbox[2]) / 2)
         y = int((bbox[1] + bbox[3]) / 2)
+        canvas.event_generate("<Enter>", x=x, y=y)
+        canvas.event_generate("<Motion>", x=x, y=y)
         canvas.event_generate("<Button-1>", x=x, y=y)
         self.app.update()
         self.app.update_idletasks()

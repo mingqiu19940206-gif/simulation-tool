@@ -949,6 +949,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self.via_top_canvas.tag_bind("dimension-label", "<Button-1>", self._on_via_dimension_click)
         self.via_top_canvas.tag_bind("dimension-label", "<Enter>", self._on_via_dimension_enter)
         self.via_top_canvas.tag_bind("dimension-label", "<Leave>", self._on_via_dimension_leave)
+        self.via_top_canvas.bind("<Button-1>", self._on_via_dimension_click, add="+")
         self.via_top_canvas.bind("<Configure>", lambda _e: self._schedule_via_diagram_redraw())
         diagram_panes.add(top_box, weight=1)
 
