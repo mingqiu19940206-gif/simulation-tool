@@ -138,6 +138,8 @@ class ViaNativeOptimetricsTests(unittest.TestCase):
              {"enabled": True, "start": 0.10, "stop": 0.15, "step": 0.05}),
             ("via_transition.return_vias.offset_x",
              {"enabled": True, "start": -0.2, "stop": 0.2, "step": 0.2}),
+            ("via_transition.return_vias.center_to_signal",
+             {"enabled": True, "start": 0.5, "stop": 0.9, "step": 0.1}),
             ("via_transition.return_vias.pitch_y",
              {"enabled": True, "start": 0.5, "stop": 0.7, "step": 0.1}),
         ):

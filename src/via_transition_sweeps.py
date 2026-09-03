@@ -37,6 +37,7 @@ VIA_SAFE_SWEEP_PATHS: Tuple[str, ...] = (
     "via_transition.backdrill.residual_stub",
     "via_transition.return_vias.offset_x",
     "via_transition.return_vias.offset_y",
+    "via_transition.return_vias.center_to_signal",
     "via_transition.return_vias.pitch_x",
     "via_transition.return_vias.pitch_y",
 )
@@ -109,6 +110,7 @@ _SPECS = {
     "via_transition.backdrill.residual_stub": ("目标残桩长度", 0.0, 5.0, False),
     "via_transition.return_vias.offset_x": ("回流孔 X 向偏移", None, None, True),
     "via_transition.return_vias.offset_y": ("回流孔 Y 向偏移", None, None, True),
+    "via_transition.return_vias.center_to_signal": ("回流孔相对信号孔中心距", None, None, True),
     "via_transition.return_vias.pitch_x": ("回流孔 X 向节距", 0.05, 3.0, False),
     "via_transition.return_vias.pitch_y": ("回流孔 Y 向节距", 0.05, 3.0, False),
 }

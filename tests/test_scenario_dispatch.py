@@ -68,6 +68,7 @@ class ScenarioDispatchTests(unittest.TestCase):
             "via_transition.backdrill.residual_stub",
             "via_transition.return_vias.offset_x",
             "via_transition.return_vias.offset_y",
+            "via_transition.return_vias.center_to_signal",
             "via_transition.return_vias.pitch_x",
             "via_transition.return_vias.pitch_y",
         ):

@@ -57,6 +57,7 @@
       "count": 2,
       "offset_x": 0.0,
       "offset_y": 1.1,
+      "center_to_signal": 0.7,
       "pitch_x": 0.8,
       "pitch_y": 0.8,
       "custom_coordinates": [],

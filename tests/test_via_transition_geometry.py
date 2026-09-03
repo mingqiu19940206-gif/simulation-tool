@@ -100,6 +100,7 @@ class ViaTransitionGeometryTests(unittest.TestCase):
     def test_08_return_via_collision_detected(self) -> None:
         cfg = copy.deepcopy(self.cfg)
         cfg["via_transition"]["return_vias"]["offset_y"] = 0.4
+        cfg["via_transition"]["return_vias"]["center_to_signal"] = 0.0
         geometry = GeometryCalculator(cfg).calculate()
         self.assertTrue(any("侵入" in error for error in geometry.errors))
 

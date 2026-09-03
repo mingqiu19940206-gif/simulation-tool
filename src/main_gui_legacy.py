@@ -1200,6 +1200,7 @@ class SurfaceCapAntipadApp(tk.Tk):
         self._update_unit_labels()
         self._apply_scenario_linkage()
         self._sync_via_derived_centers()
+        self._sync_return_via_offset_y()
         self._schedule_refresh()
 
     def _collect(self) -> Dict[str, Any]:
@@ -1469,6 +1470,39 @@ class SurfaceCapAntipadApp(tk.Tk):
             finally:
                 self._ui_sync = previous
 
+    def _sync_return_via_offset_y(self) -> None:
+        """Y 向偏移 = 孔间距/2 + 相对信号孔中心距（side_pair count=2）。"""
+        path = "via_transition.return_vias.offset_y"
+        if path not in self.variables:
+            return
+        formula = "= 孔间距/2 + 相对信号孔中心距"
+        self._set_derived_state(path, True, formula)
+        try:
+            pattern = self._backend_value("via_transition.return_vias.pattern")
+            count = int(float(self.variables["via_transition.return_vias.count"].get()))
+        except (TypeError, ValueError, tk.TclError, KeyError):
+            return
+        if pattern != "side_pair" or count != 2:
+            return
+        cts_path = "via_transition.return_vias.center_to_signal"
+        if cts_path not in self.variables:
+            return
+        try:
+            pitch = self._length_var_mm("via_transition.signal_via_pitch")
+            cts = self._length_var_mm(cts_path)
+            offset_mm = abs(pitch) / 2.0 + cts
+        except (TypeError, ValueError, tk.TclError, KeyError):
+            return
+        display = format_length(offset_mm, self.display_unit)
+        previous = self._ui_sync
+        self._ui_sync = True
+        try:
+            self._length_mm_cache[path] = offset_mm
+            self._length_display_snapshot[path] = display
+            self.variables[path].set(display)
+        finally:
+            self._ui_sync = previous
+
     def _sync_via_fields(self) -> None:
         """集中处理 VIA 换层页的字段联动与派生值（改动 1–4）。
 
@@ -1511,6 +1545,7 @@ class SurfaceCapAntipadApp(tk.Tk):
             "via_transition.return_vias.count",
             "via_transition.return_vias.offset_x",
             "via_transition.return_vias.offset_y",
+            "via_transition.return_vias.center_to_signal",
             "via_transition.return_vias.pitch_x",
             "via_transition.return_vias.pitch_y",
             "via_transition.return_vias.start_layer",
@@ -1529,18 +1564,20 @@ class SurfaceCapAntipadApp(tk.Tk):
                 continue
             layout_field = path.rsplit(".", 1)[-1]
             active_layout = {
-                "side_pair": {"count", "offset_x", "offset_y", "pitch_y"},
+                "side_pair": {"count", "offset_x", "offset_y", "center_to_signal", "pitch_y"},
                 "four_corner": {"offset_x", "offset_y"},
                 "custom": {"custom_coordinates"},
             }.get(return_pattern, set())
-            if layout_field in {"count", "offset_x", "offset_y", "pitch_x", "pitch_y",
-                                "custom_coordinates"}:
+            if layout_field in {"count", "offset_x", "offset_y", "center_to_signal",
+                                "pitch_x", "pitch_y", "custom_coordinates"}:
                 enabled = return_enabled and layout_field in active_layout
             elif path in {"via_transition.return_vias.finished_hole_diameter",
                           "via_transition.return_vias.connect_layers"}:
                 enabled = False
             else:
                 enabled = return_enabled
+            if path == "via_transition.return_vias.offset_y":
+                continue
             state = "readonly" if isinstance(widget, ttk.Combobox) else "normal"
             if not enabled:
                 state = "disabled"
@@ -1590,6 +1627,7 @@ class SurfaceCapAntipadApp(tk.Tk):
             except tk.TclError:
                 pass
         self._sync_via_derived_centers()
+        self._sync_return_via_offset_y()
 
         # 改动 4：成品孔直径只读派生（= 钻孔 − 2×镀铜）。
         self._set_derived_state(
@@ -2034,6 +2072,28 @@ class SurfaceCapAntipadApp(tk.Tk):
                              (float(contour.bounds[1]), float(contour.center_y)), False, 2))
 
         return_vias = list(getattr(geometry, "return_vias", []))
+        signal_vias = list(getattr(geometry, "signal_vias", []))
+        rv_cfg = vt.get("return_vias", {}) if isinstance(vt.get("return_vias"), Mapping) else {}
+        if return_vias and signal_vias and rv_cfg.get("center_to_signal") not in (None, ""):
+            clearance = float(rv_cfg["center_to_signal"])
+            labeled = []
+            for ret in return_vias:
+                nearest = min(
+                    signal_vias,
+                    key=lambda sig: (float(ret.x) - float(sig.x)) ** 2
+                    + (float(ret.y) - float(sig.y)) ** 2,
+                )
+                pair_key = (id(nearest), round(float(ret.x), 9), round(float(ret.y), 9))
+                if pair_key in labeled:
+                    continue
+                labeled.append(pair_key)
+                dims.append((
+                    "via_transition.return_vias.center_to_signal",
+                    f"相对信号孔中心距 {fmt(clearance)} {unit}",
+                    (float(nearest.x), float(nearest.y)),
+                    (float(ret.x), float(ret.y)),
+                    True, 0,
+                ))
         if return_vias:
             via = return_vias[0]
             vy = float(via.y)

@@ -34,6 +34,7 @@ class ViaTransitionSweepsTests(unittest.TestCase):
         self.assertIn("via_transition.pair_pitch", VIA_SAFE_SWEEP_PATHS)
         self.assertIn("via_transition.entry_trace.gap", VIA_SAFE_SWEEP_PATHS)
         self.assertIn("via_transition.exit_trace.gap", VIA_SAFE_SWEEP_PATHS)
+        self.assertIn("via_transition.return_vias.center_to_signal", VIA_SAFE_SWEEP_PATHS)
         self.assertIn("via_transition.backdrill.residual_stub", VIA_SAFE_SWEEP_PATHS)
         self.assertIn("via_transition.exit_layer", VIA_TOPOLOGY_SWEEP_PATHS)
         self.assertIn("via_transition.return_vias.count", VIA_TOPOLOGY_SWEEP_PATHS)

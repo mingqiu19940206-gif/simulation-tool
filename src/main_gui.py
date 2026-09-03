@@ -66,7 +66,7 @@ from build_info import about_message, get_build_info, product_title, ready_statu
 from capacitor_editor import ScrollableFrame
 from config_manager import (
     config_hash, convert_length, format_length, make_generation_snapshot,
-    normalize_config,
+    normalize_config, sync_side_pair_return_via_y,
 )
 from geometry_calculator import GeometryCalculator
 from gnd_via_editor import GndViaWorkbench
@@ -543,35 +543,42 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             display_values={"side_pair": "两侧成对", "four_corner": "四角", "custom": "自定义"})
         add("return", frame, 2, "数量", "via_transition.return_vias.count",
             numeric=True, integer=True, formula="四角固定为 4；自定义由坐标行数自动计算")
-        add("return", frame, 3, "X 向偏移", "via_transition.return_vias.offset_x", length=True)
-        add("return", frame, 4, "Y 向偏移", "via_transition.return_vias.offset_y", length=True)
+        add("return", frame, 3, "X 向偏移", "via_transition.return_vias.offset_x", length=True,
+            formula="相对对中心、两孔同向")
+        add("return", frame, 4, "相对信号孔中心距", "via_transition.return_vias.center_to_signal",
+            length=True)
+        add("return", frame, 5, "Y 向偏移", "via_transition.return_vias.offset_y",
+            length=True, formula="= 孔间距/2 + 相对信号孔中心距", derived=True)
+        self._set_derived_state(
+            "via_transition.return_vias.offset_y", True,
+            "= 孔间距/2 + 相对信号孔中心距")
         self.return_pitch_x_compat = add(
-            "return", frame, 5, "X 向节距（只读）",
+            "return", frame, 6, "X 向节距（只读）",
             "via_transition.return_vias.pitch_x", length=True,
             formula="当前 side_pair 布局由 X 偏移和 Y 节距决定；兼容旧配置",
         )
         self.return_pitch_x_compat.configure(state="readonly")
-        add("return", frame, 6, "Y 向节距", "via_transition.return_vias.pitch_y", length=True)
-        add("return", frame, 7, "起始层", "via_transition.return_vias.start_layer", values=conductive_layers)
-        add("return", frame, 8, "终止层", "via_transition.return_vias.end_layer", values=conductive_layers)
+        add("return", frame, 7, "Y 向节距", "via_transition.return_vias.pitch_y", length=True)
+        add("return", frame, 8, "起始层", "via_transition.return_vias.start_layer", values=conductive_layers)
+        add("return", frame, 9, "终止层", "via_transition.return_vias.end_layer", values=conductive_layers)
         _legacy.ttk.Label(frame, text="参考连接层").grid(
-            row=9, column=0, sticky="nw", padx=4, pady=5)
+            row=10, column=0, sticky="nw", padx=4, pady=5)
         self._register_hidden_variable("via_transition.return_vias.connect_layers")
         self.return_connect_matrix = _legacy.ttk.LabelFrame(
             frame, text="逐层复选（仅显示参考平面）", padding=5)
-        self.return_connect_matrix.grid(row=9, column=1, columnspan=3, sticky="ew", padx=4, pady=5)
+        self.return_connect_matrix.grid(row=10, column=1, columnspan=3, sticky="ew", padx=4, pady=5)
         self.return_connect_vars: dict[str, tk.BooleanVar] = {}
         self.return_connect_checks: list[tk.Widget] = []
         self.widgets["via_transition.return_vias.connect_layers"] = self.return_connect_matrix
-        self._via_parameter_rows["via_transition.return_vias.connect_layers"] = (frame, 9)
+        self._via_parameter_rows["via_transition.return_vias.connect_layers"] = (frame, 10)
         remember("return", "via_transition.return_vias.connect_layers", self.return_connect_matrix)
 
         _legacy.ttk.Label(frame, text="自定义坐标表").grid(
-            row=10, column=0, sticky="nw", padx=4, pady=5)
+            row=11, column=0, sticky="nw", padx=4, pady=5)
         self._register_hidden_variable("via_transition.return_vias.custom_coordinates")
         self.return_coordinate_editor = _legacy.ttk.Frame(frame)
         self.return_coordinate_editor.grid(
-            row=10, column=1, columnspan=3, sticky="ew", padx=4, pady=5)
+            row=11, column=1, columnspan=3, sticky="ew", padx=4, pady=5)
         self.return_coordinate_editor.columnconfigure(0, weight=1)
         self.return_coordinate_tree = _legacy.ttk.Treeview(
             self.return_coordinate_editor, columns=("x", "y"), show="headings", height=4,
@@ -600,7 +607,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                 row=2, column=3, padx=3, pady=(0, 3))
         self.return_coordinate_tree.bind("<<TreeviewSelect>>", self._return_coordinate_selected)
         self.widgets["via_transition.return_vias.custom_coordinates"] = self.return_coordinate_editor
-        self._via_parameter_rows["via_transition.return_vias.custom_coordinates"] = (frame, 10)
+        self._via_parameter_rows["via_transition.return_vias.custom_coordinates"] = (frame, 11)
         remember("return", "via_transition.return_vias.custom_coordinates", self.return_coordinate_editor)
 
         frame = group("return", "回流地孔（Return VIA）· 孔结构")
@@ -1065,6 +1072,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         layout_fields = {
             "via_transition.return_vias.offset_x",
             "via_transition.return_vias.offset_y",
+            "via_transition.return_vias.center_to_signal",
             "via_transition.return_vias.pitch_x",
             "via_transition.return_vias.pitch_y",
             "via_transition.return_vias.custom_coordinates",
@@ -1073,6 +1081,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             "side_pair": {
                 "via_transition.return_vias.offset_x",
                 "via_transition.return_vias.offset_y",
+                "via_transition.return_vias.center_to_signal",
                 "via_transition.return_vias.pitch_x",
                 "via_transition.return_vias.pitch_y",
             },
@@ -1493,6 +1502,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             result["via_transition"]["return_vias"]["custom_coordinates"] = points
             if result["via_transition"]["return_vias"].get("pattern") == "custom":
                 result["via_transition"]["return_vias"]["count"] = len(points)
+        sync_side_pair_return_via_y(result.get("via_transition", {}))
         return result
 
     def _refresh_stackup(self) -> None:

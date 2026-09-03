@@ -213,6 +213,7 @@ _SECTION_LENGTH_FIELDS: Dict[str, set[str]] = {
         "padstack.antipad.width_increment",
         "backdrill.drill_diameter", "backdrill.residual_stub",
         "return_vias.offset_x", "return_vias.offset_y",
+        "return_vias.center_to_signal",
         "return_vias.pitch_x", "return_vias.pitch_y",
         "return_vias.drill_diameter", "return_vias.finished_hole_diameter",
         "return_vias.plating_thickness", "return_vias.pad_diameter",
@@ -468,6 +469,36 @@ def apply_pair_pitch_to_trace_gaps(via_transition: Dict[str, Any], pair_pitch: f
         trace = via_transition.setdefault(side, {})
         width = float(trace.get("width", 0.0) or 0.0)
         trace["gap"] = pitch - width
+
+
+def is_side_pair_count2(return_vias: Mapping[str, Any]) -> bool:
+    """MVP Return VIA editor: default 两侧成对 with exactly two holes."""
+    try:
+        count = int(return_vias.get("count", 0) or 0)
+    except (TypeError, ValueError):
+        count = 0
+    return str(return_vias.get("pattern", "side_pair")) == "side_pair" and count == 2
+
+
+def side_pair_return_offset_y(signal_via_pitch: float, center_to_signal: float) -> float:
+    """side_pair count=2: Y offset from pair center = 孔间距/2 + 相对信号孔中心距."""
+    return abs(float(signal_via_pitch)) / 2.0 + float(center_to_signal)
+
+
+def side_pair_center_to_signal(offset_y: float, signal_via_pitch: float) -> float:
+    """Inverse of side_pair_return_offset_y: |Y偏移| − 孔间距/2."""
+    return float(offset_y) - abs(float(signal_via_pitch)) / 2.0
+
+
+def sync_side_pair_return_via_y(via_transition: Dict[str, Any]) -> None:
+    """Keep offset_y derived from center_to_signal for side_pair count=2."""
+    rv = via_transition.get("return_vias")
+    if not isinstance(rv, dict) or not is_side_pair_count2(rv):
+        return
+    if rv.get("center_to_signal") in (None, ""):
+        return
+    pitch = float(via_transition.get("signal_via_pitch", 0.0) or 0.0)
+    rv["offset_y"] = side_pair_return_offset_y(pitch, rv["center_to_signal"])
 
 
 def _deep_merge(defaults: Any, supplied: Any) -> Any:
@@ -955,6 +986,37 @@ def normalize_config(raw_config: Mapping[str, Any]) -> Tuple[Dict[str, Any], Lis
         if int(return_vias.get("count", 0)) != derived_count:
             return_vias["count"] = derived_count
             corrections.append("custom Return VIA 的 count 已按坐标行数派生（只读）。")
+    # side_pair count=2: center_to_signal is the editable source; offset_y is
+    # derived.  Legacy files with only offset_y backfill the clearance so
+    # geometry stays bit-identical to current main (1.1 − 0.8/2 = 0.7 mm).
+    supplied_return = (supplied_via_transition.get("return_vias")
+                       if isinstance(supplied_via_transition.get("return_vias"), Mapping)
+                       else {})
+    signal_pitch = float(converted["via_transition"].get("signal_via_pitch", 0.0) or 0.0)
+    offset_y = float(return_vias.get("offset_y", 0.0) or 0.0)
+    if "center_to_signal" not in supplied_return:
+        return_vias["center_to_signal"] = side_pair_center_to_signal(offset_y, signal_pitch)
+        corrections.append(
+            "旧配置缺少 via_transition.return_vias.center_to_signal，"
+            "已按 offset_y − signal_via_pitch/2 回填（两侧成对几何与旧 Y 向偏移一致）。"
+        )
+    else:
+        return_vias["center_to_signal"] = float(
+            return_vias.get("center_to_signal", side_pair_center_to_signal(offset_y, signal_pitch))
+        )
+    if is_side_pair_count2(return_vias):
+        derived_offset_y = side_pair_return_offset_y(
+            signal_pitch, return_vias["center_to_signal"])
+        if not math.isclose(float(return_vias.get("offset_y", 0.0) or 0.0),
+                            derived_offset_y, abs_tol=_EPS):
+            return_vias["offset_y"] = derived_offset_y
+            if "center_to_signal" in supplied_return:
+                corrections.append(
+                    "side_pair count=2 的 offset_y 已按 signal_via_pitch/2 + "
+                    "center_to_signal 重新派生。"
+                )
+        else:
+            return_vias["offset_y"] = derived_offset_y
     mount_side = str(converted.get("capacitor", {}).get("mount_side", "top"))
     if "auto_follow_layer" not in supplied_antipad:
         converted["antipad"]["auto_follow_layer"] = ""
