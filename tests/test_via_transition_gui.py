@@ -1068,7 +1068,9 @@ class ViaTransitionGuiTests(unittest.TestCase):
         collected = self.app._collect()
         self.assertEqual(collected["via_transition"]["return_vias"]["pattern"], "four_corner")
         self.assertAlmostEqual(
-            collected["via_transition"]["return_vias"]["offset_y"], new_mm, places=6)
+            collected["via_transition"]["return_vias"]["offset_y"],
+            convert_length(float(display), self.app.display_unit, "mm"),
+            places=9)
 
         self.app.variables["via_transition.return_vias.pattern"].set(
             pattern_labels.get("custom", "自定义"))
