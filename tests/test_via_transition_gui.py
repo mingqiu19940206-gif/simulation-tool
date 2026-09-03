@@ -88,8 +88,28 @@ class ViaTransitionGuiTests(unittest.TestCase):
         canvas.tag_raise(items[0])
         bbox = canvas.bbox(items[0])
         self.assertIsNotNone(bbox)
-        x = int((bbox[0] + bbox[2]) / 2)
-        y = int((bbox[1] + bbox[3]) / 2)
+        hit = None
+        x0, y0, x1, y1 = (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))
+        for x in range(x0 + 2, max(x0 + 3, x1 - 1)):
+            for y in range(y0 + 2, max(y0 + 3, y1 - 1)):
+                top_path = None
+                for item in reversed(canvas.find_overlapping(x, y, x, y)):
+                    if canvas.type(item) != "text":
+                        continue
+                    for tag in canvas.gettags(item):
+                        text = str(tag)
+                        if text.startswith("dimension:"):
+                            top_path = text[len("dimension:"):]
+                            break
+                    if top_path is not None:
+                        break
+                if top_path == path:
+                    hit = (x, y)
+                    break
+            if hit is not None:
+                break
+        self.assertIsNotNone(hit, (path, bbox, self._canvas_texts(canvas)))
+        x, y = hit
         canvas.event_generate("<Enter>", x=x, y=y)
         canvas.event_generate("<Motion>", x=x, y=y)
         canvas.event_generate("<Button-1>", x=x, y=y)

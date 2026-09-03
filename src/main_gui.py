@@ -949,7 +949,6 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self.via_top_canvas.tag_bind("dimension-label", "<Button-1>", self._on_via_dimension_click)
         self.via_top_canvas.tag_bind("dimension-label", "<Enter>", self._on_via_dimension_enter)
         self.via_top_canvas.tag_bind("dimension-label", "<Leave>", self._on_via_dimension_leave)
-        self.via_top_canvas.bind("<Button-1>", self._on_via_dimension_click, add="+")
         self.via_top_canvas.bind("<Configure>", lambda _e: self._schedule_via_diagram_redraw())
         diagram_panes.add(top_box, weight=1)
 
@@ -1183,6 +1182,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             return
 
         def focus() -> None:
+            self._parameter_navigate_job = None
             if page == "电容与模型":
                 self.cap_parameter_scroller.scroll_to_widget(widget)
             elif page == "VIA 换层":
@@ -1209,7 +1209,13 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                     pass
             self.status.set(f"已定位参数：{path}")
 
-        self.after_idle(focus)
+        job = getattr(self, "_parameter_navigate_job", None)
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except tk.TclError:
+                pass
+        self._parameter_navigate_job = self.after_idle(focus)
 
     def validate_model(self, show_dialog: bool = True) -> bool:
         """Run the structured local preflight without starting AEDT."""
