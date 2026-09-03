@@ -66,7 +66,7 @@ from build_info import about_message, get_build_info, product_title, ready_statu
 from capacitor_editor import ScrollableFrame
 from config_manager import (
     config_hash, convert_length, format_length, make_generation_snapshot,
-    normalize_config,
+    normalize_config, sync_side_pair_return_via_y,
 )
 from geometry_calculator import GeometryCalculator
 from gnd_via_editor import GndViaWorkbench
@@ -392,6 +392,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         """
         self._via_parameter_tab_by_path: dict[str, tk.Widget] = {}
         self._via_parameter_rows: dict[str, tuple[tk.Widget, int]] = {}
+        self._via_parameter_row_slaves: dict[str, list[tk.Widget]] = {}
 
         def group(section: str, title: str) -> _legacy.ttk.LabelFrame:
             page, content = sections[section]
@@ -406,17 +407,21 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             if widget is not None:
                 setattr(widget, "_via_parameter_section", section)
 
+        def snapshot_row(parent: tk.Widget, row: int, path: str) -> None:
+            self._via_parameter_rows[path] = (parent, row)
+            self._via_parameter_row_slaves[path] = list(parent.grid_slaves(row=row))
+
         def add(section: str, parent: tk.Widget, row: int, label: str, path: str,
                 **kwargs: Any) -> tk.Widget:
             widget = self._add(parent, row, label, path, **kwargs)
-            self._via_parameter_rows[path] = (parent, row)
+            snapshot_row(parent, row, path)
             remember(section, path, widget)
             return widget
 
         def fixed(section: str, parent: tk.Widget, row: int, label: str, path: str,
                   backend_value: str, display_text: str) -> None:
             self._add_fixed_label(parent, row, label, path, backend_value, display_text)
-            self._via_parameter_rows[path] = (parent, row)
+            snapshot_row(parent, row, path)
             remember(section, path, self.widgets.get(path))
 
         stackup = self.config.get("stackup", [])
@@ -543,35 +548,42 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             display_values={"side_pair": "两侧成对", "four_corner": "四角", "custom": "自定义"})
         add("return", frame, 2, "数量", "via_transition.return_vias.count",
             numeric=True, integer=True, formula="四角固定为 4；自定义由坐标行数自动计算")
-        add("return", frame, 3, "X 向偏移", "via_transition.return_vias.offset_x", length=True)
-        add("return", frame, 4, "Y 向偏移", "via_transition.return_vias.offset_y", length=True)
+        add("return", frame, 3, "X 向偏移", "via_transition.return_vias.offset_x", length=True,
+            formula="相对对中心、两孔同向")
+        add("return", frame, 4, "相对信号孔中心距", "via_transition.return_vias.center_to_signal",
+            length=True)
+        add("return", frame, 5, "Y 向偏移", "via_transition.return_vias.offset_y",
+            length=True, formula="= 孔间距/2 + 相对信号孔中心距", derived=True)
+        self._set_derived_state(
+            "via_transition.return_vias.offset_y", True,
+            "= 孔间距/2 + 相对信号孔中心距")
         self.return_pitch_x_compat = add(
-            "return", frame, 5, "X 向节距（只读）",
+            "return", frame, 6, "X 向节距（只读）",
             "via_transition.return_vias.pitch_x", length=True,
             formula="当前 side_pair 布局由 X 偏移和 Y 节距决定；兼容旧配置",
         )
         self.return_pitch_x_compat.configure(state="readonly")
-        add("return", frame, 6, "Y 向节距", "via_transition.return_vias.pitch_y", length=True)
-        add("return", frame, 7, "起始层", "via_transition.return_vias.start_layer", values=conductive_layers)
-        add("return", frame, 8, "终止层", "via_transition.return_vias.end_layer", values=conductive_layers)
+        add("return", frame, 7, "Y 向节距", "via_transition.return_vias.pitch_y", length=True)
+        add("return", frame, 8, "起始层", "via_transition.return_vias.start_layer", values=conductive_layers)
+        add("return", frame, 9, "终止层", "via_transition.return_vias.end_layer", values=conductive_layers)
         _legacy.ttk.Label(frame, text="参考连接层").grid(
-            row=9, column=0, sticky="nw", padx=4, pady=5)
+            row=10, column=0, sticky="nw", padx=4, pady=5)
         self._register_hidden_variable("via_transition.return_vias.connect_layers")
         self.return_connect_matrix = _legacy.ttk.LabelFrame(
             frame, text="逐层复选（仅显示参考平面）", padding=5)
-        self.return_connect_matrix.grid(row=9, column=1, columnspan=3, sticky="ew", padx=4, pady=5)
+        self.return_connect_matrix.grid(row=10, column=1, columnspan=3, sticky="ew", padx=4, pady=5)
         self.return_connect_vars: dict[str, tk.BooleanVar] = {}
         self.return_connect_checks: list[tk.Widget] = []
         self.widgets["via_transition.return_vias.connect_layers"] = self.return_connect_matrix
-        self._via_parameter_rows["via_transition.return_vias.connect_layers"] = (frame, 9)
+        snapshot_row(frame, 10, "via_transition.return_vias.connect_layers")
         remember("return", "via_transition.return_vias.connect_layers", self.return_connect_matrix)
 
         _legacy.ttk.Label(frame, text="自定义坐标表").grid(
-            row=10, column=0, sticky="nw", padx=4, pady=5)
+            row=11, column=0, sticky="nw", padx=4, pady=5)
         self._register_hidden_variable("via_transition.return_vias.custom_coordinates")
         self.return_coordinate_editor = _legacy.ttk.Frame(frame)
         self.return_coordinate_editor.grid(
-            row=10, column=1, columnspan=3, sticky="ew", padx=4, pady=5)
+            row=11, column=1, columnspan=3, sticky="ew", padx=4, pady=5)
         self.return_coordinate_editor.columnconfigure(0, weight=1)
         self.return_coordinate_tree = _legacy.ttk.Treeview(
             self.return_coordinate_editor, columns=("x", "y"), show="headings", height=4,
@@ -600,7 +612,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                 row=2, column=3, padx=3, pady=(0, 3))
         self.return_coordinate_tree.bind("<<TreeviewSelect>>", self._return_coordinate_selected)
         self.widgets["via_transition.return_vias.custom_coordinates"] = self.return_coordinate_editor
-        self._via_parameter_rows["via_transition.return_vias.custom_coordinates"] = (frame, 10)
+        snapshot_row(frame, 11, "via_transition.return_vias.custom_coordinates")
         remember("return", "via_transition.return_vias.custom_coordinates", self.return_coordinate_editor)
 
         frame = group("return", "回流地孔（Return VIA）· 孔结构")
@@ -803,11 +815,20 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             self.return_coordinate_y.set(str(values[1]))
 
     def _set_via_parameter_row_visible(self, path: str, visible: bool) -> None:
-        location = getattr(self, "_via_parameter_rows", {}).get(path)
-        if location is None:
-            return
-        parent, row = location
-        for widget in parent.grid_slaves(row=row):
+        slaves = getattr(self, "_via_parameter_row_slaves", {}).get(path)
+        if not slaves:
+            location = getattr(self, "_via_parameter_rows", {}).get(path)
+            if location is None:
+                return
+            parent, row = location
+            slaves = []
+            for child in parent.winfo_children():
+                info = child.grid_info()
+                if info and int(float(info.get("row", -1))) == row:
+                    slaves.append(child)
+            if not slaves:
+                slaves = list(parent.grid_slaves(row=row))
+        for widget in slaves:
             (widget.grid if visible else widget.grid_remove)()
 
     def _set_via_fanout_group_visible(self, visible: bool) -> None:
@@ -848,7 +869,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         scroller = self.via_parameter_scrollers[section]
         scroller.scroll_to_widget(widget)
         try:
-            widget.focus_set()
+            widget.focus_force()
             if isinstance(widget, (_legacy.ttk.Entry, tk.Entry)):
                 widget.selection_range(0, "end")
                 widget.icursor("end")
@@ -1065,6 +1086,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         layout_fields = {
             "via_transition.return_vias.offset_x",
             "via_transition.return_vias.offset_y",
+            "via_transition.return_vias.center_to_signal",
             "via_transition.return_vias.pitch_x",
             "via_transition.return_vias.pitch_y",
             "via_transition.return_vias.custom_coordinates",
@@ -1073,6 +1095,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             "side_pair": {
                 "via_transition.return_vias.offset_x",
                 "via_transition.return_vias.offset_y",
+                "via_transition.return_vias.center_to_signal",
                 "via_transition.return_vias.pitch_x",
                 "via_transition.return_vias.pitch_y",
             },
@@ -1173,6 +1196,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             return
 
         def focus() -> None:
+            self._parameter_navigate_job = None
             if page == "电容与模型":
                 self.cap_parameter_scroller.scroll_to_widget(widget)
             elif page == "VIA 换层":
@@ -1191,7 +1215,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                         y = widget.winfo_rooty() - scroller.content.winfo_rooty()
                         scroller.canvas.yview_moveto(max(0.0, min(1.0, (y - 20) / movable)))
                         break
-            widget.focus_set()
+            widget.focus_force()
             if isinstance(widget, (_legacy.ttk.Entry, tk.Entry)):
                 try:
                     widget.selection_range(0, "end")
@@ -1199,7 +1223,13 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                     pass
             self.status.set(f"已定位参数：{path}")
 
-        self.after_idle(focus)
+        job = getattr(self, "_parameter_navigate_job", None)
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except tk.TclError:
+                pass
+        self._parameter_navigate_job = self.after_idle(focus)
 
     def validate_model(self, show_dialog: bool = True) -> bool:
         """Run the structured local preflight without starting AEDT."""
@@ -1493,6 +1523,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             result["via_transition"]["return_vias"]["custom_coordinates"] = points
             if result["via_transition"]["return_vias"].get("pattern") == "custom":
                 result["via_transition"]["return_vias"]["count"] = len(points)
+        sync_side_pair_return_via_y(result.get("via_transition", {}))
         return result
 
     def _refresh_stackup(self) -> None:

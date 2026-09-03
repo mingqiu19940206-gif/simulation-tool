@@ -85,10 +85,33 @@ class ViaTransitionGuiTests(unittest.TestCase):
             and str(canvas.itemcget(item, "text")).startswith(prefix)
         ]
         self.assertTrue(items, (path, self._canvas_texts(canvas)))
+        canvas.tag_raise(items[0])
         bbox = canvas.bbox(items[0])
         self.assertIsNotNone(bbox)
-        x = int((bbox[0] + bbox[2]) / 2)
-        y = int((bbox[1] + bbox[3]) / 2)
+        hit = None
+        x0, y0, x1, y1 = (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))
+        for x in range(x0 + 2, max(x0 + 3, x1 - 1)):
+            for y in range(y0 + 2, max(y0 + 3, y1 - 1)):
+                top_path = None
+                for item in reversed(canvas.find_overlapping(x, y, x, y)):
+                    if canvas.type(item) != "text":
+                        continue
+                    for tag in canvas.gettags(item):
+                        text = str(tag)
+                        if text.startswith("dimension:"):
+                            top_path = text[len("dimension:"):]
+                            break
+                    if top_path is not None:
+                        break
+                if top_path == path:
+                    hit = (x, y)
+                    break
+            if hit is not None:
+                break
+        self.assertIsNotNone(hit, (path, bbox, self._canvas_texts(canvas)))
+        x, y = hit
+        canvas.event_generate("<Enter>", x=x, y=y)
+        canvas.event_generate("<Motion>", x=x, y=y)
         canvas.event_generate("<Button-1>", x=x, y=y)
         self.app.update()
         self.app.update_idletasks()
@@ -148,6 +171,16 @@ class ViaTransitionGuiTests(unittest.TestCase):
             self.assertIn("宽度 + GAP", str(self.app.formula_labels[path].cget("text")))
         self.assertIn("残桩从背钻侧最近功能连接层起算",
                       self.app.backdrill_hint_label.cget("text"))
+        offset_y = self.app.widgets["via_transition.return_vias.offset_y"]
+        self.assertEqual(str(offset_y.cget("state")), "readonly")
+        self.assertIsInstance(offset_y, tkinter.Entry)
+        self.assertNotIsInstance(offset_y, ttk.Entry)
+        self.assertEqual(str(offset_y.cget("readonlybackground")).lower(), "#eef2f7")
+        self.assertIn("孔间距/2", str(self.app.formula_labels[
+            "via_transition.return_vias.offset_y"].cget("text")))
+        self.assertIn("via_transition.return_vias.center_to_signal", self.app.widgets)
+        self.assertIn("相对对中心、两孔同向", str(self.app.formula_labels[
+            "via_transition.return_vias.offset_x"].cget("text")))
         self.assertIn("与输入/输出层无关",
                       self.app.backdrill_hint_label.cget("text"))
         self.assertNotIn("entry/exit", self.app.backdrill_hint_label.cget("text"))
@@ -528,6 +561,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
             "via_transition.exit_trace.center_to_center": ("VIA 换层", "换层与传输线"),
             "via_transition.backdrill.residual_stub": ("VIA 换层", "信号孔与背钻"),
             "via_transition.return_vias.pad_diameter": ("VIA 换层", "回流地孔"),
+            "via_transition.return_vias.center_to_signal": ("VIA 换层", "回流地孔"),
             "via_transition.padstack.antipad.diameter": ("反焊盘与叠层", None),
         }
         for path, (expected_page, expected_tab) in cases.items():
@@ -675,7 +709,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
 
         default_via = self.app.manager.default()["via_transition"]
         paths = leaves(default_via)
-        self.assertEqual(len(paths), 65)
+        self.assertEqual(len(paths), 66)
         self.assertEqual([path for path in paths if path not in self.app.variables], [])
 
     def test_27_transmission_line_group_packs_above_fanout(self) -> None:
@@ -732,6 +766,24 @@ class ViaTransitionGuiTests(unittest.TestCase):
             self.app.update_idletasks()
             self.assertEqual(str(self.app.variables[path].get()), before)
 
+        path = "via_transition.return_vias.offset_y"
+        widget = self.app.widgets[path]
+        before = str(self.app.variables[path].get())
+        self.assertEqual(str(widget.cget("state")), "readonly")
+        self.assertIsInstance(widget, tkinter.Entry)
+        self.assertNotIsInstance(widget, ttk.Entry)
+        self.assertEqual(str(widget.cget("readonlybackground")).lower(), "#eef2f7")
+        self.assertIn("孔间距/2 + 相对信号孔中心距",
+                      str(self.app.formula_labels[path].cget("text")))
+        widget.focus_set()
+        widget.event_generate("<KeyPress>", keysym="9", keycode=57)
+        try:
+            widget.insert("end", "9")
+        except tkinter.TclError:
+            pass
+        self.app.update_idletasks()
+        self.assertEqual(str(self.app.variables[path].get()), before)
+
     def test_29_unit_toggle_mm_refreshes_gap_center_and_preview_labels(self) -> None:
         self._enter_via_scenario()
         self._restore_default_via_gaps()
@@ -752,13 +804,18 @@ class ViaTransitionGuiTests(unittest.TestCase):
             self.assertAlmostEqual(float(center), 0.8, places=2)
             self.assertAlmostEqual(float(pitch), 0.8, places=2)
             self.assertAlmostEqual(float(width), 0.1, places=2)
-            self.assertNotIn("31.4961", gap + center + pitch)
-            self.assertNotIn("27.5591", gap + center)
+            clearance = str(self.app.variables["via_transition.return_vias.center_to_signal"].get())
+            offset_y = str(self.app.variables["via_transition.return_vias.offset_y"].get())
+            self.assertAlmostEqual(float(clearance), 0.7, places=2)
+            self.assertAlmostEqual(float(offset_y), 1.1, places=2)
+            self.assertNotIn("31.4961", gap + center + pitch + clearance + offset_y)
+            self.assertNotIn("27.5591", gap + center + clearance)
             labels = self._canvas_texts(self.app.via_top_canvas)
             joined = "\n".join(labels)
             self.assertTrue(any("输入 GAP" in text and "mm" in text for text in labels), labels)
             self.assertTrue(any("输出 GAP" in text and "mm" in text for text in labels), labels)
             self.assertTrue(any("输入中心距" in text and "mm" in text for text in labels), labels)
+            self.assertTrue(any("相对信号孔中心距" in text and "mm" in text for text in labels), labels)
             self.assertNotIn("31.4961", joined)
             self.assertNotIn("27.5591", joined)
             self.assertFalse(any(re.search(r"\bmil\b", text) for text in labels), labels)
@@ -788,6 +845,8 @@ class ViaTransitionGuiTests(unittest.TestCase):
             "via_transition.exit_trace.gap",
             "via_transition.exit_trace.center_to_center",
             "via_transition.signal_via_pitch",
+            "via_transition.return_vias.center_to_signal",
+            "via_transition.return_vias.offset_y",
         )
         for path in length_paths:
             shown = str(self.app.variables[path].get())
@@ -801,7 +860,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
         self.assertNotIn("31.4961", joined)
         self.assertNotIn("27.5591", joined)
         self.assertNotIn("118.1102", joined)
-        length_tokens = ("GAP", "中心距", "输入宽", "输出宽", "输入长", "输出长", "信号孔")
+        length_tokens = ("GAP", "中心距", "输入宽", "输出宽", "输入长", "输出长", "信号孔", "相对信号孔")
         for text in labels:
             if any(token in text for token in length_tokens):
                 for match in re.findall(r"\d+\.\d+", text):
@@ -863,6 +922,32 @@ class ViaTransitionGuiTests(unittest.TestCase):
                 path,
             )
             self.assertIn(path, self.app.status.get())
+
+    def test_32b_preview_center_to_signal_label_click_focuses_clearance(self) -> None:
+        self._enter_via_scenario()
+        self._restore_default_via_gaps()
+        pattern_labels = self.app.enum_labels.get("via_transition.return_vias.pattern", {})
+        self.app.variables["via_transition.return_vias.pattern"].set(
+            pattern_labels.get("side_pair", "两侧成对"))
+        self.app.variables["via_transition.return_vias.count"].set("2")
+        self.app._sync_via_fields()
+        self._realize_desktop_layout()
+        self.app.notebook.select(self.app.tabs["VIA 换层"])
+        self.app.refresh_visuals()
+        self.app.update()
+        path = "via_transition.return_vias.center_to_signal"
+        canvas = self.app.via_top_canvas
+        self._click_dimension_label(canvas, path, "相对信号孔中心距")
+        widget = self.app.widgets[path]
+        self.assertTrue(widget.winfo_ismapped(), path)
+        self.assertIs(self.app.focus_get(), widget, path)
+        selected = self.app.via_parameter_notebook.select()
+        self.assertEqual(
+            str(self.app.via_parameter_notebook.tab(selected, "text")),
+            "回流地孔",
+            path,
+        )
+        self.assertIn(path, self.app.status.get())
 
     def test_33_via_generate_and_run_is_offline_only(self) -> None:
         self._enter_via_scenario()

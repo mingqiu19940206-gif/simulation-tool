@@ -18,7 +18,12 @@ import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from config_manager import normalize_config, via_trace_center_pitch
+from config_manager import (
+    is_side_pair_count2,
+    normalize_config,
+    side_pair_return_offset_y,
+    via_trace_center_pitch,
+)
 from geometry_v1 import (
     EPSILON,
     Bounds2D,
@@ -473,6 +478,9 @@ def _return_via_positions(config: Mapping[str, Any]) -> List[Point2D]:
                 for sx in (-1.0, 1.0) for sy in (-1.0, 1.0)]
     # side_pair：差分对上下两侧（Y 向）对称各放一颗。
     if pattern == "side_pair":
+        if is_side_pair_count2(rv) and rv.get("center_to_signal") not in (None, ""):
+            signal_pitch = float(via.get("signal_via_pitch", via.get("pair_pitch", 0.0)) or 0.0)
+            oy = side_pair_return_offset_y(signal_pitch, rv["center_to_signal"])
         half = max(1, count // 2)
         pitch = float(rv.get("pitch_y", 0.0))
         offsets = [(index - (half - 1) / 2.0) * pitch for index in range(half)]

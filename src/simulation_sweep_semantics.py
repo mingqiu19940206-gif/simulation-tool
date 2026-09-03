@@ -11,7 +11,13 @@ import math
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from config_manager import apply_pair_pitch_to_trace_gaps, find_nearest_reference_plane
+from config_manager import (
+    apply_pair_pitch_to_trace_gaps,
+    find_nearest_reference_plane,
+    is_side_pair_count2,
+    side_pair_center_to_signal,
+    sync_side_pair_return_via_y,
+)
 
 
 @dataclass(frozen=True)
@@ -295,6 +301,25 @@ def _apply_via_antipad_diameter(config: Dict[str, Any], value: Any) -> None:
 def _apply_via_pair_pitch(config: Dict[str, Any], value: Any) -> None:
     """Legacy pair_pitch axis still moves both end pitches (width + GAP)."""
     apply_pair_pitch_to_trace_gaps(config.setdefault("via_transition", {}), float(value))
+
+
+def _apply_return_center_to_signal(config: Dict[str, Any], value: Any) -> None:
+    """Editable source for side_pair count=2; offset_y follows."""
+    vt = config.setdefault("via_transition", {})
+    rv = vt.setdefault("return_vias", {})
+    rv["center_to_signal"] = float(value)
+    sync_side_pair_return_via_y(vt)
+
+
+def _apply_return_offset_y(config: Dict[str, Any], value: Any) -> None:
+    """Legacy Y-offset axis: move offset_y, then backfill center_to_signal."""
+    vt = config.setdefault("via_transition", {})
+    rv = vt.setdefault("return_vias", {})
+    offset_y = float(value)
+    rv["offset_y"] = offset_y
+    if is_side_pair_count2(rv):
+        pitch = float(vt.get("signal_via_pitch", 0.0) or 0.0)
+        rv["center_to_signal"] = side_pair_center_to_signal(offset_y, pitch)
 
 
 @dataclass(frozen=True)
@@ -581,6 +606,10 @@ SWEEP_PARAMETER_REGISTRY: Dict[str, SweepParameterSpec] = {
               minimum=0.0, maximum=2.0, deps=(_need_via_transition,)),
         _spec("via_transition.exit_trace.gap", "输出传输线 GAP", "VIA 换层",
               minimum=0.0, maximum=2.0, deps=(_need_via_transition,)),
+        _spec("via_transition.return_vias.center_to_signal", "回流孔相对信号孔中心距", "VIA 换层",
+              minimum=None, deps=(_need_via_transition,), apply=_apply_return_center_to_signal),
+        _spec("via_transition.return_vias.offset_y", "回流孔 Y 向偏移", "VIA 换层",
+              minimum=None, deps=(_need_via_transition,), apply=_apply_return_offset_y),
         _spec("via_transition.padstack.antipad.diameter", "信号孔圆形反焊盘直径", "反焊盘与叠层",
               minimum=0.2, maximum=3.0, deps=(_need_via_circle_antipad, _need_manual_antipad_size),
               apply=_apply_via_antipad_diameter),
