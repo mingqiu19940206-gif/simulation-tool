@@ -742,6 +742,18 @@ class SurfaceCapAntipadApp(tk.Tk):
         self.cap_hfss_box = hfss
         hfss.pack_configure(pady=(4, 24))
         self._add(hfss, 0, "在 HFSS 中创建电容本体", "capacitor.create_body_in_hfss", boolean=True)
+        outline_path = "capacitor.show_body_outline_in_preview"
+        toolbar_outline = self.widgets[outline_path]
+        toolbar_var = self.variables[outline_path]
+        self._add(hfss, 1, "预览中显示本体轮廓", outline_path, boolean=True)
+        self.cap_hfss_outline_checkbox = self.widgets[outline_path]
+        self.cap_hfss_outline_label = self.field_labels[outline_path]
+        self.cap_hfss_outline_checkbox.configure(variable=toolbar_var)
+        self._hide_field_row(outline_path)
+        self.variables[outline_path] = toolbar_var
+        self.widgets[outline_path] = toolbar_outline
+        self.field_labels[outline_path] = toolbar_outline
+        self.cap_dimension_categories["body"] = toolbar_var
         spacer = tk.Frame(parameter_root, height=120, background="#f7f8fa")
         spacer.pack_propagate(False)
         spacer.pack(fill="x")

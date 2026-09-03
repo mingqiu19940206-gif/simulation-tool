@@ -342,14 +342,34 @@ class CapacitorEditorGuiTests(unittest.TestCase):
         self.assertNotIn(self.app.cap_hfss_box, self._ancestors(outline))
         self.assertIn(self.app.cap_dimension_toolbar, self._ancestors(outline))
         self.assertIn(self.app.cap_hfss_box, self._ancestors(create_body))
-        hfss_texts = []
+        self.assertEqual(self.app.cap_hfss_outline_label.winfo_manager(), "")
+        self.assertEqual(self.app.cap_hfss_outline_checkbox.winfo_manager(), "")
+        self.assertIn(self.app.cap_hfss_box, self._ancestors(self.app.cap_hfss_outline_label))
+        hfss_mapped_texts = []
+        hfss_hidden_texts = []
         for child in self.app.cap_hfss_box.winfo_children():
             try:
-                hfss_texts.append(str(child.cget("text")))
+                text = str(child.cget("text"))
             except tk.TclError:
                 continue
-        self.assertNotIn("预览中显示本体轮廓", hfss_texts)
-        self.assertIn("在 HFSS 中创建电容本体", hfss_texts)
+            if not text:
+                continue
+            (hfss_mapped_texts if child.winfo_manager() else hfss_hidden_texts).append(text)
+        self.assertIn("预览中显示本体轮廓", hfss_hidden_texts)
+        self.assertNotIn("预览中显示本体轮廓", hfss_mapped_texts)
+        self.assertIn("在 HFSS 中创建电容本体", hfss_mapped_texts)
+        visible_body = []
+        def walk(widget: tk.Misc) -> None:
+            for child in widget.winfo_children():
+                try:
+                    if str(child.cget("text")) == "本体" and child.winfo_manager():
+                        visible_body.append(child)
+                except tk.TclError:
+                    pass
+                walk(child)
+        walk(self.app)
+        self.assertEqual(len(visible_body), 1)
+        self.assertIs(visible_body[0], outline)
         collected = self.app._collect()
         self.assertIn("symmetric_about_y", collected["capacitor"])
         self.assertIn("transition_direction", collected["trace"])
