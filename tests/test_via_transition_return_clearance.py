@@ -52,13 +52,13 @@ class ViaTransitionReturnClearanceTests(unittest.TestCase):
         for via in before.return_vias:
             self.assertAlmostEqual(_nearest_center_distance(via, before.signal_vias), 0.7)
 
-        cfg["via_transition"]["return_vias"]["center_to_signal"] = 0.5
+        cfg["via_transition"]["return_vias"]["center_to_signal"] = 0.9
         after = GeometryCalculator(cfg).calculate()
         self.assertFalse(after.errors, after.errors)
         self.assertEqual(_xy(after.signal_vias), signal_before)
         self.assertEqual(len(after.return_vias), 2)
         for via in after.return_vias:
-            self.assertAlmostEqual(_nearest_center_distance(via, after.signal_vias), 0.5)
+            self.assertAlmostEqual(_nearest_center_distance(via, after.signal_vias), 0.9)
         self.assertNotEqual(_xy(after.return_vias), _xy(before.return_vias))
 
     def test_02_legacy_offset_y_loads_bit_identical_geometry(self) -> None:

@@ -2072,28 +2072,6 @@ class SurfaceCapAntipadApp(tk.Tk):
                              (float(contour.bounds[1]), float(contour.center_y)), False, 2))
 
         return_vias = list(getattr(geometry, "return_vias", []))
-        signal_vias = list(getattr(geometry, "signal_vias", []))
-        rv_cfg = vt.get("return_vias", {}) if isinstance(vt.get("return_vias"), Mapping) else {}
-        if return_vias and signal_vias and rv_cfg.get("center_to_signal") not in (None, ""):
-            clearance = float(rv_cfg["center_to_signal"])
-            labeled = []
-            for ret in return_vias:
-                nearest = min(
-                    signal_vias,
-                    key=lambda sig: (float(ret.x) - float(sig.x)) ** 2
-                    + (float(ret.y) - float(sig.y)) ** 2,
-                )
-                pair_key = (id(nearest), round(float(ret.x), 9), round(float(ret.y), 9))
-                if pair_key in labeled:
-                    continue
-                labeled.append(pair_key)
-                dims.append((
-                    "via_transition.return_vias.center_to_signal",
-                    f"相对信号孔中心距 {fmt(clearance)} {unit}",
-                    (float(nearest.x), float(nearest.y)),
-                    (float(ret.x), float(ret.y)),
-                    True, 0,
-                ))
         if return_vias:
             via = return_vias[0]
             vy = float(via.y)
@@ -2106,13 +2084,41 @@ class SurfaceCapAntipadApp(tk.Tk):
                          (float(via.x) - float(via.antipad_diameter) / 2.0, vy),
                          (float(via.x) + float(via.antipad_diameter) / 2.0, vy), False, 1))
 
+        # Draw last (and force-place) so the clickable clearance labels stay
+        # above later pad/GAP text after a highlighted redraw.
+        signal_vias = list(getattr(geometry, "signal_vias", []))
+        rv_cfg = vt.get("return_vias", {}) if isinstance(vt.get("return_vias"), Mapping) else {}
+        if return_vias and signal_vias and rv_cfg.get("center_to_signal") not in (None, ""):
+            clearance = float(rv_cfg["center_to_signal"])
+            labeled: list[tuple[int, float, float]] = []
+            for ret in return_vias:
+                nearest = min(
+                    signal_vias,
+                    key=lambda sig, r=ret: (float(r.x) - float(sig.x)) ** 2
+                    + (float(r.y) - float(sig.y)) ** 2,
+                )
+                pair_key = (id(nearest), round(float(ret.x), 9), round(float(ret.y), 9))
+                if pair_key in labeled:
+                    continue
+                labeled.append(pair_key)
+                dims.append((
+                    "via_transition.return_vias.center_to_signal",
+                    f"相对信号孔中心距 {fmt(clearance)} {unit}",
+                    (float(nearest.x), float(nearest.y)),
+                    (float(ret.x), float(ret.y)),
+                    True, 1,
+                ))
+
         for (path, label, p1, p2, dashed, lane) in dims:
             self._draw_via_dimension(canvas, placer, xy, path, label, p1, p2,
-                                     dashed=dashed, lane=lane)
+                                     dashed=dashed, lane=lane,
+                                     force=path == "via_transition.return_vias.center_to_signal")
+        canvas.tag_raise("dimension:via_transition.return_vias.center_to_signal")
 
     def _draw_via_dimension(self, canvas: tk.Canvas, placer: CanvasLabelPlacer,
                             xy: Any, path: str, label: str, p1: Tuple[float, float],
-                            p2: Tuple[float, float], *, dashed: bool, lane: int) -> None:
+                            p2: Tuple[float, float], *, dashed: bool, lane: int,
+                            force: bool = False) -> None:
         """绘制一条尺寸线 + 引线 + 可点击标签。"""
         ax, ay = xy(*p1)
         bx, by = xy(*p2)
@@ -2158,6 +2164,7 @@ class SurfaceCapAntipadApp(tk.Tk):
             font=("TkDefaultFont", 8, "bold" if highlighted else "normal"),
             fill=color, background="white", tags=tags,
             leader=midpoint, leader_color=color, priority=2,
+            force=force,
         )
 
     def _on_via_dimension_click(self, event: tk.Event) -> None:

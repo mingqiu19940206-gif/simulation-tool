@@ -85,6 +85,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
             and str(canvas.itemcget(item, "text")).startswith(prefix)
         ]
         self.assertTrue(items, (path, self._canvas_texts(canvas)))
+        canvas.tag_raise(items[0])
         bbox = canvas.bbox(items[0])
         self.assertIsNotNone(bbox)
         x = int((bbox[0] + bbox[2]) / 2)
