@@ -392,6 +392,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         """
         self._via_parameter_tab_by_path: dict[str, tk.Widget] = {}
         self._via_parameter_rows: dict[str, tuple[tk.Widget, int]] = {}
+        self._via_parameter_row_slaves: dict[str, list[tk.Widget]] = {}
 
         def group(section: str, title: str) -> _legacy.ttk.LabelFrame:
             page, content = sections[section]
@@ -406,17 +407,21 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             if widget is not None:
                 setattr(widget, "_via_parameter_section", section)
 
+        def snapshot_row(parent: tk.Widget, row: int, path: str) -> None:
+            self._via_parameter_rows[path] = (parent, row)
+            self._via_parameter_row_slaves[path] = list(parent.grid_slaves(row=row))
+
         def add(section: str, parent: tk.Widget, row: int, label: str, path: str,
                 **kwargs: Any) -> tk.Widget:
             widget = self._add(parent, row, label, path, **kwargs)
-            self._via_parameter_rows[path] = (parent, row)
+            snapshot_row(parent, row, path)
             remember(section, path, widget)
             return widget
 
         def fixed(section: str, parent: tk.Widget, row: int, label: str, path: str,
                   backend_value: str, display_text: str) -> None:
             self._add_fixed_label(parent, row, label, path, backend_value, display_text)
-            self._via_parameter_rows[path] = (parent, row)
+            snapshot_row(parent, row, path)
             remember(section, path, self.widgets.get(path))
 
         stackup = self.config.get("stackup", [])
@@ -570,7 +575,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         self.return_connect_vars: dict[str, tk.BooleanVar] = {}
         self.return_connect_checks: list[tk.Widget] = []
         self.widgets["via_transition.return_vias.connect_layers"] = self.return_connect_matrix
-        self._via_parameter_rows["via_transition.return_vias.connect_layers"] = (frame, 10)
+        snapshot_row(frame, 10, "via_transition.return_vias.connect_layers")
         remember("return", "via_transition.return_vias.connect_layers", self.return_connect_matrix)
 
         _legacy.ttk.Label(frame, text="自定义坐标表").grid(
@@ -607,7 +612,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                 row=2, column=3, padx=3, pady=(0, 3))
         self.return_coordinate_tree.bind("<<TreeviewSelect>>", self._return_coordinate_selected)
         self.widgets["via_transition.return_vias.custom_coordinates"] = self.return_coordinate_editor
-        self._via_parameter_rows["via_transition.return_vias.custom_coordinates"] = (frame, 11)
+        snapshot_row(frame, 11, "via_transition.return_vias.custom_coordinates")
         remember("return", "via_transition.return_vias.custom_coordinates", self.return_coordinate_editor)
 
         frame = group("return", "回流地孔（Return VIA）· 孔结构")
@@ -810,11 +815,20 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
             self.return_coordinate_y.set(str(values[1]))
 
     def _set_via_parameter_row_visible(self, path: str, visible: bool) -> None:
-        location = getattr(self, "_via_parameter_rows", {}).get(path)
-        if location is None:
-            return
-        parent, row = location
-        for widget in parent.grid_slaves(row=row):
+        slaves = getattr(self, "_via_parameter_row_slaves", {}).get(path)
+        if not slaves:
+            location = getattr(self, "_via_parameter_rows", {}).get(path)
+            if location is None:
+                return
+            parent, row = location
+            slaves = []
+            for child in parent.winfo_children():
+                info = child.grid_info()
+                if info and int(float(info.get("row", -1))) == row:
+                    slaves.append(child)
+            if not slaves:
+                slaves = list(parent.grid_slaves(row=row))
+        for widget in slaves:
             (widget.grid if visible else widget.grid_remove)()
 
     def _set_via_fanout_group_visible(self, visible: bool) -> None:
@@ -855,7 +869,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
         scroller = self.via_parameter_scrollers[section]
         scroller.scroll_to_widget(widget)
         try:
-            widget.focus_set()
+            widget.focus_force()
             if isinstance(widget, (_legacy.ttk.Entry, tk.Entry)):
                 widget.selection_range(0, "end")
                 widget.icursor("end")
@@ -1201,7 +1215,7 @@ class SurfaceCapAntipadApp(_legacy.SurfaceCapAntipadApp):
                         y = widget.winfo_rooty() - scroller.content.winfo_rooty()
                         scroller.canvas.yview_moveto(max(0.0, min(1.0, (y - 20) / movable)))
                         break
-            widget.focus_set()
+            widget.focus_force()
             if isinstance(widget, (_legacy.ttk.Entry, tk.Entry)):
                 try:
                     widget.selection_range(0, "end")

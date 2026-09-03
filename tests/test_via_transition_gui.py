@@ -926,6 +926,11 @@ class ViaTransitionGuiTests(unittest.TestCase):
     def test_32b_preview_center_to_signal_label_click_focuses_clearance(self) -> None:
         self._enter_via_scenario()
         self._restore_default_via_gaps()
+        pattern_labels = self.app.enum_labels.get("via_transition.return_vias.pattern", {})
+        self.app.variables["via_transition.return_vias.pattern"].set(
+            pattern_labels.get("side_pair", "两侧成对"))
+        self.app.variables["via_transition.return_vias.count"].set("2")
+        self.app._sync_via_fields()
         self._realize_desktop_layout()
         self.app.notebook.select(self.app.tabs["VIA 换层"])
         self.app.refresh_visuals()
@@ -934,6 +939,7 @@ class ViaTransitionGuiTests(unittest.TestCase):
         canvas = self.app.via_top_canvas
         self._click_dimension_label(canvas, path, "相对信号孔中心距")
         widget = self.app.widgets[path]
+        self.assertTrue(widget.winfo_ismapped(), path)
         self.assertIs(self.app.focus_get(), widget, path)
         selected = self.app.via_parameter_notebook.select()
         self.assertEqual(
