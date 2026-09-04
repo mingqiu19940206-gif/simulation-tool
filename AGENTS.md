@@ -1,6 +1,6 @@
 # Repository Instructions
 
-These instructions apply to Codex, Claude Code, and human contributors.
+These instructions apply to Codex and human contributors.
 
 ## Project overview
 
@@ -12,14 +12,11 @@ These instructions apply to Codex, Claude Code, and human contributors.
 - Full AEDT/HFSS generation and solve validation requires Windows with a supported Ansys Electronics Desktop installation and license.
 - macOS can be used for code editing, review, configuration checks, and platform-independent logic, but it must not claim that AEDT/HFSS execution passed.
 
-## Git ownership and branches
+## Git workflow
 
 - Never commit or push directly to `main`.
-- Windows Codex branches must use `codex/<short-task-name>`.
-- macOS Claude branches must use `claude/<short-task-name>`.
+- Codex task branches must use `codex/<short-task-name>`.
 - Before starting, fetch `origin`, update local `main` with `git pull --ff-only`, then create a fresh task branch.
-- Do not commit to, force-push, delete, or rewrite a branch owned by the other agent.
-- Do not edit the same feature concurrently on two branches unless the user explicitly assigns separate files or review roles.
 - Never use `git push --force` or destructive Git commands unless the user explicitly requests and confirms the exact operation.
 - Preserve unrelated working-tree changes.
 
@@ -31,6 +28,18 @@ These instructions apply to Codex, Claude Code, and human contributors.
 - Treat `config/default_config.json` as production data: preserve schema version and backward compatibility unless the task explicitly changes them.
 - Keep Windows and macOS path handling platform-neutral wherever possible; use `pathlib.Path` instead of hard-coded separators in Python.
 - Avoid case-only file renames because Windows and default macOS file systems are normally case-insensitive.
+
+## Multi-agent workflow
+
+- The primary agent owns requirements, task decomposition, integration, final verification, and the completion report.
+- Use project agents for medium or large tasks when independent exploration, implementation, review, or HFSS validation would improve speed or confidence. Small documentation-only or narrowly mechanical changes may remain single-agent.
+- `architecture_explorer` is read-only and maps runtime paths, configuration/geometry contracts, affected symbols, and relevant tests before risky changes.
+- `python_implementer` is the only role that edits product code. Run at most one write-capable implementation agent in a shared checkout at a time.
+- `regression_reviewer` is read-only and reviews the diff, runs targeted tests, and reports correctness, compatibility, and coverage findings.
+- `hfss_validator` performs Windows/AEDT validation without editing product source and must keep generated projects, results, logs, locks, and machine details outside the repository.
+- Parallelize independent read-heavy work. Do not parallelize overlapping edits. If separate worktrees are explicitly assigned, keep each writer on a distinct branch and integrate changes sequentially.
+- The primary agent must wait for requested agents, reconcile conflicting findings, and repeat implementation/review cycles until the requested acceptance criteria are met or a concrete external blocker is identified.
+- Subagents return distilled evidence: affected files and symbols, commands and results, risks, and unverified behavior. They must not commit or push unless the user explicitly requests it.
 
 ## Verification
 
@@ -59,7 +68,7 @@ python -B src\main_gui.py --smoke-test
 
 Always run `git diff --check` before committing. If a check cannot run, state the exact reason instead of reporting it as passed.
 
-## Handoff requirements
+## Completion requirements
 
 Every completion message and pull request must state:
 
@@ -67,6 +76,4 @@ Every completion message and pull request must state:
 2. Files changed.
 3. Commands/checks run and their results.
 4. Known limitations or unverified behavior.
-5. Recommended next action for the other agent.
-
-Read `COLLABORATION.md` for the complete Windows/macOS workflow.
+5. Recommended next action, if any.
