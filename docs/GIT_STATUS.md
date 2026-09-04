@@ -9,8 +9,8 @@
 - 远端：`https://github.com/mingqiu19940206-gif/simulation-tool`
 - 稳定分支：`main`；本补充验证分支创建时的基线为 `4a8b355`（合并 PR #3）
 - Windows 补充验证分支：`codex/hfss-real-validation`（脱敏后的真实 AEDT/HFSS 验证证据，已由 PR #4 合并）
-- 协作分支命名：Windows Codex 用 `codex/<任务名>`，macOS Claude Code 用 `claude/<任务名>`
-- 分支保护约定：不直接提交到 `main`，一律经 Pull Request 合并（见 `AGENTS.md` 与 `COLLABORATION.md`）
+- 任务分支命名：Codex 使用 `codex/<任务名>`
+- 分支保护约定：不直接提交到 `main`，一律经 Pull Request 合并（见 `AGENTS.md`）
 
 `main` 的提交历史：
 
